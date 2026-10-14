@@ -4,6 +4,7 @@ export type LanguageId = 'system' | 'zh' | 'en'
 export type Locale = 'zh' | 'en'
 export type FontId = 'cascadia' | 'consolas' | 'jetbrains' | 'fira' | 'monospace'
 export type CursorStyle = 'block' | 'underline' | 'bar'
+export type KeyboardMode = 'smart' | 'desktop' | 'native'
 export const fonts: Record<FontId, { name: string, family: string }> = {
   cascadia: { name: 'Cascadia Code', family: '"Cascadia Code", Consolas, monospace' },
   consolas: { name: 'Consolas', family: 'Consolas, monospace' },
@@ -20,6 +21,7 @@ export const refreshOptions = [0, 15, 30, 60] as const
 export interface UIPreferences {
   theme: ThemeId
   fontSize: number
+  uiFontSize: number
   fontFamily: FontId
   language: LanguageId
   sidebarWidth: number
@@ -31,6 +33,7 @@ export interface UIPreferences {
   scrollSensitivity: number
   terminalPadding: number
   cursorStyle: CursorStyle
+  keyboardMode: KeyboardMode
   cursorBlink: boolean
   rightClickSelectsWord: boolean
   activateNewSession: boolean
@@ -41,10 +44,10 @@ export interface UIPreferences {
 }
 
 export const defaults: UIPreferences = {
-  theme: 'nightfall', fontSize: 13, fontFamily: 'cascadia', language: 'system',
+  theme: 'nightfall', fontSize: 13, uiFontSize: 12, fontFamily: 'cascadia', language: 'system',
   sidebarWidth: 280, managedRatio: 0.42, defaultDirectory: '', defaultProfile: 'auto',
   scrollback: 5000, lineHeight: 1.25, scrollSensitivity: 1, terminalPadding: 14,
-  cursorStyle: 'block', cursorBlink: true, rightClickSelectsWord: false,
+  cursorStyle: 'block', keyboardMode: 'smart', cursorBlink: true, rightClickSelectsWord: false,
   activateNewSession: true, observeEnabled: true,
   observeRefreshSeconds: 15, showPid: true, showStatusBar: true,
 }
@@ -97,16 +100,16 @@ export const palettes: Record<ThemeId, Palette> = {
     terminal: term('#18191c', '#e0e1e2', '#c9c2b8', '#777780'),
   },
   pine: {
-    zh: '松影', en: 'Pine', chips: ['#1c2622', '#111b18', '#a6ba9d'],
+    zh: '松影', en: 'Pine', chips: ['#232725', '#191d1b', '#9dae9c'],
     css: {
-      '--sidebar': '#1c2622', '--canvas': '#111b18', '--surface': '#29372f',
-      '--surface-hover': '#314138', '--surface-active': '#3b4c42',
-      '--border': '#3b4a40', '--border-faint': '#303f35', '--text': '#dce4dd',
-      '--muted': '#9faf9f', '--faint': '#85958a', '--accent': '#a6ba9d',
-      '--accent-bg': '#405448', '--accent-text': '#e0eddb', '--positive': '#abcea7',
-      '--negative': '#e0aca5',
+      '--sidebar': '#232725', '--canvas': '#191d1b', '--surface': '#2c322e',
+      '--surface-hover': '#333a35', '--surface-active': '#3b453f',
+      '--border': '#404943', '--border-faint': '#323a35', '--text': '#dee2dd',
+      '--muted': '#a4afa5', '--faint': '#89978d', '--accent': '#a1b39e',
+      '--accent-bg': '#454e45', '--accent-text': '#e0e9df', '--positive': '#a2c5a8',
+      '--negative': '#d7a7a1',
     },
-    terminal: term('#111b18', '#dce6dc', '#b6cfab', '#587d6a'),
+    terminal: term('#191d1b', '#dee2dc', '#b3c4b1', '#56615a'),
   },
   bluehour: {
     zh: '暮蓝', en: 'Blue Hour', chips: ['#1b2330', '#111622', '#97acc4'],
@@ -129,11 +132,13 @@ export function readPreferences(): UIPreferences {
     if (saved.theme && themes.includes(saved.theme)) result.theme = saved.theme
     if (saved.language && ['system', 'zh', 'en'].includes(saved.language)) result.language = saved.language
     if (typeof saved.fontSize === 'number' && Number.isFinite(saved.fontSize)) result.fontSize = Math.max(11, Math.min(20, Math.round(saved.fontSize)))
+    if (typeof saved.uiFontSize === 'number' && Number.isFinite(saved.uiFontSize)) result.uiFontSize = Math.max(10, Math.min(16, Math.round(saved.uiFontSize)))
     if (typeof saved.sidebarWidth === 'number' && Number.isFinite(saved.sidebarWidth)) result.sidebarWidth = Math.max(216, Math.min(500, Math.round(saved.sidebarWidth)))
     if (typeof saved.managedRatio === 'number' && Number.isFinite(saved.managedRatio)) result.managedRatio = Math.max(0.2, Math.min(0.8, saved.managedRatio))
     if (typeof saved.defaultDirectory === 'string') result.defaultDirectory = saved.defaultDirectory.slice(0, 512)
     if (saved.fontFamily && Object.hasOwn(fonts, saved.fontFamily)) result.fontFamily = saved.fontFamily
     if (saved.cursorStyle && ['block', 'underline', 'bar'].includes(saved.cursorStyle)) result.cursorStyle = saved.cursorStyle
+    if (saved.keyboardMode && ['smart', 'desktop', 'native'].includes(saved.keyboardMode)) result.keyboardMode = saved.keyboardMode
     if (typeof saved.defaultProfile === 'string' && /^[a-z][a-z0-9_-]{0,31}$/.test(saved.defaultProfile)) result.defaultProfile = saved.defaultProfile
     if (saved.scrollback && scrollbackOptions.includes(saved.scrollback as typeof scrollbackOptions[number])) result.scrollback = saved.scrollback
     if (saved.lineHeight && lineHeightOptions.includes(saved.lineHeight as typeof lineHeightOptions[number])) result.lineHeight = saved.lineHeight
@@ -164,7 +169,7 @@ const text = {
     refresh: '刷新', new: '新建终端', rename: '重命名', terminate: '终止', remove: '移除',
     save: '保存', cancel: '取消', running: '运行中', exited: '已退出', observedStatus: '只读',
     settings: '设置', settingsTitle: '界面设置', settingsDescription: '仅影响界面和之后新建的本地 Shell。',
-    colors: '配色', fonts: '终端字体大小', language: '界面语言', system: '跟随系统',
+    colors: '配色', fonts: '终端字体大小', uiFontSize: '界面字号', language: '界面语言', system: '跟随系统',
     defaultDirectory: '新建 Shell 默认路径', defaultDirectoryHint: '留空沿用默认路径，仅作用于 PowerShell / CMD 和本机 Shell，不作用于 WSL / SSH。',
     directoryPlaceholder: '留空使用默认路径', resetLayout: '重置分栏大小', close: '关闭设置',
     widthHandle: '调整左侧栏宽度', heightHandle: '调整上下区域比例',
@@ -190,6 +195,8 @@ const text = {
     fontFamily: '字体', fontSizeShort: '字号', lineHeight: '行距', scrollback: '回滚行数',
     scrollbackHint: '仅限当前界面缓存；Daemon 的输出回放仍有容量上限。',
     cursorStyle: '光标形状', cursorBlock: '方块', cursorUnderline: '下划线', cursorBar: '竖线',
+    keyboardMode: '快捷键模式', keyboardSmart: '智能（推荐）', keyboardDesktop: '桌面复制粘贴', keyboardNative: '终端原生',
+    keyboardHint: '智能模式在 nano/vim 等全屏程序中保留 Ctrl+V 等原生按键。Ctrl+Shift+C/V 始终可复制/粘贴。',
     cursorBlink: '光标闪烁', scrollSensitivity: '滚轮速度', rightClickWord: '右键选词',
     terminalPadding: '终端留白', fontMissing: '字体未安装时会自动回退。',
     profileDefault: '默认 Shell', automatic: '自动选择', activateNewSession: '新建后切换',
@@ -210,7 +217,7 @@ const text = {
     refresh: 'Refresh', new: 'New terminal', rename: 'Rename', terminate: 'Terminate', remove: 'Remove',
     save: 'Save', cancel: 'Cancel', running: 'Running', exited: 'Exited', observedStatus: 'Read only',
     settings: 'Settings', settingsTitle: 'Appearance & preferences', settingsDescription: 'Affects the GUI and future local shell sessions only.',
-    colors: 'Color theme', fonts: 'Terminal font size', language: 'Interface language', system: 'Follow system',
+    colors: 'Color theme', fonts: 'Terminal font size', uiFontSize: 'Interface font size', language: 'Interface language', system: 'Follow system',
     defaultDirectory: 'New shell working directory', defaultDirectoryHint: 'Leave blank for the default. Applies to PowerShell / CMD and local shells, not WSL or SSH.',
     directoryPlaceholder: 'Default when empty', resetLayout: 'Reset splitter sizes', close: 'Close settings',
     widthHandle: 'Resize sidebar', heightHandle: 'Resize managed / observed panes',
@@ -236,6 +243,8 @@ const text = {
     fontFamily: 'Font', fontSizeShort: 'Size', lineHeight: 'Line height', scrollback: 'Scrollback',
     scrollbackHint: 'Local terminal history only; daemon replay remains bounded.',
     cursorStyle: 'Cursor shape', cursorBlock: 'Block', cursorUnderline: 'Underline', cursorBar: 'Bar',
+    keyboardMode: 'Shortcuts', keyboardSmart: 'Smart (recommended)', keyboardDesktop: 'Desktop clipboard', keyboardNative: 'Terminal native',
+    keyboardHint: 'Smart preserves native Ctrl+V in nano/vim-style full-screen apps. Ctrl+Shift+C/V always copy/paste.',
     cursorBlink: 'Blink cursor', scrollSensitivity: 'Wheel speed', rightClickWord: 'Right-click word',
     terminalPadding: 'Terminal padding', fontMissing: 'Unavailable fonts fall back automatically.',
     profileDefault: 'Default shell', automatic: 'Automatic', activateNewSession: 'Select on create',

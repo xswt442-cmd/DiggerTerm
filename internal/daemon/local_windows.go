@@ -64,7 +64,7 @@ func startDetached() error {
 	}
 	cmd := exec.Command(self, "--daemon")
 	cmd.SysProcAttr = &syscall.SysProcAttr{
-		CreationFlags:    0x00000008 /* DETACHED_PROCESS */ | syscall.CREATE_NEW_PROCESS_GROUP,
+		CreationFlags:    0x00000008, // DETACHED_PROCESS; preserve ConPTY console Ctrl+C delivery
 		HideWindow:       true,
 		NoInheritHandles: true,
 	}

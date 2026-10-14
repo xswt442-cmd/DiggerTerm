@@ -26,6 +26,7 @@ test('all expanded preferences persist across GUI reopen', () => {
     theme: 'pine',
     fontFamily: 'jetbrains',
     fontSize: 17,
+    uiFontSize: 15,
     language: 'zh',
     defaultProfile: 'cmd',
     defaultDirectory: 'C:\\dev\\work',
@@ -34,6 +35,7 @@ test('all expanded preferences persist across GUI reopen', () => {
     scrollSensitivity: 5,
     terminalPadding: 6,
     cursorStyle: 'bar',
+    keyboardMode: 'native',
     cursorBlink: false,
     rightClickSelectsWord: true,
     activateNewSession: false,
@@ -51,9 +53,11 @@ test('all expanded preferences persist across GUI reopen', () => {
 test('bad saved values are clamped or safely ignored', () => {
   values.set('diggerterm:preferences:v1', JSON.stringify({
     fontSize: 500,
+    uiFontSize: 500,
     fontFamily: '__proto__',
     theme: 'malicious',
     cursorStyle: 'hidden',
+    keyboardMode: 'untrusted',
     defaultProfile: '-oBadFlag',
     scrollback: 99_999_999,
     terminalPadding: -1,
@@ -64,9 +68,11 @@ test('bad saved values are clamped or safely ignored', () => {
   }))
   const read = prefs.readPreferences()
   assert.equal(read.fontSize, 20)
+  assert.equal(read.uiFontSize, 16)
   assert.equal(read.fontFamily, prefs.defaults.fontFamily)
   assert.equal(read.theme, prefs.defaults.theme)
   assert.equal(read.cursorStyle, prefs.defaults.cursorStyle)
+  assert.equal(read.keyboardMode, prefs.defaults.keyboardMode)
   assert.equal(read.defaultProfile, prefs.defaults.defaultProfile)
   assert.equal(read.scrollback, prefs.defaults.scrollback)
   assert.equal(read.terminalPadding, prefs.defaults.terminalPadding)
@@ -82,8 +88,8 @@ test('corrupt settings recover defaults without crashing UI', () => {
 })
 
 test('new setting labels appear in both UI languages', () => {
-  for (const key of ['terminalTab', 'sessionTab', 'monitorTab', 'fontFamily', 'scrollback',
-    'profileDefault', 'observeEnabled', 'refreshSeconds']) {
+  for (const key of ['terminalTab', 'sessionTab', 'monitorTab', 'fontFamily', 'uiFontSize', 'scrollback',
+    'profileDefault', 'observeEnabled', 'refreshSeconds', 'keyboardMode']) {
     assert.notEqual(prefs.translate('zh', key), '')
     assert.notEqual(prefs.translate('en', key), '')
   }

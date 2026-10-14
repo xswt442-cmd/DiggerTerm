@@ -2,10 +2,11 @@
 import { nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { Terminal } from '@xterm/xterm'
 import { FitAddon } from '@xterm/addon-fit'
-import { Events } from '@wailsio/runtime'
+import { Clipboard, Events } from '@wailsio/runtime'
 import { Resize, Snapshot, Write } from '../../bindings/github.com/xswt442-cmd/DiggerTerm/sessionservice'
 import type { Info } from '../../bindings/github.com/xswt442-cmd/DiggerTerm/internal/session/models'
-import { fonts, type Palette, type FontId, type CursorStyle } from '../uiPreferences'
+import { fonts, type Palette, type FontId, type CursorStyle, type KeyboardMode } from '../uiPreferences'
+import { decideTerminalShortcut } from '../terminalShortcuts'
 import '@xterm/xterm/css/xterm.css'
 
 const props = defineProps<{
@@ -16,6 +17,7 @@ const props = defineProps<{
   lineHeight: number
   scrollback: number
   cursorStyle: CursorStyle
+  keyboardMode: KeyboardMode
   cursorBlink: boolean
   scrollSensitivity: number
   rightClickSelectsWord: boolean
@@ -76,6 +78,69 @@ function fit() {
 
 function focus() {
   terminal?.focus()
+}
+
+// Wails supplies a native clipboard bridge, which is more dependable than
+// navigator.clipboard in desktop WebViews (particularly under Linux/WSLg).
+async function writeClipboard(text: string) {
+  try {
+    await Clipboard.SetText(text)
+  } catch (nativeError) {
+    if (!navigator.clipboard?.writeText) throw nativeError
+    await navigator.clipboard.writeText(text)
+  }
+}
+
+async function readClipboard(): Promise<string> {
+  try {
+    return await Clipboard.Text()
+  } catch (nativeError) {
+    if (!navigator.clipboard?.readText) throw nativeError
+    return navigator.clipboard.readText()
+  }
+}
+
+const isMac = typeof navigator !== 'undefined' &&
+  /Mac/i.test(navigator.userAgent)
+
+function onTerminalKeydown(event: KeyboardEvent) {
+  // Do not steal shortcuts from the sidebar, search or settings. The
+  // listener is attached only to the active terminal's DOM subtree.
+  const term = terminal
+  if (!props.active || !term) return
+  const shortcut = decideTerminalShortcut(
+    event, term.hasSelection(), isMac, props.keyboardMode, term.buffer.active.type === 'alternate',
+  )
+  if (shortcut.kind === 'pass') return
+
+  // Capture ahead of xterm and the WebView's default Copy/Paste/Reload,
+  // and do not allow xterm to send the same control byte twice.
+  event.preventDefault()
+  event.stopPropagation()
+
+  if (shortcut.kind === 'input') {
+    if (props.session.status === 'running') {
+      term.input(shortcut.data, true) // goes through onData -> ordered daemon IPC
+    }
+    return
+  }
+  if (shortcut.kind === 'copy') {
+    const selected = term.getSelection()
+    if (selected) {
+      void writeClipboard(selected).catch((err: unknown) => emit('error', String(err)))
+    }
+    return
+  }
+  if (shortcut.kind === 'paste' && props.session.status === 'running') {
+    void readClipboard()
+      .then((text) => {
+        if (text && terminal === term && props.active && props.session.status === 'running') {
+          // xterm.paste handles CR/LF normalization and bracketed paste mode.
+          term.paste(text)
+        }
+      })
+      .catch((err: unknown) => emit('error', String(err)))
+  }
 }
 
 watch(() => props.fontSize, async (size) => {
@@ -202,6 +267,7 @@ onBeforeUnmount(() => {
     :class="{ hidden: !active }"
     :style="{ padding: props.padding + 'px' }"
     @click="focus"
+    @keydown.capture="onTerminalKeydown"
   />
 </template>
 

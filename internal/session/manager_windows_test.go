@@ -102,6 +102,65 @@ func TestLocalShellWorkingDirectory(t *testing.T) {
 	}
 }
 
+// ConPTY must pass ETX from the terminal through to cmd at the prompt.
+// Foreground native Windows console processes can behave differently from
+// the cmd.exe line editor; see the documented Windows ConPTY limitation.
+func TestWindowsConPTYCtrlCCancelsPromptInput(t *testing.T) {
+	m := NewManager(nil, nil)
+	info, err := m.Create("cmd", 80, 24)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() {
+		for _, item := range m.List() {
+			if item.ID == info.ID && item.Status == "running" {
+				_ = m.Terminate(info.ID)
+			}
+		}
+	}()
+	if err := m.Write(info.ID, "echo DIGGERTERM_DONT_EXECUTE"); err != nil {
+		t.Fatal(err)
+	}
+	time.Sleep(230 * time.Millisecond)
+	if err := m.Write(info.ID, "\x03"); err != nil {
+		t.Fatal(err)
+	}
+	time.Sleep(130 * time.Millisecond)
+	if err := m.Write(info.ID, "echo DIGGERTERM_CTRL_C_PROMPT_OK\r\n"); err != nil {
+		t.Fatal(err)
+	}
+	deadline := time.Now().Add(8 * time.Second)
+	for time.Now().Before(deadline) {
+		reply, err := m.Snapshot(info.ID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		data, err := base64.StdEncoding.DecodeString(reply.Data)
+		if err != nil {
+			t.Fatal(err)
+		}
+		text := string(data)
+		// ConPTY may insert VT cursor sequences between the CR/LF and text.
+		// The echoed input appears once; successful cmd output appears twice.
+		if strings.Count(text, "DIGGERTERM_CTRL_C_PROMPT_OK") >= 2 {
+			if strings.Count(text, "DIGGERTERM_DONT_EXECUTE") > 1 {
+				t.Fatal("Ctrl+C did not cancel the unfinished command")
+			}
+			return
+		}
+		time.Sleep(75 * time.Millisecond)
+	}
+	last, err := m.Snapshot(info.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	raw, _ := base64.StdEncoding.DecodeString(last.Data)
+	if len(raw) > 950 {
+		raw = raw[len(raw)-950:]
+	}
+	t.Fatalf("ConPTY prompt did not recover after ETX. Tail=%q", raw)
+}
+
 func TestWindowsConPTYLifecycle(t *testing.T) {
 	m := NewManager(nil, nil)
 	info, err := m.Create("cmd", 80, 25)

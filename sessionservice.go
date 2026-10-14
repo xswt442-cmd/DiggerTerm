@@ -14,8 +14,9 @@ import (
 // SessionService is ONLY a Wails-to-IPC proxy. It never owns a PTY.
 // Closing the GUI/client connection does not terminate daemon sessions.
 type SessionService struct {
-	client  *daemon.Client
-	initErr error
+	client        *daemon.Client
+	initErr       error
+	setUILanguage func(string)
 }
 
 func NewSessionService(app *application.App) *SessionService {
@@ -52,6 +53,19 @@ func (s *SessionService) close() {
 	if s.client != nil {
 		_ = s.client.Close()
 	}
+}
+
+// SetUILanguage changes only the GUI's native menu; it never touches the
+// session daemon or any running PTY. The caller sends an effective locale,
+// after resolving the UI's "follow system" preference in the WebView.
+func (s *SessionService) SetUILanguage(locale string) error {
+	if locale != "zh" && locale != "en" {
+		return fmt.Errorf("unsupported UI locale %q", locale)
+	}
+	if s.setUILanguage != nil {
+		s.setUILanguage(locale)
+	}
+	return nil
 }
 
 func (s *SessionService) stopDaemon() error {

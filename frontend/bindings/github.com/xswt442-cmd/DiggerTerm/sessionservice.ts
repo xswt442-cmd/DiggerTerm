@@ -69,6 +69,15 @@ export function SSHHosts(): $CancellablePromise<string[] | null> {
     return $Call.ByID(342202540);
 }
 
+/**
+ * SetUILanguage changes only the GUI's native menu; it never touches the
+ * session daemon or any running PTY. The caller sends an effective locale,
+ * after resolving the UI's "follow system" preference in the WebView.
+ */
+export function SetUILanguage(locale: string): $CancellablePromise<void> {
+    return $Call.ByID(3443472923, locale);
+}
+
 export function Snapshot(id: string): $CancellablePromise<session$0.Replay> {
     return $Call.ByID(2306353609, id);
 }

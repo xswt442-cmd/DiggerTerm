@@ -29,6 +29,8 @@ jobs:
         run: npm --prefix frontend ci
       - name: Test desktop preferences
         run: npm --prefix frontend run test:preferences
+      - name: Test terminal keyboard shortcuts
+        run: npm --prefix frontend run test:shortcuts
       # main.go embeds frontend/dist; the Vite build must precede go test/vet.
       - name: Build frontend
         run: npm --prefix frontend run build

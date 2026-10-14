@@ -263,6 +263,9 @@ func (s *Server) dispatch(req request) message {
 }
 
 func Run() error {
+	if err := prepareDaemonConsoleInterrupts(); err != nil {
+		return failed("prepare Windows console Ctrl+C", err)
+	}
 	listener, err := listenLocal()
 	if err != nil {
 		return failed("listen local IPC", err)
