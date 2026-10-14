@@ -1,33 +1,24 @@
 # DiggerTerm 发布流程
 
-> 维护者笔记。用户可见的 Release Notes 放在 `.github/release-notes/vX.Y.Z.md`，**不要用本文件作为 GitHub Release 说明**。
+> 维护者内部说明。用户可见的 Release Notes 放在 `.github/release-notes/vX.Y.Z.md`，不要把本文件发布为 Release Notes。
 
 ## 范围
 
-目前只发布 **Windows x64 便携 ZIP**，不承诺 Linux/macOS GUI 可用；暂不做安装器、代码签名或自动更新。GUI 退出后的会话保活仅依赖仍运行的 Daemon。
+- **已发布的 v0.0.1** 是 Windows x64 ZIP 预览版，保留其历史 Tag、附件及 `.zip.sha256` 校验文件，不修改或重发。
+- **下一版起计划只提供三种程序包**：Windows x64 `.exe`、Linux x86_64 `.AppImage`、Ubuntu/Debian amd64 `.deb`。附带统一的 `SHA256SUMS` 校验文件；不再将 ZIP、tar.gz 或 macOS 程序包作为正式资产。
+- Windows 程序目前未代码签名。Linux 在 Ubuntu 24.04 环境构建，其他发行版尤其旧版 glibc 的兼容性以实机验收为准。
+- **当前 `.github/workflows/release.yml` 仍按 v0.0.1 的 Windows ZIP 流程发布。创建下一版 Tag 之前，必须先修改并验证三平台资产的构建和上传流程。** 本地测试包不等于已发布的 Release。
 
-## 每次发布
+## 下一版发布步骤
 
-1. 从 `dev` 准备版本。同步 `frontend/package.json`、锁文件、`build/config.yml` 及实际构建所需的版本元信息；更新 `CHANGELOG.md`。
-2. 新建简短的双语 `.github/release-notes/vX.Y.Z.md`，只写本次主要变化、下载与 SHA-256 校验方式、必要的限制。避免复制 README 或整份 CHANGELOG。
-3. 本机验证（先构建前端，因为 Go 使用 `//go:embed frontend/dist`）：
+1. 先完成 `dev → main` PR 审核与合并，确认 Check 通过。不要强推或重写历史。
+2. 同步版本信息（`frontend/package.json`、锁文件、`build/config.yml`），更新 `CHANGELOG.md`；准备简短的双语 `.github/release-notes/vX.Y.Z.md`。只写主要变化、下载与校验、必要限制。
+3. 验证 Windows 与 Linux GUI：终端键盘/剪贴板、nano 等全屏程序、托盘、后台会话恢复，以及 `.exe`、`.AppImage`、`.deb` 实际运行。至少运行前端测试、`go test ./...`、`go vet ./...` 和 Wails 构建。
+4. 将 Release Workflow 改为只上传上述三个安装包及 `SHA256SUMS`。在发布前验证三包存在、目标架构正确、可启动、SHA-256 一致；确认 Linux 动态库依赖。
+5. 从已合并且已验收的 `main` 提交创建新的注释 Tag，触发 Release Workflow；发布后检查附件并回下载校验。失败时保留现状，修复后使用新版本发布，**不得重写已发布的 Tag**。
 
-   ```powershell
-   npm --prefix frontend ci
-   npm --prefix frontend run build
-   go test ./...
-   go vet ./...
-   wails3 build
-   ./scripts/package-windows.ps1 -Version vX.Y.Z
-   ```
+## 边界
 
-4. 推送 `dev`，确认 GitHub `Check` 成功；按实际分支策略将 `main` **非强制快进**到经过验证的提交。
-5. 从该提交创建并推送注释 Tag `vX.Y.Z`，触发 `.github/workflows/release.yml`。
-6. 核验 GitHub Release 正式发布、ZIP 与校验文件存在，回下载比对 SHA-256，并检查归档内容。失败时保留现状，绝不强推或重写已有 Tag。
-
-## 约束
-
-- 只有 Daemon 持有 PTY；发布操作不可终止现有运行中会话。
-- 不要把 `testplace/`、依赖目录、`frontend/dist/`、`bin/`、`dist/` 或凭据提交进仓库。
-- 不修改已发布版本的 Tag 和附件；修复后发布新版本。
-- 本仓库 v0.0.1 的历史发布包使用单独的 `.zip.sha256` 文件校验。
+- 打包和测试不得终止用户正在运行的 Daemon 托管会话。
+- 不提交 `testplace/`、`bin/`、`dist/`、依赖目录、凭据或本地安装包。
+- 只发布已验证的功能；Daemon 崩溃或系统重启后的会话存活不作保证。

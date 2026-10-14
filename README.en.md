@@ -53,7 +53,7 @@ Wails GUI + xterm.js  <-- private local IPC -->  Go Session Daemon
 
 **Limitations:** Session continuity depends on a running daemon; daemon failure, forced termination, sign-out, or shutdown can end sessions. Bounded output replay is not a complete VT screen snapshot. Arbitrary external-terminal screen takeover is not implemented.
 
-**On the dev branch only (not in v0.0.1):** The sidebar **observes read-only process metadata** for current-user Windows terminal/agent processes and the default Linux user's processes within **already-running WSL distributions** (PID, parent PID, name, and start time). Linux and Windows PID namespaces are distinct. Classification is heuristic, not exhaustive. The scanner does not wake stopped WSL distributions, read command lines/environments/terminal screens, or control external processes. Linux processes cannot yet be reliably linked to DiggerTerm-managed `wsl.exe` sessions. To use this feature with an older running daemon, finish existing sessions, explicitly stop it, then reopen the GUI.
+**On the dev branch only (not in v0.0.1):** The sidebar **observes read-only process metadata** for current-user Windows terminal/agent processes and the default Linux user's processes within **already-running WSL distributions** (PID, parent PID, name, and start time). Linux and Windows PID namespaces are distinct. Classification is heuristic, not exhaustive. The scanner rechecks whether a WSL distribution is running before observing it, but the check and launch are not atomic, so an unexpected wake-up remains possible in a narrow race. It never reads command lines, environments, or external terminal screens, and cannot control external processes. Linux processes cannot yet be reliably linked to DiggerTerm-managed `wsl.exe` sessions. To use this feature with an older running daemon, finish existing sessions, explicitly stop it, then reopen the GUI.
 
 ### Appearance and shell startup directory (dev branch only)
 
@@ -96,10 +96,6 @@ wails3 build
 
 The executable is generated at `bin/diggerterm.exe`. Once all sessions are finished, you can stop the daemon explicitly with `bin/diggerterm.exe --stop-daemon`.
 
-## Project
+## Links
 
-[中文 README](README.md) · [Changelog / 更新日志](CHANGELOG.md) · [MIT License](LICENSE)
-
-## LICENSE
-
-[MIT](LICENSE)
+[中文 README](README.md) · [Changelog / 更新日志](CHANGELOG.md) · [Release process (maintainer, Chinese)](RELEASE.md) · [MIT License](LICENSE)

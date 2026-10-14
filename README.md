@@ -53,7 +53,7 @@ Wails GUI + xterm.js  <-- 本地用户专属 IPC -->  Go Session Daemon
 
 **边界：** Daemon 崩溃、被强制停止、注销或关机时，不保证终端存活；有限输出回放不等于完整 VT 屏幕快照。任意外部终端画面接管仍未实现。
 
-**dev 开发预览（不包含在 v0.0.1 下载包）：** 侧栏可以**只读观察**当前 Windows 用户的常见终端 / Agent 进程，以及**已经运行的 WSL 发行版**内默认 Linux 用户的终端 / Agent 相关进程（PID、父 PID、进程名、启动时间）。WSL 的 Linux PID 和 Windows PID 属于不同命名空间；识别仍是进程名和父子树推断，不能保证发现所有隐式终端。不会为了扫描唤醒停止的 WSL 发行版，也不会读取命令行、环境变量或外部终端画面；外部进程不可控制。WSL 内部进程暂不能与自有 `wsl.exe` 会话可靠关联。升级后若仍连接旧 Daemon，请在自有会话结束后明确停服，再重新启动 GUI。
+**dev 开发预览（不包含在 v0.0.1 下载包）：** 侧栏可以**只读观察**当前 Windows 用户的常见终端 / Agent 进程，以及**已经运行的 WSL 发行版**内默认 Linux 用户的终端 / Agent 相关进程（PID、父 PID、进程名、启动时间）。WSL 的 Linux PID 和 Windows PID 属于不同命名空间；识别仍是进程名和父子树推断，不能保证发现所有隐式终端。扫描前会再次检查发行版是否正在运行，以降低意外唤醒风险；由于 WSL 命令的检查与执行并非原子操作，极短竞态窗口仍然存在。不会读取命令行、环境变量或外部终端画面；外部进程不可控制。WSL 内部进程暂不能与自有 `wsl.exe` 会话可靠关联。升级后若仍连接旧 Daemon，请在自有会话结束后明确停服，再重新启动 GUI。
 
 ### 界面外观与默认目录（仅 dev）
 
@@ -96,10 +96,6 @@ wails3 build
 
 生成的程序位于 `bin/diggerterm.exe`。所有终端结束后，如需停服可执行 `bin/diggerterm.exe --stop-daemon`。
 
-## 项目
+## 相关链接
 
-[English README](README.en.md) · [更新日志 / Changelog](CHANGELOG.md) · [MIT License](LICENSE)
-
-## LICENSE
-
-[MIT](LICENSE)
+[English README](README.en.md) · [更新日志 / Changelog](CHANGELOG.md) · [发布流程（维护者）](RELEASE.md) · [MIT License](LICENSE)
