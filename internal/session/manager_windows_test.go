@@ -3,7 +3,10 @@ package session
 import (
 	"encoding/base64"
 	"errors"
+	"os"
+	"path/filepath"
 	"regexp"
+	"strings"
 	"testing"
 	"time"
 )
@@ -34,6 +37,68 @@ func TestRenameSurvivesManagerListAndStatus(t *testing.T) {
 	}
 	if _, err := m.Rename("missing", "External PID"); !errors.Is(err, ErrNotFound) {
 		t.Fatalf("external processes must not be renamable: %v", err)
+	}
+}
+
+func TestLocalShellWorkingDirectory(t *testing.T) {
+	m := NewManager(nil, nil)
+	root := filepath.Join(t.TempDir(), "workspace with spaces")
+	if err := os.Mkdir(root, 0700); err != nil {
+		t.Fatal(err)
+	}
+	for _, profile := range []string{"cmd", "powershell"} {
+		t.Run(profile, func(t *testing.T) {
+			info, err := m.CreateLocal(profile, root, 90, 26)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer func() {
+				for _, item := range m.List() {
+					if item.ID == info.ID && item.Status == "running" {
+						_ = m.Terminate(info.ID)
+					}
+				}
+			}()
+			command := "echo %CD%\r\n"
+			if profile == "powershell" {
+				command = "(Get-Location).Path\r\n"
+			}
+			if err := m.Write(info.ID, command); err != nil {
+				t.Fatal(err)
+			}
+			deadline := time.Now().Add(12 * time.Second)
+			for time.Now().Before(deadline) {
+				output, err := m.Snapshot(info.ID)
+				if err != nil {
+					t.Fatal(err)
+				}
+				raw, err := base64.StdEncoding.DecodeString(output.Data)
+				if err != nil {
+					t.Fatal(err)
+				}
+				if strings.Contains(strings.ToLower(string(raw)), strings.ToLower(root)) {
+					return
+				}
+				time.Sleep(65 * time.Millisecond)
+			}
+			t.Fatalf("%s did not start in configured directory %q", profile, root)
+		})
+	}
+	for _, tc := range []struct{ profile, directory string }{
+		{"cmd", "relative"},
+		{"powershell", filepath.Join(root, "does-not-exist")},
+		{"cmd", filepath.Join(root, "file.txt")},
+		{"wsl", root},
+		{"ssh", root},
+	} {
+		if tc.directory == filepath.Join(root, "file.txt") {
+			if err := os.WriteFile(tc.directory, []byte("data"), 0600); err != nil {
+				t.Fatal(err)
+			}
+		}
+		if _, err := m.CreateLocal(tc.profile, tc.directory, 80, 24); err == nil {
+			t.Errorf("accepted invalid cwd: %q %q", tc.profile, tc.directory)
+		}
 	}
 }
 

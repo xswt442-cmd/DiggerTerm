@@ -151,6 +151,12 @@ func (c *Client) Create(profile string, cols, rows int) (session.Info, error) {
 
 // CreateSSH requests a daemon-owned OpenSSH client PTY. All authentication
 // and known_hosts prompts appear inside that PTY, never in IPC parameters.
+func (c *Client) CreateLocal(profile, directory string, cols, rows int) (session.Info, error) {
+	var result session.Info
+	err := c.call(request{Method: "createLocal", Profile: profile, Directory: directory, Cols: cols, Rows: rows}, &result)
+	return result, err
+}
+
 func (c *Client) CreateSSH(target string, port, cols, rows int) (session.Info, error) {
 	var result session.Info
 	err := c.call(request{Method: "createSSH", SSHTarget: target, SSHPort: port, Cols: cols, Rows: rows}, &result)

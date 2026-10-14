@@ -9,11 +9,13 @@ Changes are recorded in a format inspired by [Keep a Changelog](https://keepacha
 - Windows / WSL：新增同用户外部终端与 Agent 进程的只读元信息观察（仅 dev，尚未发布）。扫描仅覆盖已运行的 WSL 发行版；没有外部 PTY 画面读取、输入或终止权限。
 - SSH：通过系统 OpenSSH 创建 Daemon 托管的远程交互会话，支持 ssh_config 别名、可选端口、原生密钥/ssh-agent/主机指纹和口令交互；DiggerTerm 不存储认证信息。
 - Windows 体验：支持托管会话重命名（Daemon 持有名称、跨 GUI 同步）、侧栏搜索过滤、从本地 OpenSSH 配置提供简单 Host 别名建议。
+- 界面改进：紧凑侧栏、可拖动和键盘调节的左右/上下分栏、真实 Logo；四标签紧凑设置面板，支持暗色配色、字体系列/字号/行距、回滚行数、光标与滚动行为、默认 Shell/工作路径、新会话激活，以及只读观察显示与刷新选项，均可本地保存。
 
 ### English
 - Windows / WSL: added read-only metadata observation for same-user terminal/agent processes (dev only, not released), including Linux processes in already-running WSL distributions. No external terminal screen capture or process control.
 - SSH: added daemon-managed remote interactive sessions via system OpenSSH, with ssh_config host aliases, optional port, and native host-key/key-agent/password prompts. DiggerTerm does not persist credentials.
 - Windows UX: rename managed sessions (daemon-owned, synchronized across GUIs), filter sidebar sessions/processes, and suggest literal OpenSSH Host aliases from the local config.
+- UI: denser sidebar, draggable and keyboard-adjustable splitters, project logo, and a compact four-tab settings panel with saved dark palettes, font family/size, line spacing, scrollback, cursor/scroll options, default shell and directory, new-session focus, and read-only observation display/refresh controls.
 
 ## [0.0.1] - 2026-10-14
 

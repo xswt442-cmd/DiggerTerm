@@ -97,6 +97,14 @@ func (s *SessionService) Create(profile string, cols, rows int) (session.Info, e
 
 // CreateSSH is a separate operation from Create so untrusted host strings
 // cannot masquerade as local session profiles.
+func (s *SessionService) CreateLocal(profile, directory string, cols, rows int) (session.Info, error) {
+	c, err := s.backend()
+	if err != nil {
+		return session.Info{}, err
+	}
+	return c.CreateLocal(profile, directory, cols, rows)
+}
+
 func (s *SessionService) CreateSSH(target string, port, cols, rows int) (session.Info, error) {
 	c, err := s.backend()
 	if err != nil {

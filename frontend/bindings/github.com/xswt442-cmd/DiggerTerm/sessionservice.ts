@@ -26,6 +26,10 @@ export function Create(profile: string, cols: number, rows: number): $Cancellabl
  * CreateSSH is a separate operation from Create so untrusted host strings
  * cannot masquerade as local session profiles.
  */
+export function CreateLocal(profile: string, directory: string, cols: number, rows: number): $CancellablePromise<session$0.Info> {
+    return $Call.ByID(3301322044, profile, directory, cols, rows);
+}
+
 export function CreateSSH(target: string, port: number, cols: number, rows: number): $CancellablePromise<session$0.Info> {
     return $Call.ByID(2921322589, target, port, cols, rows);
 }

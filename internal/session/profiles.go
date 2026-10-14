@@ -15,6 +15,7 @@ type Profile struct {
 type commandSpec struct {
 	path string
 	args []string
+	dir  string
 }
 
 // Profiles only lists commands supported by the current host. WSL is hosted

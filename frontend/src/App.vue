@@ -1,11 +1,106 @@
 <script setup lang="ts">
-import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import {
+  chosenLocale, defaults, fonts, lineHeightOptions, paddingOptions, palettes,
+  readPreferences, refreshOptions, scrollbackOptions, scrollSpeedOptions,
+  themes, translate, writePreferences,
+  type TextKey, type ThemeId, type LanguageId,
+} from './uiPreferences'
 import { Events } from '@wailsio/runtime'
 import TerminalPanel from './components/TerminalPanel.vue'
-import { Create, CreateSSH, Forget, List, Observe, Profiles, Rename, SSHHosts, Terminate } from '../bindings/github.com/xswt442-cmd/DiggerTerm/sessionservice'
+import { Create, CreateLocal, CreateSSH, Forget, List, Observe, Profiles, Rename, SSHHosts, Terminate } from '../bindings/github.com/xswt442-cmd/DiggerTerm/sessionservice'
 import type { Info, Profile } from '../bindings/github.com/xswt442-cmd/DiggerTerm/internal/session/models'
 import type { Process as ObservedProcess, Snapshot as ObservedSnapshot } from '../bindings/github.com/xswt442-cmd/DiggerTerm/internal/observe/models'
 
+const preferences = ref(readPreferences())
+const palette = computed(() => palettes[preferences.value.theme])
+const locale = computed(() => chosenLocale(preferences.value.language))
+const t = (key: TextKey, replacements?: Record<string, string | number>) => translate(locale.value, key, replacements)
+const kindLabel = (kind: string) => t(kind === 'terminal' ? 'kindTerminal' : kind === 'agent' ? 'kindAgent' : kind === 'descendant' ? 'kindDescendant' : 'kindOther')
+const settingsOpen = ref(false)
+const settingsTab = ref<'appearance' | 'terminal' | 'sessions' | 'observed'>('appearance')
+const paneStack = ref<HTMLElement | null>(null)
+const dragging = ref<'width' | 'height' | null>(null)
+let dragOrigin = { x: 0, y: 0, width: 0, ratio: 0, height: 1 }
+watch(preferences, (next) => writePreferences(next), { deep: true })
+
+function clamp(value: number, low: number, high: number): number {
+  return Math.max(low, Math.min(high, value))
+}
+function beginDrag(event: PointerEvent, axis: 'width' | 'height') {
+  if (event.button !== 0) return
+  event.preventDefault()
+  dragging.value = axis
+  dragOrigin = {
+    x: event.clientX, y: event.clientY,
+    width: preferences.value.sidebarWidth, ratio: preferences.value.managedRatio,
+    height: paneStack.value?.clientHeight ?? 1,
+  }
+  ;(event.currentTarget as HTMLElement).setPointerCapture(event.pointerId)
+}
+function onDrag(event: PointerEvent) {
+  if (dragging.value === 'width') {
+    preferences.value.sidebarWidth = Math.round(clamp(
+      dragOrigin.width + event.clientX - dragOrigin.x,
+      216, Math.min(500, window.innerWidth - 320),
+    ))
+  } else if (dragging.value === 'height') {
+    preferences.value.managedRatio = clamp(
+      dragOrigin.ratio + (event.clientY - dragOrigin.y) / Math.max(1, dragOrigin.height),
+      0.20, 0.80,
+    )
+  }
+}
+function endDrag() { dragging.value = null }
+function dividerKeys(event: KeyboardEvent, axis: 'width' | 'height') {
+  const step = event.shiftKey ? 40 : 12
+  if (axis === 'width' && (event.key === 'ArrowLeft' || event.key === 'ArrowRight')) {
+    event.preventDefault()
+    preferences.value.sidebarWidth = Math.round(clamp(preferences.value.sidebarWidth +
+      (event.key === 'ArrowRight' ? step : -step), 216, Math.min(500, window.innerWidth - 320)))
+  } else if (axis === 'height' && (event.key === 'ArrowUp' || event.key === 'ArrowDown')) {
+    event.preventDefault()
+    preferences.value.managedRatio = clamp(preferences.value.managedRatio +
+      (event.key === 'ArrowDown' ? step : -step) / Math.max(1, paneStack.value?.clientHeight ?? 1), 0.2, 0.8)
+  }
+}
+function resetLayout() {
+  preferences.value.sidebarWidth = defaults.sidebarWidth
+  preferences.value.managedRatio = defaults.managedRatio
+}
+function updateTheme(value: ThemeId) { preferences.value.theme = value }
+function updateLanguage(event: Event) { preferences.value.language = (event.target as HTMLSelectElement).value as LanguageId }
+function resetSection() {
+  switch (settingsTab.value) {
+    case 'appearance':
+      preferences.value.theme = defaults.theme
+      preferences.value.language = defaults.language
+      resetLayout()
+      break
+    case 'terminal':
+      for (const key of ['fontSize', 'fontFamily', 'scrollback', 'lineHeight', 'scrollSensitivity',
+        'terminalPadding', 'cursorStyle', 'cursorBlink', 'rightClickSelectsWord'] as const) {
+        // The saved preferences remain typed and bounded by each input.
+        Object.assign(preferences.value, { [key]: defaults[key] })
+      }
+      break
+    case 'sessions':
+      for (const key of ['defaultProfile', 'defaultDirectory', 'activateNewSession'] as const) {
+        Object.assign(preferences.value, { [key]: defaults[key] })
+      }
+      break
+    case 'observed':
+      for (const key of ['observeEnabled', 'observeRefreshSeconds', 'showPid', 'showStatusBar'] as const) {
+        Object.assign(preferences.value, { [key]: defaults[key] })
+      }
+      break
+  }
+}
+const localProfiles = computed(() => profiles.value.filter(p => p.id !== 'ssh'))
+const fontChoices = Object.entries(fonts).map(([id, font]) => ({ id, name: font.name }))
+watch(() => preferences.value.defaultProfile, (value) => {
+  if (value !== 'auto' && profiles.value.some(p => p.id === value)) profileId.value = value
+})
 const sessions = ref<Info[]>([])
 const profiles = ref<Profile[]>([])
 const selectedId = ref<string | null>(null)
@@ -51,7 +146,7 @@ function selectObserved(process: ObservedProcess) {
 }
 
 async function refreshObserved() {
-  if (refreshingExternal.value) return
+  if (refreshingExternal.value || !preferences.value.observeEnabled) return
   refreshingExternal.value = true
   try {
     externalSnapshot.value = await Observe()
@@ -60,7 +155,7 @@ async function refreshObserved() {
     const message = String(err)
     externalError.value = message.includes('unsupported daemon method')
       ? 'Daemon needs updating. Finish your sessions, stop it, then reopen the app.'
-      : 'Process inventory unavailable: ' + message
+      : t('observeFailed') + ': ' + message
   } finally {
     refreshingExternal.value = false
   }
@@ -74,22 +169,26 @@ async function createSession() {
     let info: Info
     if (profileId.value === 'ssh') {
       const target = sshTarget.value.trim()
-      if (!target) throw new Error('Enter an SSH host alias or user@hostname.')
+      if (!target) throw new Error(t('sshRequired'))
       const rawPort = String(sshPort.value).trim()
       const port = rawPort === '' ? 0 : Number(rawPort)
       if (!Number.isInteger(port) || port < 0 || port > 65535 || (rawPort !== '' && port === 0)) {
-        throw new Error('SSH port must be 1–65535 or left empty for ~/.ssh/config.')
+        throw new Error(t('invalidPort'))
       }
       info = await CreateSSH(target, port, 100, 30)
     } else {
-      info = await Create(profileId.value, 100, 30)
+      info = preferences.value.defaultDirectory.trim() && ['powershell', 'cmd', 'shell'].includes(profileId.value)
+        ? await CreateLocal(profileId.value, preferences.value.defaultDirectory.trim(), 100, 30)
+        : await Create(profileId.value, 100, 30)
     }
     sessions.value = [...sessions.value, info]
-    selectManaged(info.id)
+    if (preferences.value.activateNewSession || (!selectedId.value && !selectedExternalKey.value)) {
+      selectManaged(info.id)
+    }
   } catch (err) {
     const message = String(err)
-    if (profileId.value === 'ssh' && message.includes('unsupported daemon method')) {
-      errorMessage.value = 'SSH requires the new daemon. Finish existing sessions, stop the old daemon, then reopen DiggerTerm.'
+    if (message.includes('unsupported daemon method')) {
+      errorMessage.value = t('errorDaemon')
     } else {
       reportError(err)
     }
@@ -127,7 +226,7 @@ async function saveRename() {
 
 async function terminateSession(info: Info) {
   if (info.status !== 'running') return
-  if (!window.confirm(`Terminate ${info.name} (PID ${info.pid})? This will end the terminal session.`)) return
+  if (!window.confirm(t('confirmTerminate', { name: info.name, pid: info.pid }))) return
   try {
     await Terminate(info.id)
   } catch (err) {
@@ -148,6 +247,27 @@ async function removeExited(info: Info) {
   }
 }
 
+function startObservationPolling() {
+  if (observationTimer) clearInterval(observationTimer)
+  observationTimer = undefined
+  if (!preferences.value.observeEnabled) {
+    if (selectedExternalKey.value) {
+      selectedExternalKey.value = null
+      selectedId.value = sessions.value[0]?.id ?? null
+    }
+    return
+  }
+  if (!document.hidden) void refreshObserved()
+  const interval = preferences.value.observeRefreshSeconds
+  if (interval > 0) {
+    observationTimer = setInterval(() => {
+      if (!document.hidden) void refreshObserved()
+    }, interval * 1000)
+  }
+}
+watch([() => preferences.value.observeEnabled, () => preferences.value.observeRefreshSeconds],
+  () => startObservationPolling())
+
 onMounted(async () => {
   offDaemonDisconnected = Events.On('daemon:disconnected', (event) => {
     errorMessage.value = String(event.data || 'Session daemon disconnected')
@@ -164,16 +284,14 @@ onMounted(async () => {
     if (!info) return
     sessions.value = sessions.value.map((s) => s.id === info.id ? info : s)
   })
-  void refreshObserved()
+  startObservationPolling()
   // Suggestions contain only literal Host aliases; errors never prevent manual SSH entry.
   void SSHHosts().then((aliases) => { sshAliases.value = aliases ?? [] }).catch(() => {})
-  observationTimer = setInterval(() => {
-    if (!document.hidden) void refreshObserved()
-  }, 15000)
   try {
     const [available, existing] = await Promise.all([Profiles(), List()])
     profiles.value = available ?? []
-    profileId.value = profiles.value[0]?.id ?? ''
+    profileId.value = profiles.value.find(p => p.id === preferences.value.defaultProfile)?.id ??
+      profiles.value[0]?.id ?? ''
     sessions.value = existing ?? []
     selectedId.value = sessions.value[0]?.id ?? null
   } catch (err) {
@@ -191,288 +309,490 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <main class="layout">
-    <aside class="sidebar">
+  <main class="layout" :style="palette.css" @keydown.esc="settingsOpen = false">
+    <aside class="sidebar" :style="{ width: preferences.sidebarWidth + 'px' }">
       <header class="brand">
-        <span class="mark" aria-hidden="true">&gt;_</span>
+        <img class="brand-logo" src="/favicon.svg" alt="DiggerTerm" width="31" height="31" />
         <div class="brand-copy">
           <strong>DiggerTerm</strong>
-          <small>Terminal workspace</small>
+          <small>{{ t('workspace') }}</small>
         </div>
       </header>
       <input
         v-model="query"
         class="sidebar-search"
         type="search"
-        placeholder="Filter sessions / processes"
-        aria-label="Filter sessions and observed processes"
+        :placeholder="t('search')"
+        :aria-label="t('search')"
         spellcheck="false"
-        @keydown.esc="query = ''"
+        @keydown.esc.stop="query = ''"
       />
-
-      <div class="section-head">
-        <span>MY SESSIONS</span>
+      <div class="section-head main-heading">
+        <span>{{ t('managed') }}</span>
         <span class="count">{{ sessions.length }}</span>
       </div>
       <div class="new-session">
-        <select v-model="profileId" aria-label="Terminal profile" :disabled="creating">
+        <select v-model="profileId" :aria-label="t('new')" :disabled="creating">
           <option v-for="p in profiles" :key="p.id" :value="p.id">{{ p.name }}</option>
         </select>
-        <button v-if="profileId !== 'ssh'" type="button" class="create" :disabled="!profileId || creating" @click="createSession" title="Create terminal">
-          {{ creating ? '…' : '+' }}
-        </button>
+        <button
+          v-if="profileId !== 'ssh'"
+          type="button"
+          class="create"
+          :disabled="!profileId || creating"
+          :title="t('new')"
+          :aria-label="t('new')"
+          @click="createSession"
+        >{{ creating ? '…' : '+' }}</button>
       </div>
-      <form v-if="profileId === 'ssh'" class="ssh-connect" @submit.prevent="createSession" aria-label="SSH connection">
-        <input
-          v-model.trim="sshTarget"
-          type="text"
-          spellcheck="false"
-          autocomplete="off"
-          maxlength="255"
-          placeholder="Host alias or user@host"
-          list="ssh-host-aliases"
-          aria-label="SSH host"
-          :disabled="creating"
-          required
-        />
+      <form v-if="profileId === 'ssh'" class="ssh-connect" :aria-label="t('connect')" @submit.prevent="createSession">
+        <input v-model.trim="sshTarget" type="text" spellcheck="false" autocomplete="off"
+          maxlength="255" :placeholder="t('sshHost')" list="ssh-host-aliases"
+          :aria-label="t('sshHost')" :disabled="creating" required />
         <datalist id="ssh-host-aliases">
           <option v-for="alias in sshAliases" :key="alias" :value="alias" />
         </datalist>
         <div class="ssh-port-row">
-          <input
-            v-model="sshPort"
-            type="number"
-            min="1"
-            max="65535"
-            step="1"
-            placeholder="Port (ssh_config)"
-            aria-label="SSH port (optional)"
-            :disabled="creating"
-          />
-          <button type="submit" :disabled="creating || !sshTarget.trim()">{{ creating ? '…' : 'Connect' }}</button>
+          <input v-model="sshPort" type="number" min="1" max="65535" step="1"
+            :placeholder="t('sshPort')" :aria-label="t('sshPort')" :disabled="creating" />
+          <button type="submit" :disabled="creating || !sshTarget.trim()">{{ t('connect') }}</button>
         </div>
-        <small>{{ sshAliases.length ? sshAliases.length + ' local SSH aliases available. ' : '' }}OpenSSH handles keys and host-key prompts.</small>
+        <small :title="t('connectHint')">{{ t('connectHint') }}</small>
       </form>
 
-      <nav class="sessions" aria-label="Terminal sessions">
-        <div v-if="filteredSessions.length === 0" class="sidebar-empty">{{ query ? 'No matching sessions.' : 'No sessions yet. Create one above.' }}</div>
-        <div
-          v-for="s in filteredSessions"
-          :key="s.id"
-          class="session-row"
-          :class="{ selected: selectedId === s.id }"
-        >
-          <template v-if="editingSessionId === s.id">
-            <input
-              v-model="renameDraft"
-              ref="renameInput"
-              class="rename-input"
-              type="text"
-              maxlength="64"
-              aria-label="New session name"
-              :disabled="renaming"
-              @keydown.enter.prevent="saveRename"
-              @keydown.esc.prevent="cancelRename"
-            />
-            <button type="button" class="session-action" aria-label="Save session name" title="Save name" :disabled="renaming" @click="saveRename">✓</button>
-            <button type="button" class="session-action" aria-label="Cancel rename" title="Cancel rename" :disabled="renaming" @click="cancelRename">×</button>
-          </template>
-          <template v-else>
-            <button
-              type="button"
-              class="session-select"
-              :aria-current="selectedId === s.id ? 'page' : undefined"
-              @click="selectManaged(s.id)"
+      <div ref="paneStack" class="pane-stack">
+        <section class="managed-pane" :style="{ flex: (preferences.observeEnabled ? preferences.managedRatio : 1) + ' 1 0%' }">
+          <nav class="sessions" :aria-label="t('managed')">
+            <div v-if="filteredSessions.length === 0" class="sidebar-empty">
+              {{ t(query ? 'searchNone' : 'noSessions') }}
+            </div>
+            <div
+              v-for="s in filteredSessions"
+              :key="s.id"
+              class="session-row"
+              :class="{ selected: selectedId === s.id }"
             >
-              <span class="session-name">{{ s.name }} <span class="session-id">#{{ s.id }}</span></span>
-              <span class="session-meta"><span :class="['dot', s.status]" /> {{ s.status }} · PID {{ s.pid }}</span>
-            </button>
-            <button type="button" class="session-action" :aria-label="'Rename ' + s.name" title="Rename session" @click="startRename(s)">✎</button>
-            <button
-              type="button"
-              class="session-action"
-              :title="s.status === 'running' ? 'Terminate session' : 'Remove finished session'"
-              :aria-label="s.status === 'running' ? 'Terminate ' + s.name : 'Remove ' + s.name"
-              @click="s.status === 'running' ? terminateSession(s) : removeExited(s)"
-            >×</button>
-          </template>
-        </div>
-      </nav>
+              <template v-if="editingSessionId === s.id">
+                <input v-model="renameDraft" ref="renameInput" class="rename-input" type="text"
+                  maxlength="64" :aria-label="t('rename')" :disabled="renaming"
+                  @keydown.enter.prevent="saveRename" @keydown.esc.stop.prevent="cancelRename" />
+                <button type="button" class="session-action save-action" :title="t('save')"
+                  :aria-label="t('save')" :disabled="renaming" @click="saveRename">✓</button>
+                <button type="button" class="session-action" :title="t('cancel')"
+                  :aria-label="t('cancel')" :disabled="renaming" @click="cancelRename">×</button>
+              </template>
 
-      <div class="section-head external">
-        <span>OBSERVED · READ ONLY</span>
-        <button
-          type="button"
-          class="refresh-action"
-          :disabled="refreshingExternal"
-          title="Refresh observed processes"
-          aria-label="Refresh observed processes"
-          @click="refreshObserved"
-        >{{ refreshingExternal ? '…' : '↻' }}</button>
+              <template v-else>
+                <button type="button" class="session-select"
+                  :aria-current="selectedId === s.id ? 'page' : undefined"
+                  @click="selectManaged(s.id)">
+                  <span class="session-name">{{ s.name }} <span class="session-id">#{{ s.id }}</span></span>
+                  <span class="session-meta"><span :class="['dot', s.status]" />
+                    {{ s.status === 'running' ? t('running') : t('exited') }}<span v-if="preferences.showPid"> · PID {{ s.pid }}</span>
+                  </span>
+                </button>
+                <button type="button" class="session-action" :title="t('rename')"
+                  :aria-label="t('rename') + ' ' + s.name" @click="startRename(s)">✎</button>
+                <button type="button" class="session-action" :title="t(s.status === 'running' ? 'terminate' : 'remove')"
+                  :aria-label="t(s.status === 'running' ? 'terminate' : 'remove') + ' ' + s.name"
+                  @click="s.status === 'running' ? terminateSession(s) : removeExited(s)">×</button>
+              </template>
+            </div>
+          </nav>
+        </section>
+
+        <div v-if="preferences.observeEnabled" class="pane-resizer"
+          role="separator" tabindex="0" aria-orientation="horizontal"
+          :aria-label="t('heightHandle')"
+          :aria-valuenow="Math.round(preferences.managedRatio * 100)"
+          aria-valuemin="20" aria-valuemax="80"
+          :class="{ dragging: dragging === 'height' }"
+          @pointerdown="beginDrag($event, 'height')"
+          @pointermove="onDrag" @pointerup="endDrag" @pointercancel="endDrag"
+          @keydown="dividerKeys($event, 'height')">
+          <span />
+        </div>
+
+        <section v-if="preferences.observeEnabled" class="observed-pane" :style="{ flex: (1 - preferences.managedRatio) + ' 1 0%' }">
+          <div class="section-head external">
+            <span>{{ t('observed') }}</span>
+            <button type="button" class="refresh-action" :disabled="refreshingExternal"
+              :title="t('refresh')" :aria-label="t('refresh')" @click="refreshObserved">
+              {{ refreshingExternal ? '…' : '↻' }}
+            </button>
+          </div>
+          <p v-if="externalError" class="sidebar-empty observed-message" role="status">{{ externalError }}</p>
+          <p v-else-if="externalSnapshot && !externalSnapshot.supported" class="sidebar-empty observed-message">{{ t('windowsOnly') }}</p>
+          <p v-else-if="!externalSnapshot" class="sidebar-empty observed-message">{{ t('scanning') }}</p>
+          <p v-else-if="filteredObserved.length === 0" class="sidebar-empty observed-message">
+            {{ t(query ? 'observedSearchNone' : 'noObserved') }}
+          </p>
+          <nav class="observed-list" :aria-label="t('observed')">
+            <button v-for="process in filteredObserved" :key="process.key" type="button"
+              class="observed-row" :class="{ selected: selectedExternalKey === process.key }"
+              :aria-current="selectedExternalKey === process.key ? 'page' : undefined"
+              @click="selectObserved(process)">
+              <span class="session-name">
+                {{ process.name }}
+                <span class="observed-source">{{ process.source === 'wsl' ? process.distribution : 'WIN' }}</span>
+              </span>
+              <span class="session-meta">{{ kindLabel(process.kind) }}<span v-if="preferences.showPid"> · PID {{ process.pid }}</span></span>
+            </button>
+          </nav>
+          <div v-if="externalSnapshot?.truncated" class="pane-note">{{ t('limited') }}</div>
+          <div v-if="externalSnapshot?.note" class="pane-note muted-note" :title="externalSnapshot.note">
+            {{ t('observedNote') }}
+          </div>
+        </section>
       </div>
-      <p v-if="externalError" class="sidebar-empty observed-note" role="status">{{ externalError }}</p>
-      <p v-else-if="externalSnapshot && !externalSnapshot.supported" class="sidebar-empty observed-note">Windows process discovery only.</p>
-      <p v-else-if="!externalSnapshot" class="sidebar-empty observed-note">Scanning processes…</p>
-      <p v-else-if="filteredObserved.length === 0" class="sidebar-empty observed-note">{{ query ? 'No matching observed processes.' : 'No related external processes found.' }}</p>
-      <nav class="observed-list" aria-label="Observed external processes">
-        <button
-          v-for="process in filteredObserved"
-          :key="process.key"
-          type="button"
-          class="observed-row"
-          :class="{ selected: selectedExternalKey === process.key }"
-          :aria-current="selectedExternalKey === process.key ? 'page' : undefined"
-          @click="selectObserved(process)"
-        >
-          <span class="session-name">{{ process.name }} <span class="observed-source">{{ process.source === "wsl" ? process.distribution : "WIN" }}</span></span>
-          <span class="session-meta">{{ process.kind }} · PID {{ process.pid }}</span>
+
+      <footer class="sidebar-footer">
+        <button type="button" class="settings-trigger" :aria-expanded="settingsOpen"
+          :aria-label="t('settings')" @click="settingsOpen = !settingsOpen">
+          <span class="gear" aria-hidden="true">⚙</span>
+          <span>{{ t('settings') }}</span>
+          <span class="settings-arrow" aria-hidden="true">{{ settingsOpen ? '⌄' : '›' }}</span>
         </button>
-      </nav>
-      <p v-if="externalSnapshot?.truncated" class="sidebar-empty observed-note">Showing first 160 results.</p>
-      <p v-if="externalSnapshot?.note" class="sidebar-empty observed-note" :title="externalSnapshot.note">{{ externalSnapshot.note }}</p>
-      <footer class="sidebar-foot">Observed processes cannot be controlled.</footer>
+      </footer>
+
+      <div v-if="settingsOpen" class="settings-scrim" @click="settingsOpen = false"></div>
+      <section v-if="settingsOpen" class="settings-sheet" role="dialog" aria-modal="true"
+        :aria-label="t('settingsTitle')">
+        <header class="settings-head">
+          <strong>{{ t('settingsTitle') }}</strong>
+          <button type="button" :title="t('close')" :aria-label="t('close')" @click="settingsOpen = false">×</button>
+        </header>
+        <div class="settings-tabs" role="tablist" :aria-label="t('settingsTitle')">
+          <button v-for="tab in (['appearance', 'terminal', 'sessions', 'observed'] as const)"
+            :key="tab" type="button" role="tab" :aria-selected="settingsTab === tab"
+            :class="{ chosen: settingsTab === tab }"
+            @click="settingsTab = tab">
+            {{ t(tab === 'appearance' ? 'appearanceTab' : tab === 'terminal' ? 'terminalTab' : tab === 'sessions' ? 'sessionTab' : 'monitorTab') }}
+          </button>
+        </div>
+        <div class="settings-scroll" role="tabpanel">
+          <template v-if="settingsTab === 'appearance'">
+            <div class="setting-block">
+              <label class="setting-label">{{ t('colors') }}</label>
+              <div class="theme-options">
+                <button v-for="theme in themes" :key="theme" type="button" class="theme-option"
+                  :class="{ chosen: preferences.theme === theme }"
+                  :aria-pressed="preferences.theme === theme"
+                  @click="updateTheme(theme)">
+                  <span class="theme-chips" aria-hidden="true">
+                    <span v-for="color in palettes[theme].chips" :key="color" :style="{ background: color }" />
+                  </span>
+                  <span>{{ palettes[theme][locale] }}</span>
+                </button>
+              </div>
+            </div>
+            <label class="setting-row">
+              <span>{{ t('language') }}</span>
+              <select :value="preferences.language" @change="updateLanguage">
+                <option value="system">{{ t('system') }}</option>
+                <option value="zh">简体中文</option>
+                <option value="en">English</option>
+              </select>
+            </label>
+            <small class="setting-note">{{ t('workspaceHint') }}</small>
+            <button type="button" class="reset-layout" @click="resetLayout">{{ t('resetLayout') }}</button>
+          </template>
+
+          <template v-else-if="settingsTab === 'terminal'">
+            <label class="setting-row">
+              <span>{{ t('fontFamily') }}</span>
+              <select v-model="preferences.fontFamily">
+                <option v-for="font in fontChoices" :key="font.id" :value="font.id">{{ font.name }}</option>
+              </select>
+            </label>
+            <div class="setting-block">
+              <div class="setting-label setting-split">
+                <label for="font-size-slider">{{ t('fontSizeShort') }}</label>
+                <output for="font-size-slider">{{ preferences.fontSize }} px</output>
+              </div>
+              <input id="font-size-slider" v-model.number="preferences.fontSize"
+                class="font-slider" type="range" min="11" max="20" step="1" />
+            </div>
+            <div class="setting-grid">
+              <label class="setting-stack">
+                <span>{{ t('scrollback') }}</span>
+                <select v-model.number="preferences.scrollback">
+                  <option v-for="n in scrollbackOptions" :key="n" :value="n">{{ n.toLocaleString() }}</option>
+                </select>
+              </label>
+              <label class="setting-stack">
+                <span>{{ t('lineHeight') }}</span>
+                <select v-model.number="preferences.lineHeight">
+                  <option v-for="n in lineHeightOptions" :key="n" :value="n">{{ n.toFixed(2).replace(/0+$/, '').replace(/\.$/, '') }}×</option>
+                </select>
+              </label>
+              <label class="setting-stack">
+                <span>{{ t('cursorStyle') }}</span>
+                <select v-model="preferences.cursorStyle">
+                  <option value="block">{{ t('cursorBlock') }}</option>
+                  <option value="underline">{{ t('cursorUnderline') }}</option>
+                  <option value="bar">{{ t('cursorBar') }}</option>
+                </select>
+              </label>
+              <label class="setting-stack">
+                <span>{{ t('scrollSensitivity') }}</span>
+                <select v-model.number="preferences.scrollSensitivity">
+                  <option v-for="n in scrollSpeedOptions" :key="n" :value="n">{{ n }}×</option>
+                </select>
+              </label>
+              <label class="setting-stack">
+                <span>{{ t('terminalPadding') }}</span>
+                <select v-model.number="preferences.terminalPadding">
+                  <option v-for="n in paddingOptions" :key="n" :value="n">{{ n }} px</option>
+                </select>
+              </label>
+            </div>
+            <div class="toggle-grid">
+              <label class="setting-toggle"><span>{{ t('cursorBlink') }}</span>
+                <input v-model="preferences.cursorBlink" type="checkbox" /></label>
+              <label class="setting-toggle"><span>{{ t('rightClickWord') }}</span>
+                <input v-model="preferences.rightClickSelectsWord" type="checkbox" /></label>
+            </div>
+            <small class="setting-note">{{ t('fontMissing') }} {{ t('scrollbackHint') }}</small>
+          </template>
+
+          <template v-else-if="settingsTab === 'sessions'">
+            <label class="setting-row">
+              <span>{{ t('profileDefault') }}</span>
+              <select v-model="preferences.defaultProfile">
+                <option value="auto">{{ t('automatic') }}</option>
+                <option v-for="profile in localProfiles" :key="profile.id" :value="profile.id">{{ profile.name }}</option>
+              </select>
+            </label>
+            <label class="setting-toggle"><span>{{ t('activateNewSession') }}</span>
+              <input v-model="preferences.activateNewSession" type="checkbox" /></label>
+            <div class="setting-block">
+              <label class="setting-label" for="default-directory">{{ t('defaultDirectory') }}</label>
+              <input id="default-directory" v-model="preferences.defaultDirectory"
+                class="directory-input" type="text" spellcheck="false" autocomplete="off"
+                maxlength="512" :placeholder="t('directoryPlaceholder')" />
+              <small class="setting-note">{{ t('defaultDirectoryHint') }}</small>
+            </div>
+          </template>
+
+          <template v-else-if="settingsTab === 'observed'">
+            <label class="setting-toggle"><span>{{ t('observeEnabled') }}</span>
+              <input v-model="preferences.observeEnabled" type="checkbox" /></label>
+            <label class="setting-row">
+              <span>{{ t('refreshSeconds') }}</span>
+              <select v-model.number="preferences.observeRefreshSeconds" :disabled="!preferences.observeEnabled">
+                <option v-for="n in refreshOptions" :key="n" :value="n">
+                  {{ n === 0 ? t('scanManual') : t('seconds', { count: n }) }}
+                </option>
+              </select>
+            </label>
+            <label class="setting-toggle"><span>{{ t('showPid') }}</span>
+              <input v-model="preferences.showPid" type="checkbox" /></label>
+            <label class="setting-toggle"><span>{{ t('showStatusBar') }}</span>
+              <input v-model="preferences.showStatusBar" type="checkbox" /></label>
+            <small class="setting-note">{{ t('observeHint') }}</small>
+          </template>
+          <button type="button" class="reset-layout compact-reset" @click="resetSection">
+            {{ t(settingsTab === 'appearance' ? 'resetAppearance' : settingsTab === 'terminal' ? 'resetTerminal' : settingsTab === 'sessions' ? 'resetSessions' : 'resetObserved') }}
+          </button>
+        </div>
+      </section>
     </aside>
+
+    <div class="sidebar-resizer"
+      role="separator" tabindex="0" aria-orientation="vertical"
+      :aria-label="t('widthHandle')"
+      :aria-valuenow="preferences.sidebarWidth" aria-valuemin="216" aria-valuemax="500"
+      :class="{ dragging: dragging === 'width' }"
+      @pointerdown="beginDrag($event, 'width')"
+      @pointermove="onDrag" @pointerup="endDrag" @pointercancel="endDrag"
+      @keydown="dividerKeys($event, 'width')">
+      <span />
+    </div>
 
     <section class="content">
       <header class="toolbar">
-        <span class="current-name">{{ selectedExternalKey ? (activeObserved?.name ?? 'Process no longer detected') : (activeSession ? activeSession.name + ' #' + activeSession.id : 'Terminal') }}</span>
+        <span class="current-name">{{ selectedExternalKey ? (activeObserved?.name ?? t('processGone')) : (activeSession ? activeSession.name + ' #' + activeSession.id : t('terminal')) }}</span>
         <span class="status" :class="{ live: activeSession?.status === 'running' }">
-          {{ selectedExternalKey ? 'Observed · read only' : (activeSession ? activeSession.status : 'No session selected') }}
+          {{ selectedExternalKey ? t('observedStatus') : (activeSession ? (activeSession.status === 'running' ? t('running') : t('exited')) : t('noSelection')) }}
         </span>
       </header>
-
       <div v-if="errorMessage" class="error-bar" role="alert">
         <span>{{ errorMessage }}</span>
         <button type="button" aria-label="Dismiss error" @click="errorMessage = ''">×</button>
       </div>
-
       <div class="terminal-area">
         <template v-for="s in sessions" :key="s.id">
-          <TerminalPanel
-            :session="s"
-            :active="s.id === selectedId"
-            @error="reportError"
-          />
+          <TerminalPanel :session="s" :active="s.id === selectedId"
+            :font-size="preferences.fontSize" :font-family="preferences.fontFamily"
+            :line-height="preferences.lineHeight" :scrollback="preferences.scrollback"
+            :cursor-style="preferences.cursorStyle" :cursor-blink="preferences.cursorBlink"
+            :scroll-sensitivity="preferences.scrollSensitivity"
+            :right-click-selects-word="preferences.rightClickSelectsWord"
+            :padding="preferences.terminalPadding"
+            :colors="palette.terminal" @error="reportError" />
         </template>
-
         <div v-if="selectedExternalKey" class="observed-detail">
           <template v-if="activeObserved">
-            <div class="observed-kicker">EXTERNAL PROCESS · READ ONLY</div>
+            <div class="observed-kicker">{{ t('readOnly') }}</div>
             <h1>{{ activeObserved.name }}</h1>
             <dl>
-              <div><dt>Source</dt><dd>{{ activeObserved.source === "wsl" ? "WSL · " + activeObserved.distribution : "Windows" }}</dd></div>
-              <div><dt>Process ID</dt><dd>{{ activeObserved.pid }}{{ activeObserved.source === "wsl" ? " (Linux PID)" : "" }}</dd></div>
-              <div><dt>Parent PID</dt><dd>{{ activeObserved.parentPid || 'Unknown' }}</dd></div>
-              <div><dt>Classification</dt><dd>{{ activeObserved.kind }} (inferred)</dd></div>
-              <div><dt>Started</dt><dd>{{ new Date(activeObserved.startedAt).toLocaleString() }}</dd></div>
+              <div><dt>{{ t('source') }}</dt><dd>{{ activeObserved.source === 'wsl' ? 'WSL · ' + activeObserved.distribution : 'Windows' }}</dd></div>
+              <div><dt>{{ t('pid') }}</dt><dd>{{ activeObserved.pid }}{{ activeObserved.source === 'wsl' ? ' (Linux)' : '' }}</dd></div>
+              <div><dt>{{ t('parent') }}</dt><dd>{{ activeObserved.parentPid || t('unknown') }}</dd></div>
+              <div><dt>{{ t('kind') }}</dt><dd>{{ kindLabel(activeObserved.kind) }} ({{ t('inferred') }})</dd></div>
+              <div><dt>{{ t('started') }}</dt><dd>{{ new Date(activeObserved.startedAt).toLocaleString() }}</dd></div>
             </dl>
-            <p>Only process metadata is visible. DiggerTerm does not own this terminal, cannot read its screen, and will not send input or termination signals. Linux and Windows process IDs belong to different namespaces.</p>
+            <p>{{ t('readOnlyText') }}</p>
           </template>
           <template v-else>
-            <h1>Process no longer detected</h1>
-            <p>It may have exited or become inaccessible. Select another process or refresh the list.</p>
+            <h1>{{ t('processGone') }}</h1>
+            <p>{{ t('processGoneDetail') }}</p>
           </template>
         </div>
-
         <div v-if="sessions.length === 0 && !selectedExternalKey" class="empty-state">
-          <span class="prompt" aria-hidden="true">&gt;_</span>
-          <h1>Your terminals, one workspace.</h1>
-          <p>Create a local terminal from the left. Windows supports PowerShell, CMD, and WSL (when installed).</p>
-          <p class="hint">Sessions survive GUI exits while the daemon runs. Use the SSH profile to connect to a remote host. External processes remain read-only.</p>
+          <img src="/favicon.svg" alt="" width="36" height="36" />
+          <h1>{{ t('emptyTitle') }}</h1>
+          <p>{{ t('emptyDesc') }}</p>
+          <p class="hint">{{ t('emptyHint') }}</p>
         </div>
       </div>
-
-      <div class="statusbar">
-        <span>Local PTY · {{ sessions.filter((s) => s.status === 'running').length }} running · {{ observedProcesses.length }} observed</span>
-        <span>Quit UI safely · background sessions persist</span>
+      <div v-if="preferences.showStatusBar" class="statusbar">
+        <span>{{ t('activeCount', { count: sessions.filter(s => s.status === 'running').length }) }} · {{ t('observedCount', { count: observedProcesses.length }) }}</span>
+        <span>{{ t('persisted') }}</span>
       </div>
     </section>
   </main>
 </template>
 
 <style>
-:root {
-  font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
-  color: #d4d8df;
-  background: #111318;
-  font-synthesis: none;
-}
+:root { font-family: "Segoe UI", system-ui, -apple-system, sans-serif; background: #101318; font-synthesis: none; }
 * { box-sizing: border-box; }
-body { margin: 0; }
-button, select { font: inherit; }
+html, body, #app { margin: 0; width: 100%; height: 100%; overflow: hidden; }
+button, select, input { font: inherit; }
 button { cursor: pointer; }
-button:disabled { cursor: not-allowed; opacity: .6; }
-.layout { display: flex; height: 100vh; min-height: 420px; overflow: hidden; }
-.sidebar { width: 252px; flex-shrink: 0; display: flex; flex-direction: column; background: #191c23; border-right: 1px solid #2b2e36; padding: 20px 12px 12px; }
-.brand { display: flex; align-items: center; gap: 12px; padding: 3px 8px 15px; }
-.sidebar-search { width: calc(100% - 10px); margin: 0 5px 15px; padding: 8px 9px; border: 1px solid #353a44; border-radius: 7px; outline: none; background: #222630; color: #d4d8df; font-size: 11px; }
-.sidebar-search:focus { border-color: #807666; }
-.sidebar-search::placeholder { color: #858b96; }
-.brand-copy { display: flex; flex-direction: column; }
-.brand strong { font-size: 14px; letter-spacing: .015em; }
-.brand small { margin-top: 4px; color: #848c98; font-size: 11px; }
-.mark { display: grid; place-items: center; width: 34px; height: 34px; background: #292e37; border-radius: 9px; font-family: monospace; font-size: 15px; color: #c0ad91; }
-.section-head { display: flex; justify-content: space-between; align-items: center; padding: 0 10px 10px; color: #858b96; font-size: 10px; font-weight: 700; letter-spacing: .08em; }
-.count { border: 1px solid #363b45; border-radius: 8px; padding: 1px 6px; font-size: 10px; }
-.new-session { display: flex; gap: 5px; padding: 0 5px 14px; }
-.new-session select { min-width: 0; flex: 1; border: 1px solid #3a3e48; background: #272b34; color: #dce0e7; border-radius: 7px; padding: 8px 9px; font-size: 12px; }
-.new-session .create { width: 34px; border-radius: 7px; border: 1px solid #5b5145; background: #4b4034; color: #f0dfc2; font-size: 19px; }
-.ssh-connect { display: flex; flex-direction: column; gap: 7px; padding: 0 5px 13px; }
-.ssh-connect input { min-width: 0; width: 100%; border: 1px solid #3a3e48; background: #272b34; color: #dce0e7; border-radius: 6px; padding: 8px; font: inherit; font-size: 11px; }
-.ssh-connect input::placeholder { color: #8d929b; }
-.ssh-port-row { display: flex; gap: 6px; }
-.ssh-port-row input { flex: 1; width: 70px; }
-.ssh-port-row button { border: 1px solid #5b5145; background: #4b4034; color: #f0dfc2; padding: 6px 10px; border-radius: 6px; font-size: 11px; }
-.ssh-connect small { color: #828b99; font-size: 10px; line-height: 1.5; }
-.sessions { display: flex; flex-direction: column; gap: 4px; overflow-y: auto; min-height: 100px; flex: 1; }
-.session-row { display: flex; gap: 2px; align-items: center; border-radius: 7px; background: transparent; }
-.session-row:hover { background: #242832; }
-.session-row.selected { background: #30343e; }
-.session-select { background: transparent; border: 0; padding: 11px 4px 11px 10px; text-align: left; color: #d4d8df; min-width: 0; flex: 1; }
-.rename-input { flex: 1; min-width: 0; margin: 6px 3px 6px 6px; padding: 7px; background: #252a34; color: #e0e2e6; border: 1px solid #7b715f; border-radius: 5px; font-size: 11px; }
-.session-name { display: block; font-size: 12px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.session-id { font-weight: 400; color: #89909c; }
-.session-meta { display: flex; align-items: center; gap: 4px; margin-top: 7px; font-size: 10px; color: #969da9; }
-.dot { width: 6px; height: 6px; border-radius: 50%; background: #8c929d; }
-.dot.running { background: #84ce9b; }
-.session-action { border: 0; background: transparent; color: #9fa4ac; padding: 4px 5px; font-size: 15px; }
-.session-action:hover { color: #f09797; }
-.external { margin-top: 18px; border-top: 1px solid #30333b; padding-top: 12px; padding-bottom: 4px; }
-.refresh-action { border: 0; background: transparent; color: #abb0b9; padding: 2px 7px; font-size: 17px; }
-.refresh-action:hover { color: #e0e2e6; }
-.observed-list { display: flex; flex-direction: column; gap: 2px; flex: 0 1 37%; min-height: 0; overflow: auto; }
-.observed-row { display: flex; flex-direction: column; gap: 5px; text-align: left; width: 100%; border: 0; border-radius: 6px; background: transparent; color: #b8bec9; padding: 9px 10px; }
-.observed-row:hover { background: #252932; }
-.observed-row.selected { background: #30343e; }
-.observed-source { margin-left: 3px; padding: 1px 4px; border: 1px solid #41454c; border-radius: 3px; font-size: 9px; font-weight: 400; color: #9da5b1; }
-.observed-note { margin: 0 0 7px; overflow-wrap: anywhere; }
-.observed-detail { position: absolute; inset: 0; overflow: auto; padding: 42px 50px; background: #101217; }
-.observed-detail h1 { margin: 10px 0 24px; font-size: 20px; }
-.observed-kicker { color: #a49c91; font-size: 11px; font-weight: 600; letter-spacing: .08em; }
-.observed-detail dl { display: grid; gap: 0; margin: 0; max-width: 520px; }
-.observed-detail dl > div { display: flex; gap: 14px; padding: 11px 0; border-bottom: 1px solid #252831; }
-.observed-detail dt { width: 130px; flex-shrink: 0; color: #89909c; font-size: 12px; }
-.observed-detail dd { margin: 0; font-family: ui-monospace, Consolas, monospace; font-size: 12px; overflow-wrap: anywhere; }
-.observed-detail p { margin-top: 24px; max-width: 560px; }
-@media (max-width: 750px) { .observed-detail { padding: 24px; } .observed-detail dt { width: 95px; } }
-.sidebar-empty { color: #818895; font-size: 11px; line-height: 1.6; padding: 0 10px; }
-.sidebar-foot { color: #767e89; font-size: 10px; padding: 14px 10px 0; }
-.content { display: flex; flex: 1; min-width: 0; flex-direction: column; background: #101217; }
-.toolbar { display: flex; align-items: center; justify-content: space-between; min-height: 52px; border-bottom: 1px solid #252831; padding: 0 19px; }
-.current-name { font-size: 12px; font-weight: 600; }
-.status { color: #969ca7; font-size: 11px; text-transform: capitalize; }
-.status.live { color: #84ce9b; }
-.terminal-area { position: relative; min-height: 0; flex: 1; }
-.error-bar { display: flex; justify-content: space-between; padding: 8px 16px; gap: 12px; color: #f0b3b3; background: #3b2227; font-size: 12px; }
-.error-bar button { border: 0; background: transparent; color: inherit; font-size: 16px; }
-.empty-state { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 25px; text-align: center; }
-.prompt { font-family: monospace; font-size: 30px; color: #b5a083; }
-h1 { margin: 16px 0 3px; font-size: 19px; font-weight: 600; }
-p { max-width: 370px; margin: 8px 0 0; color: #959ba6; font-size: 12px; line-height: 1.7; }
-.hint { color: #777f8b; font-size: 11px; }
-.statusbar { display: flex; justify-content: space-between; gap: 12px; border-top: 1px solid #262930; padding: 7px 15px; color: #7f8792; font-size: 10px; }
-@media (max-width: 750px) {
-  .sidebar { width: 185px; }
-  .statusbar span:last-child { display: none; }
+button:disabled { cursor: not-allowed; opacity: .55; }
+button:focus-visible, input:focus-visible, select:focus-visible, [role="separator"]:focus-visible {
+  outline: 2px solid var(--accent); outline-offset: -1px;
 }
+.layout { display: flex; height: 100vh; width: 100%; min-height: 0; overflow: hidden; background: var(--canvas); color: var(--text); font-size: 12px; }
+.sidebar { position: relative; display: flex; flex-direction: column; flex: 0 0 auto; min-width: 216px; max-width: 500px; min-height: 0; background: var(--sidebar); padding: 11px 10px 0; z-index: 2; }
+.brand { display: flex; align-items: center; gap: 9px; height: 43px; padding: 0 5px; flex-shrink: 0; }
+.brand-logo { display: block; object-fit: contain; flex-shrink: 0; }
+.brand-copy { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.brand strong { font-size: 13px; font-weight: 650; letter-spacing: .005em; white-space: nowrap; }
+.brand small { color: var(--muted); font-size: 10px; white-space: nowrap; }
+.sidebar-search { flex: 0 0 auto; height: 29px; width: 100%; margin: 7px 0 11px; padding: 0 9px; border: 1px solid var(--border); border-radius: 6px; background: var(--surface); color: var(--text); font-size: 11px; }
+.sidebar-search::placeholder { color: var(--faint); }
+.section-head { display: flex; justify-content: space-between; align-items: center; min-height: 23px; flex-shrink: 0; color: var(--muted); font-size: 10px; font-weight: 650; letter-spacing: .055em; padding: 0 6px; text-transform: uppercase; }
+.main-heading { margin-bottom: 4px; }
+.count { color: var(--muted); border: 1px solid var(--border); border-radius: 9px; padding: 0 6px; font-size: 10px; line-height: 16px; }
+.new-session { flex-shrink: 0; display: flex; align-items: stretch; gap: 6px; height: 31px; margin-bottom: 8px; }
+.new-session select { min-width: 0; flex: 1; height: 31px; border: 1px solid var(--border); background: var(--surface); color: var(--text); border-radius: 6px; padding: 0 8px; font-size: 11px; }
+.new-session .create { flex: 0 0 32px; border: 1px solid var(--border); border-radius: 6px; background: var(--accent-bg); color: var(--accent-text); font-size: 18px; font-weight: 400; }
+.new-session .create:hover, .ssh-port-row button:hover { filter: brightness(1.1); }
+.ssh-connect { display: flex; flex-direction: column; gap: 5px; flex-shrink: 0; padding-bottom: 9px; }
+.ssh-connect input { width: 100%; min-width: 0; height: 29px; padding: 0 8px; background: var(--surface); color: var(--text); border: 1px solid var(--border); border-radius: 5px; font-size: 11px; }
+.ssh-connect input::placeholder { color: var(--faint); }
+.ssh-port-row { display: flex; gap: 5px; }
+.ssh-port-row input { flex: 1; }
+.ssh-port-row button { flex: 0 0 auto; border: 1px solid var(--border); border-radius: 5px; padding: 0 9px; background: var(--accent-bg); color: var(--accent-text); font-size: 11px; }
+.ssh-connect small { color: var(--faint); font-size: 10px; line-height: 1.25; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pane-stack { display: flex; flex-direction: column; flex: 1 1 0; min-height: 0; }
+.managed-pane, .observed-pane { display: flex; flex-direction: column; min-height: 70px; min-width: 0; overflow: hidden; }
+.sessions, .observed-list { min-height: 0; flex: 1 1 0; overflow-x: hidden; overflow-y: auto; scrollbar-width: thin; scrollbar-color: var(--border) transparent; }
+.sessions::-webkit-scrollbar, .observed-list::-webkit-scrollbar, .settings-scroll::-webkit-scrollbar { width: 6px; }
+.sessions::-webkit-scrollbar-thumb, .observed-list::-webkit-scrollbar-thumb, .settings-scroll::-webkit-scrollbar-thumb { background: var(--border); border-radius: 6px; }
+.session-row { display: flex; align-items: center; gap: 1px; width: 100%; min-height: 40px; padding: 0 2px; border-radius: 5px; }
+.session-row:hover, .observed-row:hover { background: var(--surface-hover); }
+.session-row.selected, .observed-row.selected { background: var(--surface-active); }
+.session-select { display: flex; flex-direction: column; justify-content: center; flex: 1 1 0; min-width: 0; min-height: 40px; border: 0; background: none; color: var(--text); text-align: left; padding: 5px 5px 5px 7px; }
+.session-name { display: block; width: 100%; min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font-size: 11px; font-weight: 620; }
+.session-id { color: var(--muted); font-weight: 400; }
+.session-meta { display: flex; align-items: center; gap: 4px; min-width: 0; margin-top: 3px; font-size: 10px; color: var(--muted); }
+.dot { display: inline-block; flex: 0 0 6px; width: 6px; height: 6px; border-radius: 100%; background: var(--faint); }
+.dot.running { background: var(--positive); }
+.session-action { display: grid; place-items: center; flex: 0 0 22px; height: 30px; padding: 0; border: 0; background: transparent; color: var(--muted); font-size: 14px; border-radius: 4px; }
+.session-action:hover { color: var(--negative); background: var(--surface); }
+.session-action.save-action:hover { color: var(--positive); }
+.rename-input { min-width: 0; flex: 1 1 0; height: 28px; margin-left: 4px; padding: 0 6px; color: var(--text); background: var(--surface); border: 1px solid var(--accent); border-radius: 4px; font-size: 11px; }
+.sidebar-empty { font-size: 11px; line-height: 1.4; padding: 8px 6px; color: var(--faint); }
+.pane-resizer { display: flex; align-items: center; justify-content: center; flex: 0 0 9px; min-height: 9px; border-top: 1px solid var(--border-faint); cursor: row-resize; touch-action: none; user-select: none; }
+.pane-resizer span { display: block; width: 30px; height: 3px; border-radius: 4px; background: var(--border); opacity: .35; }
+.pane-resizer:hover span, .pane-resizer.dragging span, .pane-resizer:focus-visible span { background: var(--accent); opacity: 1; }
+.external { margin: 2px 0 5px; }
+.external > span { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.refresh-action { display: grid; place-items: center; border: 0; padding: 0; height: 20px; width: 22px; background: transparent; color: var(--muted); font-size: 16px; }
+.refresh-action:hover { color: var(--text); }
+.observed-list { display: flex; flex-direction: column; gap: 1px; }
+.observed-row { display: flex; flex-direction: column; justify-content: center; flex: 0 0 auto; width: 100%; min-height: 37px; padding: 5px 7px; text-align: left; border: 0; border-radius: 5px; background: transparent; color: var(--text); }
+.observed-source { display: inline; margin-left: 4px; padding: 1px 3px; border: 1px solid var(--border); border-radius: 3px; color: var(--muted); font-size: 9px; font-weight: 400; }
+.observed-message { padding-top: 3px; padding-bottom: 3px; }
+.pane-note { font-size: 10px; color: var(--faint); padding: 4px 6px 2px; flex: 0 0 auto; }
+.muted-note { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; line-height: 1.35; max-height: 30px; }
+.sidebar-footer { position: relative; flex: 0 0 auto; border-top: 1px solid var(--border-faint); padding: 5px 0 6px; background: var(--sidebar); }
+.settings-trigger { display: flex; gap: 9px; width: 100%; align-items: center; height: 31px; padding: 0 8px; background: transparent; color: var(--muted); border: 0; border-radius: 5px; text-align: left; font-size: 11px; }
+.settings-trigger:hover, .settings-trigger[aria-expanded="true"] { color: var(--text); background: var(--surface-hover); }
+.gear { font-size: 17px; line-height: 1; }
+.settings-arrow { margin-left: auto; font-size: 17px; }
+.settings-scrim { position: fixed; inset: 0; z-index: 10; }
+.settings-sheet { display: flex; flex-direction: column; position: absolute; z-index: 11; left: 6px; bottom: 45px; width: min(304px, calc(100vw - 20px)); max-height: min(495px, calc(100vh - 86px)); overflow: hidden; border: 1px solid var(--border); background: var(--sidebar); box-shadow: 0 12px 36px #0009; border-radius: 8px; }
+.settings-head { display: flex; justify-content: space-between; align-items: center; flex-shrink: 0; gap: 8px; padding: 6px 10px; min-height: 34px; border-bottom: 1px solid var(--border-faint); }
+.settings-head strong { display: block; font-size: 12px; font-weight: 650; }
+.settings-head button { flex: 0 0 23px; height: 23px; border: 0; background: var(--surface); color: var(--text); font-size: 16px; border-radius: 4px; }
+.settings-tabs { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 2px; flex-shrink: 0; padding: 5px 7px 3px; border-bottom: 1px solid var(--border-faint); }
+.settings-tabs button { min-width: 0; height: 26px; padding: 0 3px; border: 0; border-radius: 4px; color: var(--muted); background: transparent; font-size: 10px; }
+.settings-tabs button:hover { color: var(--text); background: var(--surface); }
+.settings-tabs button.chosen { color: var(--accent-text); background: var(--accent-bg); }
+.settings-scroll { display: flex; flex-direction: column; min-height: 0; overflow-x: hidden; overflow-y: auto; padding: 9px 10px 10px; gap: 9px; scrollbar-width: thin; scrollbar-color: var(--border) transparent; }
+.setting-block { display: flex; flex-direction: column; gap: 5px; }
+.setting-label { color: var(--text); font-size: 10px; font-weight: 600; }
+.setting-split { display: flex; align-items: center; justify-content: space-between; }
+.setting-split output { font-size: 11px; color: var(--accent); font-weight: 500; }
+.theme-options { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 5px; }
+.theme-option { display: flex; align-items: center; gap: 5px; min-width: 0; height: 29px; padding: 3px 5px; color: var(--muted); background: var(--surface); border: 1px solid var(--border); border-radius: 5px; font-size: 10px; }
+.theme-option:hover { color: var(--text); }
+.theme-option.chosen { color: var(--text); border-color: var(--accent); }
+.theme-chips { display: flex; flex: 0 0 auto; overflow: hidden; width: 32px; height: 15px; border-radius: 3px; border: 1px solid #ffffff22; }
+.theme-chips span { flex: 1; }
+.font-slider { width: 100%; margin: 2px 0; accent-color: var(--accent); }
+.setting-block select, .directory-input, .setting-row select, .setting-stack select { min-width: 0; width: 100%; height: 28px; padding: 0 5px; color: var(--text); background: var(--surface); border: 1px solid var(--border); border-radius: 5px; font-size: 10px; }
+.setting-row { display: grid; grid-template-columns: 90px minmax(0, 1fr); align-items: center; gap: 7px; min-height: 29px; color: var(--text); font-size: 10px; font-weight: 600; }
+.setting-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 7px; }
+.setting-stack { display: flex; flex-direction: column; gap: 4px; min-width: 0; font-size: 10px; color: var(--text); }
+.toggle-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 7px; }
+.setting-toggle { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 28px; padding: 0 6px; font-size: 10px; border-radius: 4px; color: var(--text); background: var(--surface); }
+.setting-toggle input { width: 14px; height: 14px; flex: 0 0 auto; margin: 0; accent-color: var(--accent); }
+.settings-scroll select:disabled { opacity: .4; }
+.directory-input { font-family: Consolas, monospace; }
+.setting-note { color: var(--faint); line-height: 1.35; font-size: 9px; }
+.reset-layout { align-self: flex-start; padding: 5px 8px; border-radius: 4px; background: transparent; border: 1px solid var(--border); color: var(--muted); font-size: 10px; }
+.reset-layout:hover { color: var(--text); }
+.compact-reset { margin-top: 2px; }
+.sidebar-resizer { position: relative; display: flex; justify-content: center; align-items: center; flex: 0 0 7px; width: 7px; background: var(--border-faint); touch-action: none; cursor: col-resize; user-select: none; z-index: 1; }
+.sidebar-resizer span { display: block; width: 3px; height: 30px; background: var(--border); border-radius: 4px; opacity: .25; }
+.sidebar-resizer:hover span, .sidebar-resizer.dragging span, .sidebar-resizer:focus-visible span { background: var(--accent); opacity: 1; }
+.content { flex: 1 1 0; min-width: 0; min-height: 0; display: flex; flex-direction: column; background: var(--canvas); }
+.toolbar { flex: 0 0 42px; min-height: 42px; display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 0 15px; border-bottom: 1px solid var(--border-faint); }
+.current-name { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font-size: 12px; font-weight: 600; }
+.status { flex: 0 0 auto; font-size: 11px; color: var(--muted); }
+.status.live { color: var(--positive); }
+.error-bar { display: flex; justify-content: space-between; align-items: center; flex: 0 0 auto; gap: 12px; padding: 6px 12px; color: var(--negative); background: var(--surface); font-size: 11px; }
+.error-bar button { color: inherit; background: transparent; border: 0; font-size: 16px; }
+.terminal-area { position: relative; min-height: 0; flex: 1 1 0; background: var(--canvas); }
+.observed-detail { position: absolute; inset: 0; overflow: auto; padding: 35px 38px; background: var(--canvas); }
+.observed-kicker { color: var(--accent); font-size: 10px; font-weight: 600; letter-spacing: .07em; }
+.observed-detail h1 { font-size: 19px; margin: 11px 0 22px; }
+.observed-detail dl { display: grid; gap: 0; margin: 0; max-width: 540px; }
+.observed-detail dl > div { display: flex; gap: 12px; padding: 10px 0; border-bottom: 1px solid var(--border-faint); }
+.observed-detail dt { flex: 0 0 118px; color: var(--muted); font-size: 11px; }
+.observed-detail dd { margin: 0; font-family: Consolas, monospace; font-size: 11px; color: var(--text); overflow-wrap: anywhere; }
+.observed-detail p { max-width: 560px; margin-top: 22px; }
+.empty-state { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 25px; text-align: center; }
+.empty-state h1 { margin: 14px 0 6px; font-size: 17px; }
+.empty-state p { font-size: 12px; color: var(--muted); line-height: 1.6; max-width: 380px; }
+.empty-state .hint { font-size: 11px; color: var(--faint); }
+.statusbar { flex: 0 0 26px; height: 26px; display: flex; align-items: center; justify-content: space-between; gap: 14px; padding: 0 12px; border-top: 1px solid var(--border-faint); color: var(--faint); font-size: 10px; }
+@media (max-width: 820px) { .statusbar span:last-child { display: none; } }
+@media (max-height: 480px) { .brand { height: 34px; } .sidebar-search { margin: 3px 0 6px; } .settings-scroll { gap: 9px; } }
 </style>

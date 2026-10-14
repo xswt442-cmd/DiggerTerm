@@ -55,6 +55,16 @@ Wails GUI + xterm.js  <-- private local IPC -->  Go Session Daemon
 
 **On the dev branch only (not in v0.0.1):** The sidebar **observes read-only process metadata** for current-user Windows terminal/agent processes and the default Linux user's processes within **already-running WSL distributions** (PID, parent PID, name, and start time). Linux and Windows PID namespaces are distinct. Classification is heuristic, not exhaustive. The scanner does not wake stopped WSL distributions, read command lines/environments/terminal screens, or control external processes. Linux processes cannot yet be reliably linked to DiggerTerm-managed `wsl.exe` sessions. To use this feature with an older running daemon, finish existing sessions, explicitly stop it, then reopen the GUI.
 
+### Appearance and shell startup directory (dev branch only)
+
+Drag the separator between the sidebar and terminal, or the separator between **My sessions** and **Observed**. The focused separators also support arrow keys. Pane sizes are saved with local UI preferences.
+
+The compact (~304 px) **Settings** popover has four tabs: **Appearance / Terminal / Sessions / Observed**. Appearance offers four muted dark palettes (Nightfall, Graphite, Pine, Blue Hour), UI language, and splitter reset. Terminal options include font family (falling back when not installed), size (11–20 px), line height, scrollback, cursor shape/blink, mouse wheel speed, right-click word selection and padding. Sessions lets you choose the default shell, whether new sessions become active, and a **default working directory for new local shells**. Observed controls discovery visibility, manual or periodic scanning, PID labels, and the bottom status bar.
+
+An empty working directory uses the existing default. An existing absolute path applies only to new PowerShell, CMD or local Unix shells, not running sessions, WSL or remote SSH. The daemon validates the path. Hiding observed processes stops GUI scanning, **not any external process**. The scrollback option controls only the current xterm history and does not extend the daemon's bounded output replay.
+
+Preferences are stored in the local desktop WebView, not in the session daemon. Theme and font changes resize terminal columns and rows without changing process ownership.
+
 ### SSH (dev branch only; not in the v0.0.1 download)
 
 Choose **SSH** in the sidebar, enter a `~/.ssh/config` Host alias such as `prod` or a destination like `alice@server.example`, optionally override the port, then select **Connect**. The field suggests simple, literal `Host` aliases from the local config, without revealing credentials or expanding `Include`. OpenSSH handles first-connection host-key verification, keys/ssh-agent and password prompts in the terminal; DiggerTerm neither auto-accepts host keys nor stores credentials. Configure IPv6 destinations, ProxyJump and identity files in `~/.ssh/config`.

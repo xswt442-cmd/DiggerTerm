@@ -36,6 +36,7 @@ type request struct {
 	SessionID string `json:"sessionId,omitempty"`
 	Name      string `json:"name,omitempty"`
 	Profile   string `json:"profile,omitempty"`
+	Directory string `json:"directory,omitempty"`
 	SSHTarget string `json:"sshTarget,omitempty"`
 	SSHPort   int    `json:"sshPort,omitempty"`
 	Data      string `json:"data,omitempty"`

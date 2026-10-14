@@ -27,6 +27,8 @@ jobs:
           cache-dependency-path: frontend/package-lock.json
       - name: Install frontend dependencies
         run: npm --prefix frontend ci
+      - name: Test desktop preferences
+        run: npm --prefix frontend run test:preferences
       # main.go embeds frontend/dist; the Vite build must precede go test/vet.
       - name: Build frontend
         run: npm --prefix frontend run build

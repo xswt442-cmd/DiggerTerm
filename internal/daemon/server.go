@@ -200,6 +200,14 @@ func (s *Server) dispatch(req request) message {
 		}
 		info, err := s.manager.Create(req.Profile, req.Cols, req.Rows)
 		return response(req.ID, info, err)
+	case "createLocal":
+		s.lifecycle.Lock()
+		defer s.lifecycle.Unlock()
+		if s.stopping {
+			return response(req.ID, nil, errors.New("daemon is stopping"))
+		}
+		info, err := s.manager.CreateLocal(req.Profile, req.Directory, req.Cols, req.Rows)
+		return response(req.ID, info, err)
 	case "createSSH":
 		s.lifecycle.Lock()
 		defer s.lifecycle.Unlock()

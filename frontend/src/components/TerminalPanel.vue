@@ -5,9 +5,23 @@ import { FitAddon } from '@xterm/addon-fit'
 import { Events } from '@wailsio/runtime'
 import { Resize, Snapshot, Write } from '../../bindings/github.com/xswt442-cmd/DiggerTerm/sessionservice'
 import type { Info } from '../../bindings/github.com/xswt442-cmd/DiggerTerm/internal/session/models'
+import { fonts, type Palette, type FontId, type CursorStyle } from '../uiPreferences'
 import '@xterm/xterm/css/xterm.css'
 
-const props = defineProps<{ session: Info; active: boolean }>()
+const props = defineProps<{
+  session: Info
+  active: boolean
+  fontSize: number
+  fontFamily: FontId
+  lineHeight: number
+  scrollback: number
+  cursorStyle: CursorStyle
+  cursorBlink: boolean
+  scrollSensitivity: number
+  rightClickSelectsWord: boolean
+  padding: number
+  colors: Palette['terminal']
+}>()
 const emit = defineEmits<{ error: [message: string] }>()
 const container = ref<HTMLElement | null>(null)
 
@@ -64,6 +78,49 @@ function focus() {
   terminal?.focus()
 }
 
+watch(() => props.fontSize, async (size) => {
+  if (terminal) {
+    terminal.options.fontSize = size
+    await nextTick()
+    fit()
+  }
+})
+watch(() => props.colors, (colors) => {
+  if (terminal) terminal.options.theme = colors
+}, { deep: true })
+
+watch(() => props.fontFamily, async (font) => {
+  if (!terminal) return
+  terminal.options.fontFamily = fonts[font].family
+  await nextTick()
+  fit()
+})
+watch(() => props.lineHeight, async (height) => {
+  if (!terminal) return
+  terminal.options.lineHeight = height
+  await nextTick()
+  fit()
+})
+watch(() => props.scrollback, (lines) => {
+  if (terminal) terminal.options.scrollback = lines
+})
+watch(() => props.cursorStyle, (style) => {
+  if (terminal) terminal.options.cursorStyle = style
+})
+watch(() => props.cursorBlink, (blink) => {
+  if (terminal) terminal.options.cursorBlink = blink
+})
+watch(() => props.scrollSensitivity, (sensitivity) => {
+  if (terminal) terminal.options.scrollSensitivity = sensitivity
+})
+watch(() => props.rightClickSelectsWord, (enabled) => {
+  if (terminal) terminal.options.rightClickSelectsWord = enabled
+})
+watch(() => props.padding, async () => {
+  await nextTick()
+  fit()
+})
+
 watch(() => props.active, async (active) => {
   if (active) {
     await nextTick()
@@ -75,23 +132,16 @@ watch(() => props.active, async (active) => {
 onMounted(async () => {
   if (!container.value) return
   const term = new Terminal({
-    cursorBlink: true,
-    fontFamily: 'Consolas, Cascadia Code, JetBrains Mono, monospace',
-    fontSize: 13,
-    lineHeight: 1.25,
-    scrollback: 5000,
+    cursorBlink: props.cursorBlink,
+    cursorStyle: props.cursorStyle,
+    fontFamily: fonts[props.fontFamily].family,
+    fontSize: props.fontSize,
+    lineHeight: props.lineHeight,
+    scrollback: props.scrollback,
+    scrollSensitivity: props.scrollSensitivity,
+    rightClickSelectsWord: props.rightClickSelectsWord,
     convertEol: false,
-    theme: {
-      background: '#101217',
-      foreground: '#dce0e7',
-      cursor: '#dbc29b',
-      selectionBackground: '#555a70',
-      black: '#171b22',
-      blue: '#80aef5',
-      green: '#8fd7ab',
-      red: '#f48e8e',
-      yellow: '#e4c47b',
-    },
+    theme: props.colors,
   })
   const fitPlugin = new FitAddon()
   term.loadAddon(fitPlugin)
@@ -150,6 +200,7 @@ onBeforeUnmount(() => {
     ref="container"
     class="terminal-panel"
     :class="{ hidden: !active }"
+    :style="{ padding: props.padding + 'px' }"
     @click="focus"
   />
 </template>
@@ -160,7 +211,7 @@ onBeforeUnmount(() => {
   inset: 0;
   padding: 12px 16px;
   overflow: hidden;
-  background: #101217;
+  background: var(--canvas);
 }
 .terminal-panel.hidden {
   display: none;
