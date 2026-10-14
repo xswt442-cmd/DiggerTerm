@@ -60,6 +60,20 @@ func TestIPCReconnectPreservesPTY(t *testing.T) {
 	if err := second.Stop(); err == nil {
 		t.Fatal("daemon must refuse stop with active PTY")
 	}
+	// Observe is a separate read-only IPC method. The owned CMD must not
+	// appear in the list of external processes.
+	observed, err := second.Observe()
+	if err != nil {
+		t.Fatalf("observe via IPC: %v", err)
+	}
+	if !observed.Supported {
+		t.Fatal("Windows observe should be supported")
+	}
+	for _, item := range observed.Processes {
+		if item.PID == info.PID {
+			t.Fatalf("managed shell leaked into external list: %+v", item)
+		}
+	}
 	deadline := time.Now().Add(12 * time.Second)
 	for {
 		snapshot, err := second.Snapshot(info.ID)

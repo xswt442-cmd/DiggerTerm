@@ -10,6 +10,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/xswt442-cmd/DiggerTerm/internal/observe"
 	"github.com/xswt442-cmd/DiggerTerm/internal/session"
 )
 
@@ -157,6 +158,14 @@ func (c *Client) Terminate(id string) error {
 }
 func (c *Client) Forget(id string) error {
 	return c.call(request{Method: "forget", SessionID: id}, nil)
+}
+
+// Observe fetches an inventory of process metadata. It has no process
+// control or terminal-input endpoint for observed processes.
+func (c *Client) Observe() (observe.Snapshot, error) {
+	var result observe.Snapshot
+	err := c.call(request{Method: "observe"}, &result)
+	return result, err
 }
 
 // Stop is an explicit action and refuses to stop while owned PTYs are running.

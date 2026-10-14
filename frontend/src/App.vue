@@ -2,8 +2,9 @@
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { Events } from '@wailsio/runtime'
 import TerminalPanel from './components/TerminalPanel.vue'
-import { Create, Forget, List, Profiles, Terminate } from '../bindings/github.com/xswt442-cmd/DiggerTerm/sessionservice'
+import { Create, Forget, List, Observe, Profiles, Terminate } from '../bindings/github.com/xswt442-cmd/DiggerTerm/sessionservice'
 import type { Info, Profile } from '../bindings/github.com/xswt442-cmd/DiggerTerm/internal/session/models'
+import type { Process as ObservedProcess, Snapshot as ObservedSnapshot } from '../bindings/github.com/xswt442-cmd/DiggerTerm/internal/observe/models'
 
 const sessions = ref<Info[]>([])
 const profiles = ref<Profile[]>([])
@@ -11,13 +12,47 @@ const selectedId = ref<string | null>(null)
 const profileId = ref('')
 const creating = ref(false)
 const errorMessage = ref('')
+const externalSnapshot = ref<ObservedSnapshot | null>(null)
+const externalError = ref('')
+const refreshingExternal = ref(false)
+const selectedExternalKey = ref<string | null>(null)
+const observedProcesses = computed(() => externalSnapshot.value?.processes ?? [])
+const activeObserved = computed(() => observedProcesses.value.find((p) => p.key === selectedExternalKey.value))
 const activeSession = computed(() => sessions.value.find((s) => s.id === selectedId.value))
+let observationTimer: ReturnType<typeof setInterval> | undefined
 let offExit: (() => void) | undefined
 let offQuitBlocked: (() => void) | undefined
 let offDaemonDisconnected: (() => void) | undefined
 
 function reportError(err: unknown) {
   errorMessage.value = err instanceof Error ? err.message : String(err)
+}
+
+// Observed PIDs are display-only. They are never sent to Write/Terminate.
+function selectManaged(id: string) {
+  selectedExternalKey.value = null
+  selectedId.value = id
+}
+
+function selectObserved(process: ObservedProcess) {
+  selectedId.value = null
+  selectedExternalKey.value = process.key
+}
+
+async function refreshObserved() {
+  if (refreshingExternal.value) return
+  refreshingExternal.value = true
+  try {
+    externalSnapshot.value = await Observe()
+    externalError.value = ''
+  } catch (err) {
+    const message = String(err)
+    externalError.value = message.includes('unsupported daemon method')
+      ? 'Daemon needs updating. Finish your sessions, stop it, then reopen the app.'
+      : 'Process inventory unavailable: ' + message
+  } finally {
+    refreshingExternal.value = false
+  }
 }
 
 async function createSession() {
@@ -27,7 +62,7 @@ async function createSession() {
   try {
     const info = await Create(profileId.value, 100, 30)
     sessions.value = [...sessions.value, info]
-    selectedId.value = info.id
+    selectManaged(info.id)
   } catch (err) {
     reportError(err)
   } finally {
@@ -70,6 +105,10 @@ onMounted(async () => {
     if (!info) return
     sessions.value = sessions.value.map((s) => s.id === info.id ? info : s)
   })
+  void refreshObserved()
+  observationTimer = setInterval(() => {
+    if (!document.hidden) void refreshObserved()
+  }, 15000)
   try {
     const [available, existing] = await Promise.all([Profiles(), List()])
     profiles.value = available ?? []
@@ -82,6 +121,7 @@ onMounted(async () => {
 })
 
 onBeforeUnmount(() => {
+  if (observationTimer) clearInterval(observationTimer)
   offExit?.()
   offQuitBlocked?.()
   offDaemonDisconnected?.()
@@ -124,7 +164,7 @@ onBeforeUnmount(() => {
             type="button"
             class="session-select"
             :aria-current="selectedId === s.id ? 'page' : undefined"
-            @click="selectedId = s.id"
+            @click="selectManaged(s.id)"
           >
             <span class="session-name">{{ s.name }} <span class="session-id">#{{ s.id }}</span></span>
             <span class="session-meta"><span :class="['dot', s.status]" /> {{ s.status }} · PID {{ s.pid }}</span>
@@ -139,16 +179,44 @@ onBeforeUnmount(() => {
         </div>
       </nav>
 
-      <div class="section-head external"><span>EXTERNAL · READ ONLY</span></div>
-      <p class="sidebar-empty">Process discovery is planned. No external processes are controlled.</p>
-      <footer class="sidebar-foot">GUI + background daemon · v0.2</footer>
+      <div class="section-head external">
+        <span>OBSERVED · READ ONLY</span>
+        <button
+          type="button"
+          class="refresh-action"
+          :disabled="refreshingExternal"
+          title="Refresh observed processes"
+          aria-label="Refresh observed processes"
+          @click="refreshObserved"
+        >{{ refreshingExternal ? '…' : '↻' }}</button>
+      </div>
+      <p v-if="externalError" class="sidebar-empty observed-note" role="status">{{ externalError }}</p>
+      <p v-else-if="externalSnapshot && !externalSnapshot.supported" class="sidebar-empty observed-note">Windows process discovery only.</p>
+      <p v-else-if="!externalSnapshot" class="sidebar-empty observed-note">Scanning processes…</p>
+      <p v-else-if="observedProcesses.length === 0" class="sidebar-empty observed-note">No related external processes found.</p>
+      <nav class="observed-list" aria-label="Observed external processes">
+        <button
+          v-for="process in observedProcesses"
+          :key="process.key"
+          type="button"
+          class="observed-row"
+          :class="{ selected: selectedExternalKey === process.key }"
+          :aria-current="selectedExternalKey === process.key ? 'page' : undefined"
+          @click="selectObserved(process)"
+        >
+          <span class="session-name">{{ process.name }}</span>
+          <span class="session-meta">{{ process.kind }} · PID {{ process.pid }}</span>
+        </button>
+      </nav>
+      <p v-if="externalSnapshot?.truncated" class="sidebar-empty observed-note">Showing first 160 results.</p>
+      <footer class="sidebar-foot">Observed processes cannot be controlled.</footer>
     </aside>
 
     <section class="content">
       <header class="toolbar">
-        <span class="current-name">{{ activeSession ? activeSession.name + ' #' + activeSession.id : 'Terminal' }}</span>
+        <span class="current-name">{{ selectedExternalKey ? (activeObserved?.name ?? 'Process no longer detected') : (activeSession ? activeSession.name + ' #' + activeSession.id : 'Terminal') }}</span>
         <span class="status" :class="{ live: activeSession?.status === 'running' }">
-          {{ activeSession ? activeSession.status : 'No session selected' }}
+          {{ selectedExternalKey ? 'Observed · read only' : (activeSession ? activeSession.status : 'No session selected') }}
         </span>
       </header>
 
@@ -166,16 +234,34 @@ onBeforeUnmount(() => {
           />
         </template>
 
-        <div v-if="sessions.length === 0" class="empty-state">
+        <div v-if="selectedExternalKey" class="observed-detail">
+          <template v-if="activeObserved">
+            <div class="observed-kicker">EXTERNAL PROCESS · READ ONLY</div>
+            <h1>{{ activeObserved.name }}</h1>
+            <dl>
+              <div><dt>Process ID</dt><dd>{{ activeObserved.pid }}</dd></div>
+              <div><dt>Parent PID</dt><dd>{{ activeObserved.parentPid || 'Unknown' }}</dd></div>
+              <div><dt>Classification</dt><dd>{{ activeObserved.kind }} (inferred)</dd></div>
+              <div><dt>Started</dt><dd>{{ new Date(activeObserved.startedAt).toLocaleString() }}</dd></div>
+            </dl>
+            <p>Only process metadata is visible. DiggerTerm does not own this PTY, cannot read its screen, and will not send input or termination signals.</p>
+          </template>
+          <template v-else>
+            <h1>Process no longer detected</h1>
+            <p>It may have exited or become inaccessible. Select another process or refresh the list.</p>
+          </template>
+        </div>
+
+        <div v-if="sessions.length === 0 && !selectedExternalKey" class="empty-state">
           <span class="prompt" aria-hidden="true">&gt;_</span>
           <h1>Your terminals, one workspace.</h1>
           <p>Create a local terminal from the left. Windows supports PowerShell, CMD, and WSL (when installed).</p>
-          <p class="hint">Sessions keep running across GUI exits and reopen from the background daemon. SSH and external discovery are planned.</p>
+          <p class="hint">Sessions survive GUI exits while the daemon runs. External process metadata can be observed read-only; SSH is planned.</p>
         </div>
       </div>
 
       <div class="statusbar">
-        <span>Local PTY · {{ sessions.filter((s) => s.status === 'running').length }} running</span>
+        <span>Local PTY · {{ sessions.filter((s) => s.status === 'running').length }} running · {{ observedProcesses.length }} observed</span>
         <span>Quit UI safely · background sessions persist</span>
       </div>
     </section>
@@ -218,7 +304,23 @@ button:disabled { cursor: not-allowed; opacity: .6; }
 .dot.running { background: #84ce9b; }
 .session-action { border: 0; background: transparent; color: #9fa4ac; padding: 4px 7px; font-size: 17px; }
 .session-action:hover { color: #f09797; }
-.external { margin-top: 18px; border-top: 1px solid #30333b; padding-top: 17px; }
+.external { margin-top: 18px; border-top: 1px solid #30333b; padding-top: 12px; padding-bottom: 4px; }
+.refresh-action { border: 0; background: transparent; color: #abb0b9; padding: 2px 7px; font-size: 17px; }
+.refresh-action:hover { color: #e0e2e6; }
+.observed-list { display: flex; flex-direction: column; gap: 2px; flex: 0 1 37%; min-height: 0; overflow: auto; }
+.observed-row { display: flex; flex-direction: column; gap: 5px; text-align: left; width: 100%; border: 0; border-radius: 6px; background: transparent; color: #b8bec9; padding: 9px 10px; }
+.observed-row:hover { background: #252932; }
+.observed-row.selected { background: #30343e; }
+.observed-note { margin: 0 0 7px; overflow-wrap: anywhere; }
+.observed-detail { position: absolute; inset: 0; overflow: auto; padding: 42px 50px; background: #101217; }
+.observed-detail h1 { margin: 10px 0 24px; font-size: 20px; }
+.observed-kicker { color: #a49c91; font-size: 11px; font-weight: 600; letter-spacing: .08em; }
+.observed-detail dl { display: grid; gap: 0; margin: 0; max-width: 520px; }
+.observed-detail dl > div { display: flex; gap: 14px; padding: 11px 0; border-bottom: 1px solid #252831; }
+.observed-detail dt { width: 130px; flex-shrink: 0; color: #89909c; font-size: 12px; }
+.observed-detail dd { margin: 0; font-family: ui-monospace, Consolas, monospace; font-size: 12px; overflow-wrap: anywhere; }
+.observed-detail p { margin-top: 24px; max-width: 560px; }
+@media (max-width: 750px) { .observed-detail { padding: 24px; } .observed-detail dt { width: 95px; } }
 .sidebar-empty { color: #818895; font-size: 11px; line-height: 1.6; padding: 0 10px; }
 .sidebar-foot { color: #767e89; font-size: 10px; padding: 14px 10px 0; }
 .content { display: flex; flex: 1; min-width: 0; flex-direction: column; background: #101217; }

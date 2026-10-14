@@ -7,6 +7,7 @@ import (
 
 	"github.com/wailsapp/wails/v3/pkg/application"
 	"github.com/xswt442-cmd/DiggerTerm/internal/daemon"
+	"github.com/xswt442-cmd/DiggerTerm/internal/observe"
 	"github.com/xswt442-cmd/DiggerTerm/internal/session"
 )
 
@@ -107,6 +108,16 @@ func (s *SessionService) Snapshot(id string) (session.Replay, error) {
 		return session.Replay{}, err
 	}
 	return c.Snapshot(id)
+}
+
+// Observe exposes read-only external process metadata. The Wails frontend
+// cannot send these PID identifiers to any managed-session control method.
+func (s *SessionService) Observe() (observe.Snapshot, error) {
+	c, err := s.backend()
+	if err != nil {
+		return observe.Snapshot{}, err
+	}
+	return c.Observe()
 }
 
 func (s *SessionService) Terminate(id string) error {

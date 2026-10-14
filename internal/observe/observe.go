@@ -1,0 +1,178 @@
+// Package observe exposes a strictly read-only process inventory.
+// Unlike managed sessions, observed processes have NO control API.
+package observe
+
+import (
+	"fmt"
+	"sort"
+	"strings"
+	"time"
+)
+
+const maxObserved = 160
+
+type Process struct {
+	Key       string `json:"key"` // PID + start time; not an authorization token
+	PID       int    `json:"pid"`
+	ParentPID int    `json:"parentPid"`
+	Name      string `json:"name"`
+	Kind      string `json:"kind"`      // terminal, agent, or descendant
+	StartedAt string `json:"startedAt"` // UTC RFC3339, known process start time
+}
+
+type Snapshot struct {
+	Supported bool      `json:"supported"`
+	ScannedAt string    `json:"scannedAt"`
+	Processes []Process `json:"processes"`
+	Truncated bool      `json:"truncated"`
+	Note      string    `json:"note"`
+}
+
+// Scan never opens PTY handles and never reads process command lines,
+// environments, terminal contents, or other private process memory.
+func Scan(ownedPIDs []int) (Snapshot, error) {
+	rows, supported, err := platformSnapshot()
+	if err != nil {
+		return Snapshot{}, err
+	}
+	result := Snapshot{
+		Supported: supported,
+		ScannedAt: time.Now().UTC().Format(time.RFC3339),
+		Processes: make([]Process, 0),
+		Note:      "Process-name heuristics only. No screen contents or control permissions.",
+	}
+	if !supported {
+		result.Note = "Read-only external process scanning is available on Windows only."
+		return result, nil
+	}
+	var truncated bool
+	result.Processes, truncated = selectRelated(rows, ownedPIDs, maxObserved)
+	result.Truncated = truncated
+	return result, nil
+}
+
+type processRow struct {
+	pid       int
+	parentPID int
+	name      string
+	started   time.Time
+}
+
+// Deliberately conservative heuristics: an agent using a generic node.exe
+// process can only be shown as a descendant of a recognized process.
+func rootKind(name string) string {
+	switch strings.ToLower(name) {
+	case "cmd.exe", "powershell.exe", "pwsh.exe", "wsl.exe", "wslhost.exe",
+		"bash.exe", "ssh.exe", "wt.exe", "windowsterminal.exe", "openconsole.exe",
+		"conhost.exe", "mintty.exe", "wezterm-gui.exe", "alacritty.exe",
+		"hyper.exe", "tabby.exe":
+		return "terminal"
+	case "claude.exe", "codex.exe", "gemini.exe", "opencode.exe", "aider.exe":
+		return "agent"
+	}
+	return ""
+}
+
+func selectRelated(rows []processRow, managed []int, limit int) ([]Process, bool) {
+	byPID := make(map[int]processRow, len(rows))
+	for _, row := range rows {
+		if row.pid > 0 && !row.started.IsZero() {
+			byPID[row.pid] = row
+		}
+	}
+	owned := make(map[int]bool, len(managed))
+	for _, pid := range managed {
+		owned[pid] = true
+	}
+
+	// Every parent link must be newer than neither child nor its own start:
+	// this prevents attaching a child to an unrelated PID reused by Windows.
+	parentOf := func(row processRow) (processRow, bool) {
+		parent, ok := byPID[row.parentPID]
+		return parent, ok && parent.pid != row.pid && !parent.started.After(row.started)
+	}
+	// Determine whether a process belongs to our PTY tree, even when its
+	// descendant executable looks like an external agent.
+	isOwned := func(row processRow) bool {
+		seen := make(map[int]bool)
+		for {
+			if owned[row.pid] {
+				return true
+			}
+			if seen[row.pid] {
+				return false
+			}
+			seen[row.pid] = true
+			parent, ok := parentOf(row)
+			if !ok {
+				return false
+			}
+			row = parent
+		}
+	}
+	relatedKind := func(row processRow) string {
+		if kind := rootKind(row.name); kind != "" {
+			return kind
+		}
+		seen := make(map[int]bool)
+		for {
+			if seen[row.pid] {
+				break
+			}
+			seen[row.pid] = true
+			parent, ok := parentOf(row)
+			if !ok {
+				break
+			}
+			if rootKind(parent.name) != "" {
+				return "descendant"
+			}
+			row = parent
+		}
+		return ""
+	}
+
+	processes := make([]Process, 0)
+	for _, row := range rows {
+		if row.pid <= 0 || row.started.IsZero() || isOwned(row) {
+			continue
+		}
+		kind := relatedKind(row)
+		if kind == "" {
+			continue
+		}
+		processes = append(processes, Process{
+			Key:       fmt.Sprintf("%d-%d", row.pid, row.started.UnixNano()),
+			PID:       row.pid,
+			ParentPID: row.parentPID,
+			Name:      row.name,
+			Kind:      kind,
+			StartedAt: row.started.UTC().Format(time.RFC3339Nano),
+		})
+	}
+	// Prioritize explicitly recognized terminals/agents before descendants;
+	// a large process tree should not hide the terminal roots.
+	sort.Slice(processes, func(i, j int) bool {
+		a, b := processes[i], processes[j]
+		if a.Kind != b.Kind {
+			if a.Kind == "descendant" {
+				return false
+			}
+			if b.Kind == "descendant" {
+				return true
+			}
+		}
+		if a.Name != b.Name {
+			return strings.ToLower(a.Name) < strings.ToLower(b.Name)
+		}
+		return a.PID < b.PID
+	})
+	if limit < 0 {
+		limit = 0
+	}
+	truncated := len(processes) > limit
+	if truncated {
+		processes = processes[:limit]
+	}
+	return processes, truncated
+}

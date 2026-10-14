@@ -13,6 +13,9 @@ import { Call as $Call, CancellablePromise as $CancellablePromise } from "@wails
 
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore: Unused imports
+import * as observe$0 from "./internal/observe/models.js";
+// eslint-disable-next-line @typescript-eslint/ban-ts-comment
+// @ts-ignore: Unused imports
 import * as session$0 from "./internal/session/models.js";
 
 export function Create(profile: string, cols: number, rows: number): $CancellablePromise<session$0.Info> {
@@ -25,6 +28,14 @@ export function Forget(id: string): $CancellablePromise<void> {
 
 export function List(): $CancellablePromise<session$0.Info[] | null> {
     return $Call.ByID(406057093);
+}
+
+/**
+ * Observe exposes read-only external process metadata. The Wails frontend
+ * cannot send these PID identifiers to any managed-session control method.
+ */
+export function Observe(): $CancellablePromise<observe$0.Snapshot> {
+    return $Call.ByID(2644345531);
 }
 
 export function Profiles(): $CancellablePromise<session$0.Profile[] | null> {

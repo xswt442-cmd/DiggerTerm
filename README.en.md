@@ -51,7 +51,9 @@ Wails GUI + xterm.js  <-- private local IPC -->  Go Session Daemon
                                                └─ PTY / ConPTY / WSL
 ```
 
-**Limitations:** Session continuity depends on a running daemon; daemon failure, forced termination, sign-out, or shutdown can end sessions. Bounded output replay is not a complete VT screen snapshot. SSH, read-only external terminal discovery, AI-agent process monitoring, and arbitrary terminal takeover are not implemented.
+**Limitations:** Session continuity depends on a running daemon; daemon failure, forced termination, sign-out, or shutdown can end sessions. Bounded output replay is not a complete VT screen snapshot. SSH and arbitrary external-terminal screen takeover are not implemented.
+
+**On the dev branch only (not included in the v0.0.1 download):** The Windows sidebar can now **observe metadata read-only** for common same-user terminal/AI-agent processes and their descendants (PID, parent PID, process name, start time). Detection is heuristic and cannot find every hidden agent terminal, read another PTY's screen, or control external processes; Linux processes inside WSL are not enumerated yet. An already-running older daemon must be stopped after all managed sessions finish, then restarted to expose the new feature.
 
 ## Build from source
 

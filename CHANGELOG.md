@@ -6,10 +6,10 @@ Changes are recorded in a format inspired by [Keep a Changelog](https://keepacha
 ## [Unreleased] / 未发布
 
 ### 简体中文
-- 暂无已宣布的变更。
+- Windows：新增外部终端与 AI Agent 相关进程的只读元信息观察（仅 dev，尚未发布）；与自有 PTY 会话隔离，不能访问外部 PTY 画面或控制进程。
 
 ### English
-- No announced changes yet.
+- Windows: added read-only metadata observation for related terminal/AI-agent processes (dev only, not released). Observed processes cannot be controlled or have their terminal screens captured.
 
 ## [0.0.1] - 2026-10-14
 

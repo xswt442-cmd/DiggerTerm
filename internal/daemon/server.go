@@ -8,6 +8,7 @@ import (
 	"net"
 	"sync"
 
+	"github.com/xswt442-cmd/DiggerTerm/internal/observe"
 	"github.com/xswt442-cmd/DiggerTerm/internal/session"
 )
 
@@ -203,6 +204,17 @@ func (s *Server) dispatch(req request) message {
 	case "snapshot":
 		reply, err := s.manager.Snapshot(req.SessionID)
 		return response(req.ID, reply, err)
+	case "observe":
+		// No target PID parameter and no control operation. Only report
+		// current-user metadata, excluding daemon-owned PTY process trees.
+		owned := make([]int, 0)
+		for _, managed := range s.manager.List() {
+			if managed.Status == "running" && managed.PID > 0 {
+				owned = append(owned, managed.PID)
+			}
+		}
+		snapshot, err := observe.Scan(owned)
+		return response(req.ID, snapshot, err)
 	case "terminate":
 		return response(req.ID, nil, s.manager.Terminate(req.SessionID))
 	case "forget":
