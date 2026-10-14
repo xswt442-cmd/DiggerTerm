@@ -2,15 +2,48 @@ package main
 
 import (
 	"embed"
+	"fmt"
 	"log"
+	"os"
 
 	"github.com/wailsapp/wails/v3/pkg/application"
+	"github.com/wailsapp/wails/v3/pkg/events"
+	"github.com/xswt442-cmd/DiggerTerm/internal/daemon"
 )
 
 //go:embed all:frontend/dist
 var assets embed.FS
 
+//go:embed build/appicon.png
+var trayIcon []byte
+
 func main() {
+	// A single executable has exactly two modes: a desktop GUI or the one
+	// independent daemon. The daemon never initializes Wails or a tray.
+	if len(os.Args) > 1 {
+		switch os.Args[1] {
+		case "--daemon":
+			if err := daemon.Run(); err != nil {
+				log.Fatal(err)
+			}
+			return
+		case "--stop-daemon":
+			c, err := daemon.Dial(nil)
+			if err != nil {
+				log.Fatal(err)
+			}
+			defer c.Close()
+			if err := c.Stop(); err != nil {
+				log.Fatal(err)
+			}
+			fmt.Println("DiggerTerm daemon stopped")
+			return
+		}
+	}
+	runGUI()
+}
+
+func runGUI() {
 	app := application.New(application.Options{
 		Name:        "DiggerTerm",
 		Description: "A lightweight terminal workspace",
@@ -18,11 +51,17 @@ func main() {
 			Handler: application.AssetFileServerFS(assets),
 		},
 		Mac: application.MacOptions{
-			ApplicationShouldTerminateAfterLastWindowClosed: true,
+			ApplicationShouldTerminateAfterLastWindowClosed: false,
 		},
 	})
+	sessions := NewSessionService(app)
+	defer sessions.close()
+	if sessions.initErr != nil {
+		log.Printf("session daemon startup: %v", sessions.initErr)
+	}
+	app.RegisterService(application.NewService(sessions))
 
-	app.Window.NewWithOptions(application.WebviewWindowOptions{
+	window := app.Window.NewWithOptions(application.WebviewWindowOptions{
 		Title:            "DiggerTerm",
 		Width:            1120,
 		Height:           720,
@@ -32,7 +71,41 @@ func main() {
 		URL:              "/",
 	})
 
+	tray := app.SystemTray.New()
+	tray.SetIcon(trayIcon)
+	tray.SetTooltip("DiggerTerm - terminal workspace")
+	tray.OnClick(func() {
+		window.Show()
+		window.Focus()
+	})
+
+	// Hiding and quitting GUI ONLY detach the client. All PTYs reside in
+	// the separate daemon, which stays alive even if the GUI exits/crashes.
+	window.RegisterHook(events.Common.WindowClosing, func(e *application.WindowEvent) {
+		window.Hide()
+		e.Cancel()
+	})
+	menu := app.NewMenu()
+	menu.Add("Show DiggerTerm").OnClick(func(_ *application.Context) {
+		window.Show()
+		window.Focus()
+	})
+	menu.AddSeparator()
+	menu.Add("Quit UI (sessions keep running)").OnClick(func(_ *application.Context) {
+		app.Quit()
+	})
+	menu.Add("Stop daemon and quit (only when idle)").OnClick(func(_ *application.Context) {
+		if err := sessions.stopDaemon(); err != nil {
+			window.Show()
+			window.Focus()
+			app.Event.Emit("terminal:quit-blocked", err.Error())
+			return
+		}
+		app.Quit()
+	})
+	tray.SetMenu(menu)
+
 	if err := app.Run(); err != nil {
-		log.Fatal(err)
+		log.Printf("DiggerTerm GUI: %v", err)
 	}
 }
