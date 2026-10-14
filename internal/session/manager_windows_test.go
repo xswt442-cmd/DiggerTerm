@@ -2,12 +2,41 @@ package session
 
 import (
 	"encoding/base64"
+	"errors"
 	"regexp"
 	"testing"
 	"time"
 )
 
 // Exercises the real Windows ConPTY backend, not a fake in-memory terminal.
+func TestRenameSurvivesManagerListAndStatus(t *testing.T) {
+	m := NewManager(nil, nil)
+	info, err := m.Create("cmd", 80, 24)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() {
+		for _, item := range m.List() {
+			if item.ID == info.ID && item.Status == "running" {
+				_ = m.Terminate(info.ID)
+			}
+		}
+	}()
+	renamed, err := m.Rename(info.ID, "  项目终端 / Dev  ")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if renamed.Name != "项目终端 / Dev" || renamed.ID != info.ID || renamed.PID != info.PID {
+		t.Fatalf("wrong rename result: %+v", renamed)
+	}
+	if got := m.List()[0].Name; got != renamed.Name {
+		t.Fatalf("lost daemon-owned rename: %q", got)
+	}
+	if _, err := m.Rename("missing", "External PID"); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("external processes must not be renamable: %v", err)
+	}
+}
+
 func TestWindowsConPTYLifecycle(t *testing.T) {
 	m := NewManager(nil, nil)
 	info, err := m.Create("cmd", 80, 25)

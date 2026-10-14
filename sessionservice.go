@@ -26,7 +26,7 @@ func NewSessionService(app *application.App) *SessionService {
 			if json.Unmarshal(raw, &output) == nil {
 				app.Event.Emit(event, output)
 			}
-		case "terminal:exit":
+		case "terminal:exit", "terminal:renamed":
 			var info session.Info
 			if json.Unmarshal(raw, &info) == nil {
 				app.Event.Emit(event, info)
@@ -70,6 +70,15 @@ func (s *SessionService) Profiles() ([]session.Profile, error) {
 	return c.Profiles()
 }
 
+// SSHHosts exposes only simple, explicit Host aliases; never SSH credentials.
+func (s *SessionService) SSHHosts() ([]string, error) {
+	c, err := s.backend()
+	if err != nil {
+		return nil, err
+	}
+	return c.SSHHosts()
+}
+
 func (s *SessionService) List() ([]session.Info, error) {
 	c, err := s.backend()
 	if err != nil {
@@ -84,6 +93,24 @@ func (s *SessionService) Create(profile string, cols, rows int) (session.Info, e
 		return session.Info{}, err
 	}
 	return c.Create(profile, cols, rows)
+}
+
+// CreateSSH is a separate operation from Create so untrusted host strings
+// cannot masquerade as local session profiles.
+func (s *SessionService) CreateSSH(target string, port, cols, rows int) (session.Info, error) {
+	c, err := s.backend()
+	if err != nil {
+		return session.Info{}, err
+	}
+	return c.CreateSSH(target, port, cols, rows)
+}
+
+func (s *SessionService) Rename(id, name string) (session.Info, error) {
+	c, err := s.backend()
+	if err != nil {
+		return session.Info{}, err
+	}
+	return c.Rename(id, name)
 }
 
 func (s *SessionService) Write(id, data string) error {

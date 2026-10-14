@@ -22,6 +22,14 @@ export function Create(profile: string, cols: number, rows: number): $Cancellabl
     return $Call.ByID(727494345, profile, cols, rows);
 }
 
+/**
+ * CreateSSH is a separate operation from Create so untrusted host strings
+ * cannot masquerade as local session profiles.
+ */
+export function CreateSSH(target: string, port: number, cols: number, rows: number): $CancellablePromise<session$0.Info> {
+    return $Call.ByID(2921322589, target, port, cols, rows);
+}
+
 export function Forget(id: string): $CancellablePromise<void> {
     return $Call.ByID(783522984, id);
 }
@@ -42,8 +50,19 @@ export function Profiles(): $CancellablePromise<session$0.Profile[] | null> {
     return $Call.ByID(531259195);
 }
 
+export function Rename(id: string, name: string): $CancellablePromise<session$0.Info> {
+    return $Call.ByID(628772759, id, name);
+}
+
 export function Resize(id: string, cols: number, rows: number): $CancellablePromise<void> {
     return $Call.ByID(1024318965, id, cols, rows);
+}
+
+/**
+ * SSHHosts exposes only simple, explicit Host aliases; never SSH credentials.
+ */
+export function SSHHosts(): $CancellablePromise<string[] | null> {
+    return $Call.ByID(342202540);
 }
 
 export function Snapshot(id: string): $CancellablePromise<session$0.Replay> {

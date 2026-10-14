@@ -189,6 +189,9 @@ func (s *Server) dispatch(req request) message {
 		return response(req.ID, session.Profiles(), nil)
 	case "list":
 		return response(req.ID, s.manager.List(), nil)
+	case "sshHosts":
+		aliases, err := session.SSHHostAliases()
+		return response(req.ID, aliases, err)
 	case "create":
 		s.lifecycle.Lock()
 		defer s.lifecycle.Unlock()
@@ -196,6 +199,20 @@ func (s *Server) dispatch(req request) message {
 			return response(req.ID, nil, errors.New("daemon is stopping"))
 		}
 		info, err := s.manager.Create(req.Profile, req.Cols, req.Rows)
+		return response(req.ID, info, err)
+	case "createSSH":
+		s.lifecycle.Lock()
+		defer s.lifecycle.Unlock()
+		if s.stopping {
+			return response(req.ID, nil, errors.New("daemon is stopping"))
+		}
+		info, err := s.manager.CreateSSH(req.SSHTarget, req.SSHPort, req.Cols, req.Rows)
+		return response(req.ID, info, err)
+	case "rename":
+		info, err := s.manager.Rename(req.SessionID, req.Name)
+		if err == nil {
+			s.broadcast("terminal:renamed", info)
+		}
 		return response(req.ID, info, err)
 	case "write":
 		return response(req.ID, nil, s.manager.Write(req.SessionID, req.Data))

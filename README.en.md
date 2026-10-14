@@ -51,9 +51,17 @@ Wails GUI + xterm.js  <-- private local IPC -->  Go Session Daemon
                                                └─ PTY / ConPTY / WSL
 ```
 
-**Limitations:** Session continuity depends on a running daemon; daemon failure, forced termination, sign-out, or shutdown can end sessions. Bounded output replay is not a complete VT screen snapshot. SSH and arbitrary external-terminal screen takeover are not implemented.
+**Limitations:** Session continuity depends on a running daemon; daemon failure, forced termination, sign-out, or shutdown can end sessions. Bounded output replay is not a complete VT screen snapshot. Arbitrary external-terminal screen takeover is not implemented.
 
-**On the dev branch only (not included in the v0.0.1 download):** The Windows sidebar can now **observe metadata read-only** for common same-user terminal/AI-agent processes and their descendants (PID, parent PID, process name, start time). Detection is heuristic and cannot find every hidden agent terminal, read another PTY's screen, or control external processes; Linux processes inside WSL are not enumerated yet. An already-running older daemon must be stopped after all managed sessions finish, then restarted to expose the new feature.
+**On the dev branch only (not in v0.0.1):** The sidebar **observes read-only process metadata** for current-user Windows terminal/agent processes and the default Linux user's processes within **already-running WSL distributions** (PID, parent PID, name, and start time). Linux and Windows PID namespaces are distinct. Classification is heuristic, not exhaustive. The scanner does not wake stopped WSL distributions, read command lines/environments/terminal screens, or control external processes. Linux processes cannot yet be reliably linked to DiggerTerm-managed `wsl.exe` sessions. To use this feature with an older running daemon, finish existing sessions, explicitly stop it, then reopen the GUI.
+
+### SSH (dev branch only; not in the v0.0.1 download)
+
+Choose **SSH** in the sidebar, enter a `~/.ssh/config` Host alias such as `prod` or a destination like `alice@server.example`, optionally override the port, then select **Connect**. The field suggests simple, literal `Host` aliases from the local config, without revealing credentials or expanding `Include`. OpenSSH handles first-connection host-key verification, keys/ssh-agent and password prompts in the terminal; DiggerTerm neither auto-accepts host keys nor stores credentials. Configure IPv6 destinations, ProxyJump and identity files in `~/.ssh/config`.
+
+The sidebar also supports filtering by name/PID. The pencil button renames a managed session; its name is held by the daemon across GUI reconnects (not persisted after a daemon shutdown). **Read-only observed processes cannot be renamed or controlled.**
+
+SSH sessions are daemon-managed: quitting the GUI does not itself disconnect the client. **SSH/network failure, a remote shell exit or daemon shutdown can still end remote work**; consider tmux for long-running tasks. This does not take over existing external SSH terminals.
 
 ## Build from source
 

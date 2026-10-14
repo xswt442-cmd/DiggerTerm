@@ -12,12 +12,14 @@ import (
 const maxObserved = 160
 
 type Process struct {
-	Key       string `json:"key"` // PID + start time; not an authorization token
-	PID       int    `json:"pid"`
-	ParentPID int    `json:"parentPid"`
-	Name      string `json:"name"`
-	Kind      string `json:"kind"`      // terminal, agent, or descendant
-	StartedAt string `json:"startedAt"` // UTC RFC3339, known process start time
+	Key          string `json:"key"` // PID + start time; not an authorization token
+	PID          int    `json:"pid"`
+	ParentPID    int    `json:"parentPid"`
+	Name         string `json:"name"`
+	Kind         string `json:"kind"`         // terminal, agent, or descendant
+	Source       string `json:"source"`       // windows or wsl
+	Distribution string `json:"distribution"` // only populated for WSL
+	StartedAt    string `json:"startedAt"`    // UTC RFC3339, known process start time
 }
 
 type Snapshot struct {
@@ -45,9 +47,18 @@ func Scan(ownedPIDs []int) (Snapshot, error) {
 		result.Note = "Read-only external process scanning is available on Windows only."
 		return result, nil
 	}
-	var truncated bool
-	result.Processes, truncated = selectRelated(rows, ownedPIDs, maxObserved)
-	result.Truncated = truncated
+	win, windowsClipped := selectRelated(rows, ownedPIDs, maxObserved)
+	for i := range win {
+		win[i].Source = "windows"
+	}
+	wsl, wslClipped, wslNote := platformWSLSnapshot()
+	// The two OS namespaces can legitimately have the same numeric PID.
+	// Keep Windows and WSL processes in one explicitly scoped read-only list.
+	result.Processes = mergeObserved(win, wsl, maxObserved)
+	result.Truncated = windowsClipped || wslClipped || len(win)+len(wsl) > maxObserved
+	if wslNote != "" {
+		result.Note += " " + wslNote + "."
+	}
 	return result, nil
 }
 
@@ -74,6 +85,10 @@ func rootKind(name string) string {
 }
 
 func selectRelated(rows []processRow, managed []int, limit int) ([]Process, bool) {
+	return selectRelatedWithKind(rows, managed, limit, rootKind)
+}
+
+func selectRelatedWithKind(rows []processRow, managed []int, limit int, classify func(string) string) ([]Process, bool) {
 	byPID := make(map[int]processRow, len(rows))
 	for _, row := range rows {
 		if row.pid > 0 && !row.started.IsZero() {
@@ -111,7 +126,7 @@ func selectRelated(rows []processRow, managed []int, limit int) ([]Process, bool
 		}
 	}
 	relatedKind := func(row processRow) string {
-		if kind := rootKind(row.name); kind != "" {
+		if kind := classify(row.name); kind != "" {
 			return kind
 		}
 		seen := make(map[int]bool)
@@ -124,7 +139,7 @@ func selectRelated(rows []processRow, managed []int, limit int) ([]Process, bool
 			if !ok {
 				break
 			}
-			if rootKind(parent.name) != "" {
+			if classify(parent.name) != "" {
 				return "descendant"
 			}
 			row = parent

@@ -1,8 +1,8 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
 import { Events } from '@wailsio/runtime'
 import TerminalPanel from './components/TerminalPanel.vue'
-import { Create, Forget, List, Observe, Profiles, Terminate } from '../bindings/github.com/xswt442-cmd/DiggerTerm/sessionservice'
+import { Create, CreateSSH, Forget, List, Observe, Profiles, Rename, SSHHosts, Terminate } from '../bindings/github.com/xswt442-cmd/DiggerTerm/sessionservice'
 import type { Info, Profile } from '../bindings/github.com/xswt442-cmd/DiggerTerm/internal/session/models'
 import type { Process as ObservedProcess, Snapshot as ObservedSnapshot } from '../bindings/github.com/xswt442-cmd/DiggerTerm/internal/observe/models'
 
@@ -10,6 +10,14 @@ const sessions = ref<Info[]>([])
 const profiles = ref<Profile[]>([])
 const selectedId = ref<string | null>(null)
 const profileId = ref('')
+const sshTarget = ref('')
+const sshPort = ref('')
+const sshAliases = ref<string[]>([])
+const query = ref('')
+const editingSessionId = ref<string | null>(null)
+const renameDraft = ref('')
+const renameInput = ref<HTMLInputElement | null>(null)
+const renaming = ref(false)
 const creating = ref(false)
 const errorMessage = ref('')
 const externalSnapshot = ref<ObservedSnapshot | null>(null)
@@ -17,10 +25,13 @@ const externalError = ref('')
 const refreshingExternal = ref(false)
 const selectedExternalKey = ref<string | null>(null)
 const observedProcesses = computed(() => externalSnapshot.value?.processes ?? [])
+const filteredSessions = computed(() => sessions.value.filter((s) => (s.name + ' ' + s.id + ' ' + s.profile + ' ' + s.pid).toLowerCase().includes(query.value.trim().toLowerCase())))
+const filteredObserved = computed(() => observedProcesses.value.filter((p) => (p.name + ' ' + p.kind + ' ' + p.pid + ' ' + p.distribution).toLowerCase().includes(query.value.trim().toLowerCase())))
 const activeObserved = computed(() => observedProcesses.value.find((p) => p.key === selectedExternalKey.value))
 const activeSession = computed(() => sessions.value.find((s) => s.id === selectedId.value))
 let observationTimer: ReturnType<typeof setInterval> | undefined
 let offExit: (() => void) | undefined
+let offRename: (() => void) | undefined
 let offQuitBlocked: (() => void) | undefined
 let offDaemonDisconnected: (() => void) | undefined
 
@@ -60,13 +71,57 @@ async function createSession() {
   creating.value = true
   errorMessage.value = ''
   try {
-    const info = await Create(profileId.value, 100, 30)
+    let info: Info
+    if (profileId.value === 'ssh') {
+      const target = sshTarget.value.trim()
+      if (!target) throw new Error('Enter an SSH host alias or user@hostname.')
+      const rawPort = String(sshPort.value).trim()
+      const port = rawPort === '' ? 0 : Number(rawPort)
+      if (!Number.isInteger(port) || port < 0 || port > 65535 || (rawPort !== '' && port === 0)) {
+        throw new Error('SSH port must be 1–65535 or left empty for ~/.ssh/config.')
+      }
+      info = await CreateSSH(target, port, 100, 30)
+    } else {
+      info = await Create(profileId.value, 100, 30)
+    }
     sessions.value = [...sessions.value, info]
     selectManaged(info.id)
   } catch (err) {
-    reportError(err)
+    const message = String(err)
+    if (profileId.value === 'ssh' && message.includes('unsupported daemon method')) {
+      errorMessage.value = 'SSH requires the new daemon. Finish existing sessions, stop the old daemon, then reopen DiggerTerm.'
+    } else {
+      reportError(err)
+    }
   } finally {
     creating.value = false
+  }
+}
+
+async function startRename(info: Info) {
+  editingSessionId.value = info.id
+  renameDraft.value = info.name
+  await nextTick()
+  renameInput.value?.focus()
+  renameInput.value?.select()
+}
+
+function cancelRename() {
+  editingSessionId.value = null
+}
+
+async function saveRename() {
+  const id = editingSessionId.value
+  if (!id || renaming.value) return
+  renaming.value = true
+  try {
+    const changed = await Rename(id, renameDraft.value)
+    sessions.value = sessions.value.map((s) => s.id === changed.id ? changed : s)
+    editingSessionId.value = null
+  } catch (err) {
+    reportError(err)
+  } finally {
+    renaming.value = false
   }
 }
 
@@ -97,6 +152,10 @@ onMounted(async () => {
   offDaemonDisconnected = Events.On('daemon:disconnected', (event) => {
     errorMessage.value = String(event.data || 'Session daemon disconnected')
   })
+  offRename = Events.On('terminal:renamed', (event) => {
+    const info = event.data as Info
+    if (info?.id) sessions.value = sessions.value.map((s) => s.id === info.id ? info : s)
+  })
   offQuitBlocked = Events.On('terminal:quit-blocked', (event) => {
     errorMessage.value = String(event.data)
   })
@@ -106,6 +165,8 @@ onMounted(async () => {
     sessions.value = sessions.value.map((s) => s.id === info.id ? info : s)
   })
   void refreshObserved()
+  // Suggestions contain only literal Host aliases; errors never prevent manual SSH entry.
+  void SSHHosts().then((aliases) => { sshAliases.value = aliases ?? [] }).catch(() => {})
   observationTimer = setInterval(() => {
     if (!document.hidden) void refreshObserved()
   }, 15000)
@@ -123,6 +184,7 @@ onMounted(async () => {
 onBeforeUnmount(() => {
   if (observationTimer) clearInterval(observationTimer)
   offExit?.()
+  offRename?.()
   offQuitBlocked?.()
   offDaemonDisconnected?.()
 })
@@ -138,6 +200,15 @@ onBeforeUnmount(() => {
           <small>Terminal workspace</small>
         </div>
       </header>
+      <input
+        v-model="query"
+        class="sidebar-search"
+        type="search"
+        placeholder="Filter sessions / processes"
+        aria-label="Filter sessions and observed processes"
+        spellcheck="false"
+        @keydown.esc="query = ''"
+      />
 
       <div class="section-head">
         <span>MY SESSIONS</span>
@@ -147,35 +218,84 @@ onBeforeUnmount(() => {
         <select v-model="profileId" aria-label="Terminal profile" :disabled="creating">
           <option v-for="p in profiles" :key="p.id" :value="p.id">{{ p.name }}</option>
         </select>
-        <button type="button" class="create" :disabled="!profileId || creating" @click="createSession" title="Create terminal">
+        <button v-if="profileId !== 'ssh'" type="button" class="create" :disabled="!profileId || creating" @click="createSession" title="Create terminal">
           {{ creating ? '…' : '+' }}
         </button>
       </div>
+      <form v-if="profileId === 'ssh'" class="ssh-connect" @submit.prevent="createSession" aria-label="SSH connection">
+        <input
+          v-model.trim="sshTarget"
+          type="text"
+          spellcheck="false"
+          autocomplete="off"
+          maxlength="255"
+          placeholder="Host alias or user@host"
+          list="ssh-host-aliases"
+          aria-label="SSH host"
+          :disabled="creating"
+          required
+        />
+        <datalist id="ssh-host-aliases">
+          <option v-for="alias in sshAliases" :key="alias" :value="alias" />
+        </datalist>
+        <div class="ssh-port-row">
+          <input
+            v-model="sshPort"
+            type="number"
+            min="1"
+            max="65535"
+            step="1"
+            placeholder="Port (ssh_config)"
+            aria-label="SSH port (optional)"
+            :disabled="creating"
+          />
+          <button type="submit" :disabled="creating || !sshTarget.trim()">{{ creating ? '…' : 'Connect' }}</button>
+        </div>
+        <small>{{ sshAliases.length ? sshAliases.length + ' local SSH aliases available. ' : '' }}OpenSSH handles keys and host-key prompts.</small>
+      </form>
 
       <nav class="sessions" aria-label="Terminal sessions">
-        <div v-if="sessions.length === 0" class="sidebar-empty">No sessions yet. Create one above.</div>
+        <div v-if="filteredSessions.length === 0" class="sidebar-empty">{{ query ? 'No matching sessions.' : 'No sessions yet. Create one above.' }}</div>
         <div
-          v-for="s in sessions"
+          v-for="s in filteredSessions"
           :key="s.id"
           class="session-row"
           :class="{ selected: selectedId === s.id }"
         >
-          <button
-            type="button"
-            class="session-select"
-            :aria-current="selectedId === s.id ? 'page' : undefined"
-            @click="selectManaged(s.id)"
-          >
-            <span class="session-name">{{ s.name }} <span class="session-id">#{{ s.id }}</span></span>
-            <span class="session-meta"><span :class="['dot', s.status]" /> {{ s.status }} · PID {{ s.pid }}</span>
-          </button>
-          <button
-            type="button"
-            class="session-action"
-            :title="s.status === 'running' ? 'Terminate session' : 'Remove finished session'"
-            :aria-label="s.status === 'running' ? 'Terminate ' + s.name : 'Remove ' + s.name"
-            @click="s.status === 'running' ? terminateSession(s) : removeExited(s)"
-          >×</button>
+          <template v-if="editingSessionId === s.id">
+            <input
+              v-model="renameDraft"
+              ref="renameInput"
+              class="rename-input"
+              type="text"
+              maxlength="64"
+              aria-label="New session name"
+              :disabled="renaming"
+              @keydown.enter.prevent="saveRename"
+              @keydown.esc.prevent="cancelRename"
+            />
+            <button type="button" class="session-action" aria-label="Save session name" title="Save name" :disabled="renaming" @click="saveRename">✓</button>
+            <button type="button" class="session-action" aria-label="Cancel rename" title="Cancel rename" :disabled="renaming" @click="cancelRename">×</button>
+          </template>
+          <template v-else>
+            <button
+              type="button"
+              class="session-select"
+              :aria-current="selectedId === s.id ? 'page' : undefined"
+              @click="selectManaged(s.id)"
+            >
+              <span class="session-name">{{ s.name }} <span class="session-id">#{{ s.id }}</span></span>
+              <span class="session-meta"><span :class="['dot', s.status]" /> {{ s.status }} · PID {{ s.pid }}</span>
+            </button>
+            <button type="button" class="session-action" :aria-label="'Rename ' + s.name" title="Rename session" @click="startRename(s)">✎</button>
+            <button
+              type="button"
+              class="session-action"
+              :title="s.status === 'running' ? 'Terminate session' : 'Remove finished session'"
+              :aria-label="s.status === 'running' ? 'Terminate ' + s.name : 'Remove ' + s.name"
+              @click="s.status === 'running' ? terminateSession(s) : removeExited(s)"
+            >×</button>
+          </template>
         </div>
       </nav>
 
@@ -193,10 +313,10 @@ onBeforeUnmount(() => {
       <p v-if="externalError" class="sidebar-empty observed-note" role="status">{{ externalError }}</p>
       <p v-else-if="externalSnapshot && !externalSnapshot.supported" class="sidebar-empty observed-note">Windows process discovery only.</p>
       <p v-else-if="!externalSnapshot" class="sidebar-empty observed-note">Scanning processes…</p>
-      <p v-else-if="observedProcesses.length === 0" class="sidebar-empty observed-note">No related external processes found.</p>
+      <p v-else-if="filteredObserved.length === 0" class="sidebar-empty observed-note">{{ query ? 'No matching observed processes.' : 'No related external processes found.' }}</p>
       <nav class="observed-list" aria-label="Observed external processes">
         <button
-          v-for="process in observedProcesses"
+          v-for="process in filteredObserved"
           :key="process.key"
           type="button"
           class="observed-row"
@@ -204,11 +324,12 @@ onBeforeUnmount(() => {
           :aria-current="selectedExternalKey === process.key ? 'page' : undefined"
           @click="selectObserved(process)"
         >
-          <span class="session-name">{{ process.name }}</span>
+          <span class="session-name">{{ process.name }} <span class="observed-source">{{ process.source === "wsl" ? process.distribution : "WIN" }}</span></span>
           <span class="session-meta">{{ process.kind }} · PID {{ process.pid }}</span>
         </button>
       </nav>
       <p v-if="externalSnapshot?.truncated" class="sidebar-empty observed-note">Showing first 160 results.</p>
+      <p v-if="externalSnapshot?.note" class="sidebar-empty observed-note" :title="externalSnapshot.note">{{ externalSnapshot.note }}</p>
       <footer class="sidebar-foot">Observed processes cannot be controlled.</footer>
     </aside>
 
@@ -239,12 +360,13 @@ onBeforeUnmount(() => {
             <div class="observed-kicker">EXTERNAL PROCESS · READ ONLY</div>
             <h1>{{ activeObserved.name }}</h1>
             <dl>
-              <div><dt>Process ID</dt><dd>{{ activeObserved.pid }}</dd></div>
+              <div><dt>Source</dt><dd>{{ activeObserved.source === "wsl" ? "WSL · " + activeObserved.distribution : "Windows" }}</dd></div>
+              <div><dt>Process ID</dt><dd>{{ activeObserved.pid }}{{ activeObserved.source === "wsl" ? " (Linux PID)" : "" }}</dd></div>
               <div><dt>Parent PID</dt><dd>{{ activeObserved.parentPid || 'Unknown' }}</dd></div>
               <div><dt>Classification</dt><dd>{{ activeObserved.kind }} (inferred)</dd></div>
               <div><dt>Started</dt><dd>{{ new Date(activeObserved.startedAt).toLocaleString() }}</dd></div>
             </dl>
-            <p>Only process metadata is visible. DiggerTerm does not own this PTY, cannot read its screen, and will not send input or termination signals.</p>
+            <p>Only process metadata is visible. DiggerTerm does not own this terminal, cannot read its screen, and will not send input or termination signals. Linux and Windows process IDs belong to different namespaces.</p>
           </template>
           <template v-else>
             <h1>Process no longer detected</h1>
@@ -256,7 +378,7 @@ onBeforeUnmount(() => {
           <span class="prompt" aria-hidden="true">&gt;_</span>
           <h1>Your terminals, one workspace.</h1>
           <p>Create a local terminal from the left. Windows supports PowerShell, CMD, and WSL (when installed).</p>
-          <p class="hint">Sessions survive GUI exits while the daemon runs. External process metadata can be observed read-only; SSH is planned.</p>
+          <p class="hint">Sessions survive GUI exits while the daemon runs. Use the SSH profile to connect to a remote host. External processes remain read-only.</p>
         </div>
       </div>
 
@@ -282,7 +404,10 @@ button { cursor: pointer; }
 button:disabled { cursor: not-allowed; opacity: .6; }
 .layout { display: flex; height: 100vh; min-height: 420px; overflow: hidden; }
 .sidebar { width: 252px; flex-shrink: 0; display: flex; flex-direction: column; background: #191c23; border-right: 1px solid #2b2e36; padding: 20px 12px 12px; }
-.brand { display: flex; align-items: center; gap: 12px; padding: 3px 8px 26px; }
+.brand { display: flex; align-items: center; gap: 12px; padding: 3px 8px 15px; }
+.sidebar-search { width: calc(100% - 10px); margin: 0 5px 15px; padding: 8px 9px; border: 1px solid #353a44; border-radius: 7px; outline: none; background: #222630; color: #d4d8df; font-size: 11px; }
+.sidebar-search:focus { border-color: #807666; }
+.sidebar-search::placeholder { color: #858b96; }
 .brand-copy { display: flex; flex-direction: column; }
 .brand strong { font-size: 14px; letter-spacing: .015em; }
 .brand small { margin-top: 4px; color: #848c98; font-size: 11px; }
@@ -292,17 +417,25 @@ button:disabled { cursor: not-allowed; opacity: .6; }
 .new-session { display: flex; gap: 5px; padding: 0 5px 14px; }
 .new-session select { min-width: 0; flex: 1; border: 1px solid #3a3e48; background: #272b34; color: #dce0e7; border-radius: 7px; padding: 8px 9px; font-size: 12px; }
 .new-session .create { width: 34px; border-radius: 7px; border: 1px solid #5b5145; background: #4b4034; color: #f0dfc2; font-size: 19px; }
+.ssh-connect { display: flex; flex-direction: column; gap: 7px; padding: 0 5px 13px; }
+.ssh-connect input { min-width: 0; width: 100%; border: 1px solid #3a3e48; background: #272b34; color: #dce0e7; border-radius: 6px; padding: 8px; font: inherit; font-size: 11px; }
+.ssh-connect input::placeholder { color: #8d929b; }
+.ssh-port-row { display: flex; gap: 6px; }
+.ssh-port-row input { flex: 1; width: 70px; }
+.ssh-port-row button { border: 1px solid #5b5145; background: #4b4034; color: #f0dfc2; padding: 6px 10px; border-radius: 6px; font-size: 11px; }
+.ssh-connect small { color: #828b99; font-size: 10px; line-height: 1.5; }
 .sessions { display: flex; flex-direction: column; gap: 4px; overflow-y: auto; min-height: 100px; flex: 1; }
 .session-row { display: flex; gap: 2px; align-items: center; border-radius: 7px; background: transparent; }
 .session-row:hover { background: #242832; }
 .session-row.selected { background: #30343e; }
-.session-select { background: transparent; border: 0; padding: 11px 7px 11px 10px; text-align: left; color: #d4d8df; min-width: 0; flex: 1; }
+.session-select { background: transparent; border: 0; padding: 11px 4px 11px 10px; text-align: left; color: #d4d8df; min-width: 0; flex: 1; }
+.rename-input { flex: 1; min-width: 0; margin: 6px 3px 6px 6px; padding: 7px; background: #252a34; color: #e0e2e6; border: 1px solid #7b715f; border-radius: 5px; font-size: 11px; }
 .session-name { display: block; font-size: 12px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .session-id { font-weight: 400; color: #89909c; }
 .session-meta { display: flex; align-items: center; gap: 4px; margin-top: 7px; font-size: 10px; color: #969da9; }
 .dot { width: 6px; height: 6px; border-radius: 50%; background: #8c929d; }
 .dot.running { background: #84ce9b; }
-.session-action { border: 0; background: transparent; color: #9fa4ac; padding: 4px 7px; font-size: 17px; }
+.session-action { border: 0; background: transparent; color: #9fa4ac; padding: 4px 5px; font-size: 15px; }
 .session-action:hover { color: #f09797; }
 .external { margin-top: 18px; border-top: 1px solid #30333b; padding-top: 12px; padding-bottom: 4px; }
 .refresh-action { border: 0; background: transparent; color: #abb0b9; padding: 2px 7px; font-size: 17px; }
@@ -311,6 +444,7 @@ button:disabled { cursor: not-allowed; opacity: .6; }
 .observed-row { display: flex; flex-direction: column; gap: 5px; text-align: left; width: 100%; border: 0; border-radius: 6px; background: transparent; color: #b8bec9; padding: 9px 10px; }
 .observed-row:hover { background: #252932; }
 .observed-row.selected { background: #30343e; }
+.observed-source { margin-left: 3px; padding: 1px 4px; border: 1px solid #41454c; border-radius: 3px; font-size: 9px; font-weight: 400; color: #9da5b1; }
 .observed-note { margin: 0 0 7px; overflow-wrap: anywhere; }
 .observed-detail { position: absolute; inset: 0; overflow: auto; padding: 42px 50px; background: #101217; }
 .observed-detail h1 { margin: 10px 0 24px; font-size: 20px; }

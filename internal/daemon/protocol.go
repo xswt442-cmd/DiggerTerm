@@ -34,7 +34,10 @@ type request struct {
 	ID        uint64 `json:"id"`
 	Method    string `json:"method"`
 	SessionID string `json:"sessionId,omitempty"`
+	Name      string `json:"name,omitempty"`
 	Profile   string `json:"profile,omitempty"`
+	SSHTarget string `json:"sshTarget,omitempty"`
+	SSHPort   int    `json:"sshPort,omitempty"`
 	Data      string `json:"data,omitempty"`
 	Cols      int    `json:"cols,omitempty"`
 	Rows      int    `json:"rows,omitempty"`

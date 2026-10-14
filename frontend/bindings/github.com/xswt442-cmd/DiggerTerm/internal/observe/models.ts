@@ -16,6 +16,16 @@ export interface Process {
     "kind": string;
 
     /**
+     * windows or wsl
+     */
+    "source": string;
+
+    /**
+     * only populated for WSL
+     */
+    "distribution": string;
+
+    /**
      * UTC RFC3339, known process start time
      */
     "startedAt": string;

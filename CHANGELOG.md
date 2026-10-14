@@ -6,10 +6,14 @@ Changes are recorded in a format inspired by [Keep a Changelog](https://keepacha
 ## [Unreleased] / 未发布
 
 ### 简体中文
-- Windows：新增外部终端与 AI Agent 相关进程的只读元信息观察（仅 dev，尚未发布）；与自有 PTY 会话隔离，不能访问外部 PTY 画面或控制进程。
+- Windows / WSL：新增同用户外部终端与 Agent 进程的只读元信息观察（仅 dev，尚未发布）。扫描仅覆盖已运行的 WSL 发行版；没有外部 PTY 画面读取、输入或终止权限。
+- SSH：通过系统 OpenSSH 创建 Daemon 托管的远程交互会话，支持 ssh_config 别名、可选端口、原生密钥/ssh-agent/主机指纹和口令交互；DiggerTerm 不存储认证信息。
+- Windows 体验：支持托管会话重命名（Daemon 持有名称、跨 GUI 同步）、侧栏搜索过滤、从本地 OpenSSH 配置提供简单 Host 别名建议。
 
 ### English
-- Windows: added read-only metadata observation for related terminal/AI-agent processes (dev only, not released). Observed processes cannot be controlled or have their terminal screens captured.
+- Windows / WSL: added read-only metadata observation for same-user terminal/agent processes (dev only, not released), including Linux processes in already-running WSL distributions. No external terminal screen capture or process control.
+- SSH: added daemon-managed remote interactive sessions via system OpenSSH, with ssh_config host aliases, optional port, and native host-key/key-agent/password prompts. DiggerTerm does not persist credentials.
+- Windows UX: rename managed sessions (daemon-owned, synchronized across GUIs), filter sidebar sessions/processes, and suggest literal OpenSSH Host aliases from the local config.
 
 ## [0.0.1] - 2026-10-14
 

@@ -60,6 +60,22 @@ func TestIPCReconnectPreservesPTY(t *testing.T) {
 	if err := second.Stop(); err == nil {
 		t.Fatal("daemon must refuse stop with active PTY")
 	}
+	renamed, err := second.Rename(info.ID, "  Live terminal · 项目  ")
+	if err != nil || renamed.Name != "Live terminal · 项目" {
+		t.Fatalf("rename over IPC failed: %+v err=%v", renamed, err)
+	}
+	if _, err := second.Rename("external-1234", "Not owned"); err == nil {
+		t.Fatal("IPC must reject renaming an external/nonexistent process")
+	}
+	third, err := Dial(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	listed, err := third.List()
+	_ = third.Close()
+	if err != nil || len(listed) != 1 || listed[0].Name != renamed.Name || listed[0].PID != info.PID {
+		t.Fatalf("rename did not survive another GUI connection: %+v err=%v", listed, err)
+	}
 	// Observe is a separate read-only IPC method. The owned CMD must not
 	// appear in the list of external processes.
 	observed, err := second.Observe()
