@@ -4,15 +4,28 @@ on:
   push:
     tags:
       - 'v*'
+  # Build-only verification before tagging. Manual runs NEVER publish a release.
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to test (for example v0.0.2)'
+        required: true
+        type: string
 
 permissions:
-  contents: write
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}-${{ github.event_name }}
+  cancel-in-progress: false
 
 jobs:
   windows:
-    name: Publish Windows x64
+    name: Windows x64 EXE
     runs-on: windows-latest
-    timeout-minutes: 40
+    timeout-minutes: 45
+    env:
+      RELEASE_VERSION: ${{ inputs.version || github.ref_name }}
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-go@v7
@@ -25,53 +38,153 @@ jobs:
           cache: npm
           cache-dependency-path: frontend/package-lock.json
 
-      - name: Verify release version
+      - name: Verify versions and release notes
+        run: node scripts/verify-release.mjs "$env:RELEASE_VERSION"
         shell: pwsh
-        run: |
-          $version = (Get-Content frontend/package.json -Raw | ConvertFrom-Json).version
-          if ($env:GITHUB_REF_NAME -ne "v$version") {
-            throw "Git tag $env:GITHUB_REF_NAME does not match frontend version v$version"
-          }
-          $config = Get-Content build/config.yml -Raw
-          if ($config -notmatch "(?m)^  version: `"$([regex]::Escape($version))`"") {
-            throw "build/config.yml version does not match $version"
-          }
-          $notes = ".github/release-notes/$env:GITHUB_REF_NAME.md"
-          if (!(Test-Path $notes)) { throw "Missing user-facing release notes: $notes" }
 
-      - name: Install frontend dependencies
+      - name: Install frontend
         run: npm --prefix frontend ci
-      # main.go embeds frontend/dist; Vite must run before Go tests.
-      - name: Run checks
+      - name: Run frontend tests
         run: |
-          npm --prefix frontend run build
-          go test ./...
+          npm --prefix frontend run test:preferences
+          npm --prefix frontend run test:shortcuts
+      - name: Build frontend (Go embeds dist)
+        run: npm --prefix frontend run build
+      - name: Go tests and vet
+        run: |
+          go test ./... -count=1
           go vet ./...
+
       - name: Install pinned Wails CLI
         shell: pwsh
         run: |
           go install github.com/wailsapp/wails/v3/cmd/wails3@v3.0.0-beta.29
           "$(go env GOPATH)\bin" >> $env:GITHUB_PATH
-      - name: Build release binary
-        run: wails3 build
-      - name: Package portable release
-        shell: pwsh
-        run: ./scripts/package-windows.ps1 -Version $env:GITHUB_REF_NAME
 
-      - name: Publish GitHub Release
+      - name: Build Wails Windows production binary
+        run: wails3 build
+      - name: Package Windows x64 EXE
         shell: pwsh
-        env:
-          GH_TOKEN: ${{ github.token }}
+        run: ./scripts/package-windows-exe.ps1 -Version $env:RELEASE_VERSION -OutputDir dist
+      - name: Upload Windows package
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-release
+          path: dist/DiggerTerm-*.exe
+          if-no-files-found: error
+          retention-days: 7
+          compression-level: 0
+
+  linux:
+    name: Linux x64 AppImage + DEB
+    runs-on: ubuntu-24.04
+    timeout-minutes: 75
+    env:
+      RELEASE_VERSION: ${{ inputs.version || github.ref_name }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+          cache: true
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Verify versions and release notes
+        run: node scripts/verify-release.mjs "$RELEASE_VERSION"
+
+      - name: Install native GTK4 / WebKitGTK6 dependencies
         run: |
-          $tag = $env:GITHUB_REF_NAME
-          $zip = "dist/DiggerTerm-$tag-windows-amd64.zip"
-          $checksum = "$zip.sha256"
-          $notes = ".github/release-notes/$tag.md"
-          if (gh release view $tag --repo $env:GITHUB_REPOSITORY 2>$null) {
-            gh release upload $tag $zip $checksum --clobber --repo $env:GITHUB_REPOSITORY
-            if ($LASTEXITCODE -ne 0) { throw 'Failed to update release assets' }
-            gh release edit $tag --title "DiggerTerm $tag" --notes-file $notes --repo $env:GITHUB_REPOSITORY
-          } else {
-            gh release create $tag $zip $checksum --verify-tag --title "DiggerTerm $tag" --notes-file $notes --repo $env:GITHUB_REPOSITORY
-          }
-          if ($LASTEXITCODE -ne 0) { throw 'GitHub Release failed' }
+          sudo apt-get update
+          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+            libgtk-4-dev libwebkitgtk-6.0-dev libayatana-appindicator3-dev \
+            libgdk-pixbuf2.0-bin pkg-config gcc nano
+
+      - name: Install frontend
+        run: npm --prefix frontend ci
+      - name: Frontend tests and build
+        run: |
+          npm --prefix frontend run test:preferences
+          npm --prefix frontend run test:shortcuts
+          npm --prefix frontend run build
+      - name: Linux Go tests and vet (includes GNU nano PTY)
+        run: |
+          go test ./... -count=1
+          go vet ./...
+
+      - name: Package native Linux AppImage and DEB
+        run: bash scripts/package-linux.sh "$RELEASE_VERSION" dist
+
+      - name: Verify Linux artifacts and AppImage payload
+        run: |
+          set -euo pipefail
+          image="dist/DiggerTerm-$RELEASE_VERSION-linux-x86_64.AppImage"
+          deb="dist/DiggerTerm-$RELEASE_VERSION-linux-amd64.deb"
+          test -s "$image" && test -s "$deb"
+          test "$(dpkg-deb --field "$deb" Version)" = "${RELEASE_VERSION#v}"
+          test "$(dpkg-deb --field "$deb" Architecture)" = "amd64"
+          "$image" --appimage-version
+          stage="$(mktemp -d)"
+          trap 'rm -rf "$stage"' EXIT
+          (cd "$stage" && "$GITHUB_WORKSPACE/$image" --appimage-extract >/dev/null)
+          test -x "$stage/squashfs-root/usr/bin/diggerterm"
+          test -f "$stage/squashfs-root/diggerterm.desktop"
+          echo 'AppImage and Debian package structure verified'
+
+      - name: Upload Linux packages
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-release
+          path: |
+            dist/DiggerTerm-*.AppImage
+            dist/DiggerTerm-*.deb
+          if-no-files-found: error
+          retention-days: 7
+          compression-level: 0
+
+  publish:
+    name: Verify SHA-256 and publish
+    needs: [windows, linux]
+    # No tag means no release; manual workflow_dispatch is always build-only.
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      RELEASE_VERSION: ${{ github.ref_name }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/download-artifact@v4
+        with:
+          name: windows-release
+          path: dist
+      - uses: actions/download-artifact@v4
+        with:
+          name: linux-release
+          path: dist
+
+      - name: Verify all assets, generate SHA256SUMS
+        run: |
+          node scripts/verify-release.mjs "$RELEASE_VERSION"
+          bash scripts/verify-release-assets.sh "$RELEASE_VERSION" dist
+
+      - name: Publish verified GitHub release
+        run: |
+          set -euo pipefail
+          if gh release view "$RELEASE_VERSION" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo 'Refusing to replace an existing published release' >&2
+            exit 1
+          fi
+          gh release create "$RELEASE_VERSION" \
+            "dist/DiggerTerm-$RELEASE_VERSION-windows-amd64.exe" \
+            "dist/DiggerTerm-$RELEASE_VERSION-linux-x86_64.AppImage" \
+            "dist/DiggerTerm-$RELEASE_VERSION-linux-amd64.deb" \
+            dist/SHA256SUMS \
+            --verify-tag --title "DiggerTerm $RELEASE_VERSION" \
+            --notes-file ".github/release-notes/$RELEASE_VERSION.md" \
+            --repo "$GITHUB_REPOSITORY"

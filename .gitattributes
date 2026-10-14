@@ -18,3 +18,4 @@ build/linux/nfpm/scripts/** linguist-vendored
 
 # Auto-generated Wails TypeScript bindings are committed for standalone Vite builds.
 frontend/bindings/** linguist-generated
+*.sh text eol=lf

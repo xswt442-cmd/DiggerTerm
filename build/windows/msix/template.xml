@@ -17,7 +17,7 @@
         PackageDisplayName="My Product"
         PublisherName="CN=My Company"
         PublisherDisplayName="My Company"
-        Version="0.0.1.0"
+        Version="0.0.2.0"
         PackageDescription="A DiggerTerm application">
         <Capabilities>
             <Capability Name="runFullTrust" />
@@ -37,7 +37,7 @@
             <Resource Language="en-us" />
         </Resources>
         <Dependencies>
-            <TargetDeviceFamily Name="Windows.Desktop" MinVersion="10.0.17763.0" MaxVersionTested="10.0.19041.0" />
+            <TargetDeviceFamily Name="Windows.Desktop" MinVersion="10.0.27763.0" MaxVersionTested="10.0.29041.0" />
         </Dependencies>
         <Properties>
             <Framework>false</Framework>

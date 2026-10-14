@@ -10,7 +10,7 @@
   <Identity
     Name="com.example.diggerterm"
     Publisher="CN=My Company"
-    Version="0.0.1.0"
+    Version="0.0.2.0"
     ProcessorArchitecture="x64" />
 
   <Properties>
@@ -21,7 +21,7 @@
   </Properties>
 
   <Dependencies>
-    <TargetDeviceFamily Name="Windows.Desktop" MinVersion="10.0.17763.0" MaxVersionTested="10.0.19041.0" />
+    <TargetDeviceFamily Name="Windows.Desktop" MinVersion="10.0.27763.0" MaxVersionTested="10.0.29041.0" />
   </Dependencies>
 
   <Resources>
