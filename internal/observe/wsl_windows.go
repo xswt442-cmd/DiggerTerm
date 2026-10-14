@@ -23,6 +23,7 @@ const maxWSLDistros = 4
 // The default distro user is used: there is no -u root or elevation.
 const linuxProcessScript = `uid=$(id -u) || exit 2
 hz=$(getconf CLK_TCK) || exit 2
+ps -p "$$" -o pid=,ppid=,uid=,comm= >/dev/null 2>&1 || exit 2
 btime=
 while read -r field value rest; do
   if [ "$field" = btime ]; then btime=$value; break; fi
@@ -95,19 +96,36 @@ func runWSLCommand(ctx context.Context, exe string, args ...string) ([]byte, err
 	return out.Bytes(), nil
 }
 
-// Each WSL invocation is short and bounded. No stopped distro is launched.
+func runningWSLDistros(exe string) ([]string, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	data, err := runWSLCommand(ctx, exe, "--list", "--running", "--quiet")
+	if err != nil {
+		return nil, err
+	}
+	return parseRunningDistros(data), nil
+}
+
+func containsDistro(distros []string, target string) bool {
+	for _, distro := range distros {
+		if distro == target {
+			return true
+		}
+	}
+	return false
+}
+
+// WSL does not expose an atomic running-state check and exec operation. Check
+// immediately before each bounded invocation to narrow the exit race.
 func platformWSLSnapshot() ([]Process, bool, string) {
 	exe, err := wslExecutable()
 	if err != nil {
 		return nil, false, "WSL discovery unavailable"
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
-	data, err := runWSLCommand(ctx, exe, "--list", "--running", "--quiet")
-	cancel()
+	distros, err := runningWSLDistros(exe)
 	if err != nil {
 		return nil, false, "Unable to list running WSL distributions"
 	}
-	distros := parseRunningDistros(data)
 	if len(distros) == 0 {
 		return nil, false, "No running WSL user distributions"
 	}
@@ -118,7 +136,18 @@ func platformWSLSnapshot() ([]Process, bool, string) {
 	}
 	observed := make([]Process, 0)
 	failures := 0
+	skippedStopped := 0
+	scanned := 0
 	for _, distro := range distros {
+		latest, err := runningWSLDistros(exe)
+		if err != nil {
+			failures++
+			continue
+		}
+		if !containsDistro(latest, distro) {
+			skippedStopped++
+			continue
+		}
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		raw, err := runWSLCommand(ctx, exe, "-d", distro, "--exec", "/bin/sh", "-c", linuxProcessScript)
 		cancel()
@@ -132,11 +161,15 @@ func platformWSLSnapshot() ([]Process, bool, string) {
 			continue
 		}
 		observed = append(observed, processes...)
+		scanned++
 		truncated = truncated || clipped
 	}
-	note := fmt.Sprintf("%d running WSL distro(s) scanned", len(distros)-failures)
+	note := fmt.Sprintf("%d running WSL distro(s) scanned", scanned)
 	if failures > 0 {
 		note += fmt.Sprintf("; %d unavailable", failures)
+	}
+	if skippedStopped > 0 {
+		note += fmt.Sprintf("; %d stopped before scan and skipped", skippedStopped)
 	}
 	return observed, truncated, note
 }
