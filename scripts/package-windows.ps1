@@ -27,17 +27,20 @@ $stage = Join-Path ([IO.Path]::GetTempPath()) ("diggerterm-release-" + [guid]::N
 try {
     New-Item -ItemType Directory -Force -Path $stage | Out-Null
     Copy-Item -LiteralPath $executable -Destination $stage
-    foreach ($name in @('README.md', 'CHANGELOG.md', 'RELEASE.md', 'LICENSE')) {
+    foreach ($name in @('README.md', 'README.en.md', 'CHANGELOG.md', 'LICENSE')) {
         Copy-Item -LiteralPath (Join-Path $root $name) -Destination $stage
     }
+    # Keep the README logo available when opening the Markdown from the ZIP.
+    New-Item -ItemType Directory -Path (Join-Path $stage 'icons') | Out-Null
+    Copy-Item -LiteralPath (Join-Path $root 'icons/diggerterm-icon.svg') -Destination (Join-Path $stage 'icons')
     if (Test-Path $archive) { Remove-Item $archive -Force }
-    Compress-Archive -LiteralPath (Get-ChildItem $stage -File | ForEach-Object FullName) -DestinationPath $archive -CompressionLevel Optimal
+    Compress-Archive -LiteralPath (Get-ChildItem $stage | ForEach-Object FullName) -DestinationPath $archive -CompressionLevel Optimal
 
     Add-Type -AssemblyName System.IO.Compression.FileSystem
     $zip = [IO.Compression.ZipFile]::OpenRead($archive)
     try {
-        $actual = @($zip.Entries | ForEach-Object FullName | Sort-Object)
-        $expected = @(@('diggerterm.exe', 'README.md', 'CHANGELOG.md', 'RELEASE.md', 'LICENSE') | Sort-Object)
+        $actual = @($zip.Entries | Where-Object { $_.Name -ne '' } | ForEach-Object { $_.FullName.Replace('\', '/') } | Sort-Object)
+        $expected = @(@('diggerterm.exe', 'README.md', 'README.en.md', 'CHANGELOG.md', 'LICENSE', 'icons/diggerterm-icon.svg') | Sort-Object)
         if (($actual -join '|') -ne ($expected -join '|')) {
             throw "Unexpected archive content: $($actual -join ', ')"
         }

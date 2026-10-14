@@ -36,6 +36,8 @@ jobs:
           if ($config -notmatch "(?m)^  version: `"$([regex]::Escape($version))`"") {
             throw "build/config.yml version does not match $version"
           }
+          $notes = ".github/release-notes/$env:GITHUB_REF_NAME.md"
+          if (!(Test-Path $notes)) { throw "Missing user-facing release notes: $notes" }
 
       - name: Install frontend dependencies
         run: npm --prefix frontend ci
@@ -64,11 +66,12 @@ jobs:
           $tag = $env:GITHUB_REF_NAME
           $zip = "dist/DiggerTerm-$tag-windows-amd64.zip"
           $checksum = "$zip.sha256"
+          $notes = ".github/release-notes/$tag.md"
           if (gh release view $tag --repo $env:GITHUB_REPOSITORY 2>$null) {
             gh release upload $tag $zip $checksum --clobber --repo $env:GITHUB_REPOSITORY
             if ($LASTEXITCODE -ne 0) { throw 'Failed to update release assets' }
-            gh release edit $tag --title "DiggerTerm $tag" --notes-file RELEASE.md --repo $env:GITHUB_REPOSITORY
+            gh release edit $tag --title "DiggerTerm $tag" --notes-file $notes --repo $env:GITHUB_REPOSITORY
           } else {
-            gh release create $tag $zip $checksum --verify-tag --title "DiggerTerm $tag" --notes-file RELEASE.md --repo $env:GITHUB_REPOSITORY
+            gh release create $tag $zip $checksum --verify-tag --title "DiggerTerm $tag" --notes-file $notes --repo $env:GITHUB_REPOSITORY
           }
           if ($LASTEXITCODE -ne 0) { throw 'GitHub Release failed' }
