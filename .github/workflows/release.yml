@@ -14,12 +14,12 @@ jobs:
     runs-on: windows-latest
     timeout-minutes: 40
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
         with:
           go-version-file: go.mod
           cache: true
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: '24'
           cache: npm
@@ -39,11 +39,12 @@ jobs:
 
       - name: Install frontend dependencies
         run: npm --prefix frontend ci
+      # main.go embeds frontend/dist; Vite must run before Go tests.
       - name: Run checks
         run: |
+          npm --prefix frontend run build
           go test ./...
           go vet ./...
-          npm --prefix frontend run build
       - name: Install pinned Wails CLI
         shell: pwsh
         run: |
