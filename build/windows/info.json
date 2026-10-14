@@ -1,0 +1,15 @@
+{
+	"fixed": {
+		"file_version": "0.1.0"
+	},
+	"info": {
+		"0000": {
+			"ProductVersion": "0.1.0",
+			"CompanyName": "xswt442-cmd",
+			"FileDescription": "Lightweight terminal workspace",
+			"LegalCopyright": "© 2026, xswt442-cmd",
+			"ProductName": "DiggerTerm",
+			"Comments": "DiggerTerm desktop app"
+		}
+	}
+}
