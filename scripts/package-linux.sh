@@ -143,7 +143,10 @@ export PATH="$tmp/tools:$PATH"
   fi
 )
 tail -n 12 "$tmp/linuxdeploy.log"
-mapfile -t images < <(find "$tmp" -maxdepth 1 -type f -name '*.AppImage')
+# The download helper may place its two tool AppImages in the same temp dir.
+# Only collect the generated application image, never the packaging tools.
+mapfile -t images < <(find "$tmp" -maxdepth 1 -type f -name '*.AppImage' \
+  ! -name 'linuxdeploy.AppImage' ! -name 'appimagetool.AppImage')
 [[ "${#images[@]}" == 1 ]] || { echo "Expected one AppImage, got ${#images[@]}" >&2; exit 1; }
 appimage="$out/DiggerTerm-$version-linux-x86_64.AppImage"
 install -m755 "${images[0]}" "$appimage"
