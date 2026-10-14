@@ -77,3 +77,7 @@ wails3 build
 ## 项目
 
 [English README](README.en.md) · [更新日志 / Changelog](CHANGELOG.md) · [MIT License](LICENSE)
+
+## LICENSE
+
+[MIT](LICENSE)
