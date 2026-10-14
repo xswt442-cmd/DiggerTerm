@@ -1,0 +1,32 @@
+package main
+
+import "testing"
+
+func TestTrayLabelsForLocale(t *testing.T) {
+	for _, lang := range []string{"zh", "en"} {
+		labels := trayLabelsFor(lang)
+		if labels.tooltip == "" || labels.show == "" || labels.quit == "" || labels.stop == "" {
+			t.Fatalf("missing %s tray labels: %+v", lang, labels)
+		}
+		if lang == "zh" && labels.show == trayLabelsFor("en").show {
+			t.Fatal("Chinese tray menu has not been translated")
+		}
+	}
+}
+func TestSetUILanguageValidation(t *testing.T) {
+	s := &SessionService{}
+	if err := s.SetUILanguage("other"); err == nil {
+		t.Fatal("invalid UI locale accepted")
+	}
+	var got string
+	s.setUILanguage = func(locale string) { got = locale }
+	if err := s.SetUILanguage("zh"); err != nil {
+		t.Fatal(err)
+	}
+	if got != "zh" {
+		t.Fatalf("native tray callback got %q", got)
+	}
+	if err := s.SetUILanguage("en"); err != nil || got != "en" {
+		t.Fatalf("English tray callback got %q, error %v", got, err)
+	}
+}

@@ -9,3 +9,12 @@
 *.png binary
 *.ico binary
 *.icns binary
+
+# Wails-provided installer/package templates, retained for optional builds.
+# Exclude third-party boilerplate from GitHub's language breakdown.
+build/windows/nsis/** linguist-vendored
+build/linux/appimage/build.sh linguist-vendored
+build/linux/nfpm/scripts/** linguist-vendored
+
+# Auto-generated Wails TypeScript bindings are committed for standalone Vite builds.
+frontend/bindings/** linguist-generated

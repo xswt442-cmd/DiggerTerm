@@ -73,7 +73,7 @@ func runGUI() {
 
 	tray := app.SystemTray.New()
 	tray.SetIcon(trayIcon)
-	tray.SetTooltip("DiggerTerm - terminal workspace")
+	tray.SetTooltip(trayLabelsFor("en").tooltip)
 	tray.OnClick(func() {
 		window.Show()
 		window.Focus()
@@ -86,15 +86,18 @@ func runGUI() {
 		e.Cancel()
 	})
 	menu := app.NewMenu()
-	menu.Add("Show DiggerTerm").OnClick(func(_ *application.Context) {
+	showItem := menu.Add(trayLabelsFor("en").show)
+	showItem.OnClick(func(_ *application.Context) {
 		window.Show()
 		window.Focus()
 	})
 	menu.AddSeparator()
-	menu.Add("Quit UI (sessions keep running)").OnClick(func(_ *application.Context) {
+	quitItem := menu.Add(trayLabelsFor("en").quit)
+	quitItem.OnClick(func(_ *application.Context) {
 		app.Quit()
 	})
-	menu.Add("Stop daemon and quit (only when idle)").OnClick(func(_ *application.Context) {
+	stopItem := menu.Add(trayLabelsFor("en").stop)
+	stopItem.OnClick(func(_ *application.Context) {
 		if err := sessions.stopDaemon(); err != nil {
 			window.Show()
 			window.Focus()
@@ -104,6 +107,17 @@ func runGUI() {
 		app.Quit()
 	})
 	tray.SetMenu(menu)
+	// MenuItem.SetLabel updates the native Windows/Linux/macOS menu in place.
+	// Do the update on Wails' main thread; tooltip dispatches there itself.
+	sessions.setUILanguage = func(locale string) {
+		labels := trayLabelsFor(locale)
+		application.InvokeSync(func() {
+			showItem.SetLabel(labels.show)
+			quitItem.SetLabel(labels.quit)
+			stopItem.SetLabel(labels.stop)
+		})
+		tray.SetTooltip(labels.tooltip)
+	}
 
 	if err := app.Run(); err != nil {
 		log.Printf("DiggerTerm GUI: %v", err)

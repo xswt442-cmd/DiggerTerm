@@ -13,10 +13,25 @@ import { Call as $Call, CancellablePromise as $CancellablePromise } from "@wails
 
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore: Unused imports
+import * as observe$0 from "./internal/observe/models.js";
+// eslint-disable-next-line @typescript-eslint/ban-ts-comment
+// @ts-ignore: Unused imports
 import * as session$0 from "./internal/session/models.js";
 
 export function Create(profile: string, cols: number, rows: number): $CancellablePromise<session$0.Info> {
     return $Call.ByID(727494345, profile, cols, rows);
+}
+
+/**
+ * CreateSSH is a separate operation from Create so untrusted host strings
+ * cannot masquerade as local session profiles.
+ */
+export function CreateLocal(profile: string, directory: string, cols: number, rows: number): $CancellablePromise<session$0.Info> {
+    return $Call.ByID(3301322044, profile, directory, cols, rows);
+}
+
+export function CreateSSH(target: string, port: number, cols: number, rows: number): $CancellablePromise<session$0.Info> {
+    return $Call.ByID(2921322589, target, port, cols, rows);
 }
 
 export function Forget(id: string): $CancellablePromise<void> {
@@ -27,12 +42,40 @@ export function List(): $CancellablePromise<session$0.Info[] | null> {
     return $Call.ByID(406057093);
 }
 
+/**
+ * Observe exposes read-only external process metadata. The Wails frontend
+ * cannot send these PID identifiers to any managed-session control method.
+ */
+export function Observe(): $CancellablePromise<observe$0.Snapshot> {
+    return $Call.ByID(2644345531);
+}
+
 export function Profiles(): $CancellablePromise<session$0.Profile[] | null> {
     return $Call.ByID(531259195);
 }
 
+export function Rename(id: string, name: string): $CancellablePromise<session$0.Info> {
+    return $Call.ByID(628772759, id, name);
+}
+
 export function Resize(id: string, cols: number, rows: number): $CancellablePromise<void> {
     return $Call.ByID(1024318965, id, cols, rows);
+}
+
+/**
+ * SSHHosts exposes only simple, explicit Host aliases; never SSH credentials.
+ */
+export function SSHHosts(): $CancellablePromise<string[] | null> {
+    return $Call.ByID(342202540);
+}
+
+/**
+ * SetUILanguage changes only the GUI's native menu; it never touches the
+ * session daemon or any running PTY. The caller sends an effective locale,
+ * after resolving the UI's "follow system" preference in the WebView.
+ */
+export function SetUILanguage(locale: string): $CancellablePromise<void> {
+    return $Call.ByID(3443472923, locale);
 }
 
 export function Snapshot(id: string): $CancellablePromise<session$0.Replay> {

@@ -7,14 +7,16 @@ import (
 
 	"github.com/wailsapp/wails/v3/pkg/application"
 	"github.com/xswt442-cmd/DiggerTerm/internal/daemon"
+	"github.com/xswt442-cmd/DiggerTerm/internal/observe"
 	"github.com/xswt442-cmd/DiggerTerm/internal/session"
 )
 
 // SessionService is ONLY a Wails-to-IPC proxy. It never owns a PTY.
 // Closing the GUI/client connection does not terminate daemon sessions.
 type SessionService struct {
-	client  *daemon.Client
-	initErr error
+	client        *daemon.Client
+	initErr       error
+	setUILanguage func(string)
 }
 
 func NewSessionService(app *application.App) *SessionService {
@@ -25,7 +27,7 @@ func NewSessionService(app *application.App) *SessionService {
 			if json.Unmarshal(raw, &output) == nil {
 				app.Event.Emit(event, output)
 			}
-		case "terminal:exit":
+		case "terminal:exit", "terminal:renamed":
 			var info session.Info
 			if json.Unmarshal(raw, &info) == nil {
 				app.Event.Emit(event, info)
@@ -53,6 +55,19 @@ func (s *SessionService) close() {
 	}
 }
 
+// SetUILanguage changes only the GUI's native menu; it never touches the
+// session daemon or any running PTY. The caller sends an effective locale,
+// after resolving the UI's "follow system" preference in the WebView.
+func (s *SessionService) SetUILanguage(locale string) error {
+	if locale != "zh" && locale != "en" {
+		return fmt.Errorf("unsupported UI locale %q", locale)
+	}
+	if s.setUILanguage != nil {
+		s.setUILanguage(locale)
+	}
+	return nil
+}
+
 func (s *SessionService) stopDaemon() error {
 	client, err := s.backend()
 	if err != nil {
@@ -69,6 +84,15 @@ func (s *SessionService) Profiles() ([]session.Profile, error) {
 	return c.Profiles()
 }
 
+// SSHHosts exposes only simple, explicit Host aliases; never SSH credentials.
+func (s *SessionService) SSHHosts() ([]string, error) {
+	c, err := s.backend()
+	if err != nil {
+		return nil, err
+	}
+	return c.SSHHosts()
+}
+
 func (s *SessionService) List() ([]session.Info, error) {
 	c, err := s.backend()
 	if err != nil {
@@ -83,6 +107,32 @@ func (s *SessionService) Create(profile string, cols, rows int) (session.Info, e
 		return session.Info{}, err
 	}
 	return c.Create(profile, cols, rows)
+}
+
+// CreateSSH is a separate operation from Create so untrusted host strings
+// cannot masquerade as local session profiles.
+func (s *SessionService) CreateLocal(profile, directory string, cols, rows int) (session.Info, error) {
+	c, err := s.backend()
+	if err != nil {
+		return session.Info{}, err
+	}
+	return c.CreateLocal(profile, directory, cols, rows)
+}
+
+func (s *SessionService) CreateSSH(target string, port, cols, rows int) (session.Info, error) {
+	c, err := s.backend()
+	if err != nil {
+		return session.Info{}, err
+	}
+	return c.CreateSSH(target, port, cols, rows)
+}
+
+func (s *SessionService) Rename(id, name string) (session.Info, error) {
+	c, err := s.backend()
+	if err != nil {
+		return session.Info{}, err
+	}
+	return c.Rename(id, name)
 }
 
 func (s *SessionService) Write(id, data string) error {
@@ -107,6 +157,16 @@ func (s *SessionService) Snapshot(id string) (session.Replay, error) {
 		return session.Replay{}, err
 	}
 	return c.Snapshot(id)
+}
+
+// Observe exposes read-only external process metadata. The Wails frontend
+// cannot send these PID identifiers to any managed-session control method.
+func (s *SessionService) Observe() (observe.Snapshot, error) {
+	c, err := s.backend()
+	if err != nil {
+		return observe.Snapshot{}, err
+	}
+	return c.Observe()
 }
 
 func (s *SessionService) Terminate(id string) error {

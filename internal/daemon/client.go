@@ -10,6 +10,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/xswt442-cmd/DiggerTerm/internal/observe"
 	"github.com/xswt442-cmd/DiggerTerm/internal/session"
 )
 
@@ -131,6 +132,12 @@ func (c *Client) Profiles() ([]session.Profile, error) {
 	err := c.call(request{Method: "profiles"}, &result)
 	return result, err
 }
+func (c *Client) SSHHosts() ([]string, error) {
+	var aliases []string
+	err := c.call(request{Method: "sshHosts"}, &aliases)
+	return aliases, err
+}
+
 func (c *Client) List() ([]session.Info, error) {
 	var result []session.Info
 	err := c.call(request{Method: "list"}, &result)
@@ -141,6 +148,28 @@ func (c *Client) Create(profile string, cols, rows int) (session.Info, error) {
 	err := c.call(request{Method: "create", Profile: profile, Cols: cols, Rows: rows}, &result)
 	return result, err
 }
+
+// CreateSSH requests a daemon-owned OpenSSH client PTY. All authentication
+// and known_hosts prompts appear inside that PTY, never in IPC parameters.
+func (c *Client) CreateLocal(profile, directory string, cols, rows int) (session.Info, error) {
+	var result session.Info
+	err := c.call(request{Method: "createLocal", Profile: profile, Directory: directory, Cols: cols, Rows: rows}, &result)
+	return result, err
+}
+
+func (c *Client) CreateSSH(target string, port, cols, rows int) (session.Info, error) {
+	var result session.Info
+	err := c.call(request{Method: "createSSH", SSHTarget: target, SSHPort: port, Cols: cols, Rows: rows}, &result)
+	return result, err
+}
+
+// Rename only accepts daemon-created session IDs, never observed process IDs.
+func (c *Client) Rename(id, name string) (session.Info, error) {
+	var info session.Info
+	err := c.call(request{Method: "rename", SessionID: id, Name: name}, &info)
+	return info, err
+}
+
 func (c *Client) Write(id, data string) error {
 	return c.call(request{Method: "write", SessionID: id, Data: data}, nil)
 }
@@ -157,6 +186,14 @@ func (c *Client) Terminate(id string) error {
 }
 func (c *Client) Forget(id string) error {
 	return c.call(request{Method: "forget", SessionID: id}, nil)
+}
+
+// Observe fetches an inventory of process metadata. It has no process
+// control or terminal-input endpoint for observed processes.
+func (c *Client) Observe() (observe.Snapshot, error) {
+	var result observe.Snapshot
+	err := c.call(request{Method: "observe"}, &result)
+	return result, err
 }
 
 // Stop is an explicit action and refuses to stop while owned PTYs are running.

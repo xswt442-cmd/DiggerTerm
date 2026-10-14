@@ -1,53 +1,24 @@
-# DiggerTerm v0.0.1 · Initial Release / 首次发布
+# DiggerTerm 发布流程
 
-> **Early preview · Windows x64 only / 早期预览版 · 仅 Windows x64**
+> 维护者内部说明。用户可见的 Release Notes 放在 `.github/release-notes/vX.Y.Z.md`，不要把本文件发布为 Release Notes。
 
-## 简体中文
+## 范围
 
-DiggerTerm v0.0.1 是首次公开预览。它将 PowerShell、CMD 和默认 WSL 会话集中在一个轻量桌面窗口中，使用独立 Go Daemon 持有终端进程。
+- **已发布的 v0.0.1** 是 Windows x64 ZIP 预览版，保留其历史 Tag、附件及 `.zip.sha256` 校验文件，不修改或重发。
+- **下一版起计划只提供三种程序包**：Windows x64 `.exe`、Linux x86_64 `.AppImage`、Ubuntu/Debian amd64 `.deb`。附带统一的 `SHA256SUMS` 校验文件；不再将 ZIP、tar.gz 或 macOS 程序包作为正式资产。
+- Windows 程序目前未代码签名。Linux 在 Ubuntu 24.04 环境构建，其他发行版尤其旧版 glibc 的兼容性以实机验收为准。
+- **当前 `.github/workflows/release.yml` 仍按 v0.0.1 的 Windows ZIP 流程发布。创建下一版 Tag 之前，必须先修改并验证三平台资产的构建和上传流程。** 本地测试包不等于已发布的 Release。
 
-**主要功能**
-- 左侧会话管理、右侧完整交互式终端。
-- 创建、切换、调整大小与显式终止 DiggerTerm 管理的会话。
-- 关闭或退出 GUI 后，只要 Daemon 仍运行，终端可以继续运行；重新启动 GUI 可重新连接。
-- 系统托盘支持隐藏窗口、只退出 GUI，且活跃会话会阻止 Daemon 被主动停止。
+## 下一版发布步骤
 
-**下载与使用**
-- 附件：`DiggerTerm-v0.0.1-windows-amd64.zip`（Windows x64 便携版）。
-- 解压后启动 `diggerterm.exe`，无需安装程序。
-- 需要 Microsoft Edge WebView2 Runtime；WSL 会话需要已安装并初始化的 WSL 发行版。
-- 本版本没有代码签名，可能显示 Windows 未知发布者提示。
-- 可用同名 `.sha256` 校验文件验证下载内容。
+1. 先完成 `dev → main` PR 审核与合并，确认 Check 通过。不要强推或重写历史。
+2. 同步版本信息（`frontend/package.json`、锁文件、`build/config.yml`），更新 `CHANGELOG.md`；准备简短的双语 `.github/release-notes/vX.Y.Z.md`。只写主要变化、下载与校验、必要限制。
+3. 验证 Windows 与 Linux GUI：终端键盘/剪贴板、nano 等全屏程序、托盘、后台会话恢复，以及 `.exe`、`.AppImage`、`.deb` 实际运行。至少运行前端测试、`go test ./...`、`go vet ./...` 和 Wails 构建。
+4. 将 Release Workflow 改为只上传上述三个安装包及 `SHA256SUMS`。在发布前验证三包存在、目标架构正确、可启动、SHA-256 一致；确认 Linux 动态库依赖。
+5. 从已合并且已验收的 `main` 提交创建新的注释 Tag，触发 Release Workflow；发布后检查附件并回下载校验。失败时保留现状，修复后使用新版本发布，**不得重写已发布的 Tag**。
 
-**已知限制**
-- 尚无 SSH、AI Agent 后台进程观察、外部终端接管。
-- 只有 Daemon 持续运行时会话才有保障；Daemon 意外终止、用户注销或关机后不保证会话存活。
-- 有限 PTY 输出重播不等于全屏终端程序的完整状态恢复。
-- Linux/macOS 尚未提供正式测试的发布包。
+## 边界
 
-## English
-
-DiggerTerm v0.0.1 is the first public preview: a lightweight desktop workspace for PowerShell, Command Prompt, and default WSL sessions, backed by an independent Go session daemon.
-
-**Highlights**
-- A session sidebar and a real interactive terminal.
-- Create, switch, resize, and explicitly terminate DiggerTerm-managed sessions.
-- Close or exit the GUI without ending terminal processes, provided the daemon is still running; reconnect after restarting the GUI.
-- System tray hide / GUI-only quit. Stopping the daemon is refused while sessions remain active.
-
-**Download and run**
-- Attachment: `DiggerTerm-v0.0.1-windows-amd64.zip` (portable Windows x64 archive).
-- Extract and launch `diggerterm.exe`; no installer required.
-- Requires Microsoft Edge WebView2 Runtime; WSL sessions require an installed, initialized Linux distribution.
-- The preview is unsigned and may show an unknown-publisher warning.
-- Verify your download using the accompanying `.sha256` checksum file.
-
-**Known limitations**
-- SSH, AI agent background-process observation, and external-terminal takeover are not available.
-- Session continuity depends on a running daemon; daemon failure, sign-out, or shutdown can end sessions.
-- Bounded PTY output replay is not a complete snapshot of a full-screen terminal program.
-- No officially tested Linux/macOS release packages.
-
----
-
-[Source](https://github.com/xswt442-cmd/DiggerTerm) · [Documentation / 文档](https://github.com/xswt442-cmd/DiggerTerm/blob/v0.0.1/README.md) · [MIT License](https://github.com/xswt442-cmd/DiggerTerm/blob/v0.0.1/LICENSE)
+- 打包和测试不得终止用户正在运行的 Daemon 托管会话。
+- 不提交 `testplace/`、`bin/`、`dist/`、依赖目录、凭据或本地安装包。
+- 只发布已验证的功能；Daemon 崩溃或系统重启后的会话存活不作保证。

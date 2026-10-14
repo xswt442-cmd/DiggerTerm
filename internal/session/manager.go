@@ -5,9 +5,16 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"os"
+	"os/exec"
+	"path/filepath"
 	"strconv"
+	"strings"
 	"sync"
 	"sync/atomic"
+	"time"
+	"unicode"
+	"unicode/utf8"
 
 	pty "github.com/aymanbagabas/go-pty"
 )
@@ -44,13 +51,14 @@ type Replay struct {
 }
 
 type managed struct {
-	mu      sync.Mutex
-	writeMu sync.Mutex
-	info    Info
-	pty     pty.Pty
-	cmd     *pty.Cmd
-	history []byte
-	offset  uint64
+	mu       sync.Mutex
+	writeMu  sync.Mutex
+	info     Info
+	pty      pty.Pty
+	cmd      *pty.Cmd
+	history  []byte
+	offset   uint64
+	readDone chan struct{}
 }
 
 type Manager struct {
@@ -98,6 +106,12 @@ func validSize(cols, rows int) bool {
 }
 
 func (m *Manager) Create(profile string, cols, rows int) (Info, error) {
+	return m.CreateLocal(profile, "", cols, rows)
+}
+
+// CreateLocal uses the child's actual OS working directory, never a shell
+// command. It is only supported for local shells, not WSL or SSH.
+func (m *Manager) CreateLocal(profile, directory string, cols, rows int) (Info, error) {
 	spec, ok := profileCommand(profile)
 	if !ok {
 		return Info{}, fmt.Errorf("unsupported profile: %q", profile)
@@ -105,7 +119,39 @@ func (m *Manager) Create(profile string, cols, rows int) (Info, error) {
 	if !validSize(cols, rows) {
 		return Info{}, fmt.Errorf("invalid terminal size %dx%d", cols, rows)
 	}
+	if directory != "" {
+		if profile != "powershell" && profile != "cmd" && profile != "shell" {
+			return Info{}, fmt.Errorf("custom working directory is not supported for %q", profile)
+		}
+		if !filepath.IsAbs(directory) {
+			return Info{}, errors.New("working directory must be an absolute path")
+		}
+		stat, err := os.Stat(directory)
+		if err != nil {
+			return Info{}, fmt.Errorf("working directory: %w", err)
+		}
+		if !stat.IsDir() {
+			return Info{}, errors.New("working directory is not a directory")
+		}
+		spec.dir = filepath.Clean(directory)
+	}
+	return m.createSpec(spec, profileName(profile), profile, cols, rows)
+}
 
+// CreateSSH delegates authentication, host-key verification and ~/.ssh/config
+// handling to the platform OpenSSH client. It owns ONLY the client PTY.
+func (m *Manager) CreateSSH(target string, port, cols, rows int) (Info, error) {
+	if !validSize(cols, rows) {
+		return Info{}, fmt.Errorf("invalid terminal size %dx%d", cols, rows)
+	}
+	spec, err := sshCommand(target, port)
+	if err != nil {
+		return Info{}, err
+	}
+	return m.createSpec(spec, "SSH · "+target, "ssh", cols, rows)
+}
+
+func (m *Manager) createSpec(spec commandSpec, name, profile string, cols, rows int) (Info, error) {
 	terminal, err := pty.New()
 	if err != nil {
 		return Info{}, fmt.Errorf("create PTY: %w", err)
@@ -114,18 +160,29 @@ func (m *Manager) Create(profile string, cols, rows int) (Info, error) {
 		_ = terminal.Close()
 		return Info{}, fmt.Errorf("resize PTY: %w", err)
 	}
+	if spec.dir != "" {
+		// go-pty resolves a relative executable against Cmd.Dir, unlike
+		// ordinary PATH lookup; make the executable absolute first.
+		resolved, resolveErr := exec.LookPath(spec.path)
+		if resolveErr != nil {
+			_ = terminal.Close()
+			return Info{}, fmt.Errorf("find shell executable: %w", resolveErr)
+		}
+		spec.path = resolved
+	}
 	cmd := terminal.Command(spec.path, spec.args...)
+	cmd.Dir = spec.dir
 	if err = cmd.Start(); err != nil {
 		_ = terminal.Close()
 		return Info{}, fmt.Errorf("start %s: %w", spec.path, err)
 	}
 
 	id := strconv.FormatUint(m.nextID.Add(1), 10)
-	info := Info{ID: id, Name: profileName(profile), Profile: profile, Status: "running"}
+	info := Info{ID: id, Name: name, Profile: profile, Status: "running"}
 	if cmd.Process != nil {
 		info.PID = cmd.Process.Pid
 	}
-	s := &managed{info: info, pty: terminal, cmd: cmd}
+	s := &managed{info: info, pty: terminal, cmd: cmd, readDone: make(chan struct{})}
 	m.mu.Lock()
 	m.sessions[id] = s
 	m.order = append(m.order, id)
@@ -146,6 +203,7 @@ func profileName(id string) string {
 }
 
 func (m *Manager) readLoop(s *managed) {
+	defer close(s.readDone)
 	buf := make([]byte, maxOutputChunk)
 	for {
 		n, err := s.pty.Read(buf)
@@ -172,6 +230,12 @@ func (m *Manager) readLoop(s *managed) {
 
 func (m *Manager) waitLoop(s *managed) {
 	err := s.cmd.Wait()
+	// Allow the PTY reader a short, bounded interval to drain SSH errors
+	// (especially host-key rejection) before the ConPTY is closed.
+	select {
+	case <-s.readDone:
+	case <-time.After(300 * time.Millisecond):
+	}
 	s.mu.Lock()
 	s.info.Status = "exited"
 	if err != nil {
@@ -188,6 +252,29 @@ func (m *Manager) waitLoop(s *managed) {
 	if m.exited != nil {
 		m.exited(info)
 	}
+}
+
+// Rename changes the display name of a daemon-owned session. The name lives
+// with the daemon's session metadata, not with GUI tabs or external PIDs.
+func (m *Manager) Rename(id, name string) (Info, error) {
+	name = strings.TrimSpace(name)
+	if name == "" || utf8.RuneCountInString(name) > 64 {
+		return Info{}, errors.New("session name must be 1–64 characters")
+	}
+	for _, char := range name {
+		if unicode.IsControl(char) || unicode.Is(unicode.Cf, char) {
+			return Info{}, errors.New("session name cannot contain control or invisible format characters")
+		}
+	}
+	s, err := m.get(id)
+	if err != nil {
+		return Info{}, err
+	}
+	s.mu.Lock()
+	s.info.Name = name
+	info := s.info
+	s.mu.Unlock()
+	return info, nil
 }
 
 func (m *Manager) Write(id, text string) error {
