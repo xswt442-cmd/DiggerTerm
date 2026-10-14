@@ -77,3 +77,7 @@ The executable is generated at `bin/diggerterm.exe`. Once all sessions are finis
 ## Project
 
 [中文 README](README.md) · [Changelog / 更新日志](CHANGELOG.md) · [MIT License](LICENSE)
+
+## LICENSE
+
+[MIT](LICENSE)
