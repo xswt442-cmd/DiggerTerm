@@ -1,0 +1,73 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  windows:
+    name: Publish Windows x64
+    runs-on: windows-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Verify release version
+        shell: pwsh
+        run: |
+          $version = (Get-Content frontend/package.json -Raw | ConvertFrom-Json).version
+          if ($env:GITHUB_REF_NAME -ne "v$version") {
+            throw "Git tag $env:GITHUB_REF_NAME does not match frontend version v$version"
+          }
+          $config = Get-Content build/config.yml -Raw
+          if ($config -notmatch "(?m)^  version: `"$([regex]::Escape($version))`"") {
+            throw "build/config.yml version does not match $version"
+          }
+
+      - name: Install frontend dependencies
+        run: npm --prefix frontend ci
+      - name: Run checks
+        run: |
+          go test ./...
+          go vet ./...
+          npm --prefix frontend run build
+      - name: Install pinned Wails CLI
+        shell: pwsh
+        run: |
+          go install github.com/wailsapp/wails/v3/cmd/wails3@v3.0.0-beta.29
+          "$(go env GOPATH)\bin" >> $env:GITHUB_PATH
+      - name: Build release binary
+        run: wails3 build
+      - name: Package portable release
+        shell: pwsh
+        run: ./scripts/package-windows.ps1 -Version $env:GITHUB_REF_NAME
+
+      - name: Publish GitHub Release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $tag = $env:GITHUB_REF_NAME
+          $zip = "dist/DiggerTerm-$tag-windows-amd64.zip"
+          $checksum = "$zip.sha256"
+          if (gh release view $tag --repo $env:GITHUB_REPOSITORY 2>$null) {
+            gh release upload $tag $zip $checksum --clobber --repo $env:GITHUB_REPOSITORY
+            if ($LASTEXITCODE -ne 0) { throw 'Failed to update release assets' }
+            gh release edit $tag --title "DiggerTerm $tag" --notes-file RELEASE.md --repo $env:GITHUB_REPOSITORY
+          } else {
+            gh release create $tag $zip $checksum --verify-tag --title "DiggerTerm $tag" --notes-file RELEASE.md --repo $env:GITHUB_REPOSITORY
+          }
+          if ($LASTEXITCODE -ne 0) { throw 'GitHub Release failed' }

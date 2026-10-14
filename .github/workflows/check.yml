@@ -2,11 +2,18 @@ name: Check
 
 on:
   push:
+    branches: [dev, main]
   pull_request:
+    branches: [dev, main]
+
+permissions:
+  contents: read
 
 jobs:
-  build:
+  windows:
+    name: Windows x64 build
     runs-on: windows-latest
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
@@ -18,12 +25,22 @@ jobs:
           node-version: '24'
           cache: npm
           cache-dependency-path: frontend/package-lock.json
-      - name: Frontend
-        working-directory: frontend
-        run: |
-          npm ci
-          npm run build
-      - name: Go checks
+      - name: Install frontend dependencies
+        run: npm --prefix frontend ci
+      - name: Go tests and vet
         run: |
           go test ./...
           go vet ./...
+      - name: Build frontend
+        run: npm --prefix frontend run build
+      - name: Install pinned Wails CLI
+        shell: pwsh
+        run: |
+          go install github.com/wailsapp/wails/v3/cmd/wails3@v3.0.0-beta.29
+          "$(go env GOPATH)\bin" >> $env:GITHUB_PATH
+      - name: Build Windows application
+        run: wails3 build
+      - name: Verify executable
+        shell: pwsh
+        run: |
+          if (!(Test-Path 'bin/diggerterm.exe')) { throw 'Expected Windows executable was not built' }
