@@ -38,6 +38,8 @@
 
 ## 说明
 
+开发分支支持用户主题：将 [示例 JSON/CSS](examples/themes/) 复制到用户主目录下的 `user/DiggerTerm/`，在“设置 → 外观”刷新并选择。主题名称读取 JSON 的 `name`；`custom.css` 提供可关闭的全局覆盖。外观页显示实际目录和配置错误。
+
 Windows 需要 WebView2，安装包尚未签名。Linux 主要针对 Ubuntu 24.04 构建，其他发行版兼容性待验证。会话不保证在 Daemon 崩溃或系统重启后存活。
 
 [English](README.en.md) · [CHANGELOG](CHANGELOG.md) · [发布流程](RELEASE.md) · [MIT License](LICENSE)

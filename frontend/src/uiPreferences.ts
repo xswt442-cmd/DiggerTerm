@@ -1,5 +1,6 @@
 /** GUI preferences are private to this WebView; they do not change session ownership. */
-export type ThemeId = 'nightfall' | 'graphite' | 'pine' | 'bluehour'
+export type BuiltinThemeId = 'nightfall' | 'graphite' | 'pine' | 'bluehour'
+export type ThemeId = `builtin:${BuiltinThemeId}` | `user:${string}`
 export type LanguageId = 'system' | 'zh' | 'en'
 export type Locale = 'zh' | 'en'
 export type FontId = 'cascadia' | 'consolas' | 'jetbrains' | 'fira' | 'monospace'
@@ -20,6 +21,7 @@ export const refreshOptions = [0, 15, 30, 60] as const
 
 export interface UIPreferences {
   theme: ThemeId
+  customCSS: boolean
   fontSize: number
   uiFontSize: number
   fontFamily: FontId
@@ -44,7 +46,7 @@ export interface UIPreferences {
 }
 
 export const defaults: UIPreferences = {
-  theme: 'nightfall', fontSize: 13, uiFontSize: 12, fontFamily: 'cascadia', language: 'system',
+  theme: 'builtin:nightfall', customCSS: true, fontSize: 13, uiFontSize: 12, fontFamily: 'cascadia', language: 'system',
   sidebarWidth: 280, managedRatio: 0.42, defaultDirectory: '', defaultProfile: 'auto',
   scrollback: 5000, lineHeight: 1.25, scrollSensitivity: 1, terminalPadding: 14,
   cursorStyle: 'block', keyboardMode: 'smart', cursorBlink: true, rightClickSelectsWord: false,
@@ -53,12 +55,15 @@ export const defaults: UIPreferences = {
 }
 
 const key = 'diggerterm:preferences:v1'
-export const themes: ThemeId[] = ['nightfall', 'graphite', 'pine', 'bluehour']
+export const themes: BuiltinThemeId[] = ['nightfall', 'graphite', 'pine', 'bluehour']
 
-type TerminalTheme = {
+export type TerminalTheme = {
   background: string; foreground: string; cursor: string
   selectionBackground: string; black: string; red: string; green: string
   yellow: string; blue: string; magenta: string; cyan: string; white: string
+  brightBlack?: string; brightRed?: string; brightGreen?: string; brightYellow?: string
+  brightBlue?: string; brightMagenta?: string; brightCyan?: string; brightWhite?: string
+  cursorAccent?: string; selectionForeground?: string; selectionInactiveBackground?: string
 }
 export type Palette = {
   zh: string
@@ -74,7 +79,7 @@ const term = (background: string, foreground: string, cursor: string, selectionB
   blue: '#92accf', magenta: '#b8a5c9', cyan: '#99c2bf', white: '#d9dde2',
 })
 
-export const palettes: Record<ThemeId, Palette> = {
+export const palettes: Record<BuiltinThemeId, Palette> = {
   nightfall: {
     zh: '夜航', en: 'Nightfall', chips: ['#1b1f26', '#101318', '#bca58b'],
     css: {
@@ -129,7 +134,11 @@ export function readPreferences(): UIPreferences {
   const result = { ...defaults }
   try {
     const saved = JSON.parse(localStorage.getItem(key) || '{}') as Partial<UIPreferences>
-    if (saved.theme && themes.includes(saved.theme)) result.theme = saved.theme
+    if (typeof saved.theme === 'string') {
+      const legacy = saved.theme as BuiltinThemeId
+      if (themes.includes(legacy)) result.theme = `builtin:${legacy}`
+      else if (/^(builtin:(nightfall|graphite|pine|bluehour)|user:[^/\\\x00-\x1f]{1,128})$/.test(saved.theme)) result.theme = saved.theme
+    }
     if (saved.language && ['system', 'zh', 'en'].includes(saved.language)) result.language = saved.language
     if (typeof saved.fontSize === 'number' && Number.isFinite(saved.fontSize)) result.fontSize = Math.max(11, Math.min(20, Math.round(saved.fontSize)))
     if (typeof saved.uiFontSize === 'number' && Number.isFinite(saved.uiFontSize)) result.uiFontSize = Math.max(10, Math.min(16, Math.round(saved.uiFontSize)))
@@ -145,7 +154,7 @@ export function readPreferences(): UIPreferences {
     if (saved.scrollSensitivity && scrollSpeedOptions.includes(saved.scrollSensitivity as typeof scrollSpeedOptions[number])) result.scrollSensitivity = saved.scrollSensitivity
     if (saved.terminalPadding && paddingOptions.includes(saved.terminalPadding as typeof paddingOptions[number])) result.terminalPadding = saved.terminalPadding
     if (saved.observeRefreshSeconds !== undefined && refreshOptions.includes(saved.observeRefreshSeconds as typeof refreshOptions[number])) result.observeRefreshSeconds = saved.observeRefreshSeconds
-    for (const name of ['cursorBlink', 'rightClickSelectsWord', 'activateNewSession',
+    for (const name of ['customCSS', 'cursorBlink', 'rightClickSelectsWord', 'activateNewSession',
       'observeEnabled', 'showPid', 'showStatusBar'] as const) {
       if (typeof saved[name] === 'boolean') result[name] = saved[name]
     }

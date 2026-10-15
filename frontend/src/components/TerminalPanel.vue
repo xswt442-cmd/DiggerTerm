@@ -7,6 +7,7 @@ import { Resize, Snapshot, Write } from '../../bindings/github.com/xswt442-cmd/D
 import type { Info } from '../../bindings/github.com/xswt442-cmd/DiggerTerm/internal/session/models'
 import { fonts, type Palette, type FontId, type CursorStyle, type KeyboardMode } from '../uiPreferences'
 import { decideTerminalShortcut } from '../terminalShortcuts'
+import { terminalColors } from '../userThemes'
 import '@xterm/xterm/css/xterm.css'
 
 const props = defineProps<{
@@ -23,6 +24,7 @@ const props = defineProps<{
   rightClickSelectsWord: boolean
   padding: number
   colors: Palette['terminal']
+  themeRevision: number
 }>()
 const emit = defineEmits<{ error: [message: string] }>()
 const container = ref<HTMLElement | null>(null)
@@ -150,9 +152,10 @@ watch(() => props.fontSize, async (size) => {
     fit()
   }
 })
-watch(() => props.colors, (colors) => {
-  if (terminal) terminal.options.theme = colors
-}, { deep: true })
+function updateColors() {
+  if (terminal && container.value) terminal.options.theme = terminalColors(container.value, props.colors)
+}
+watch([() => props.colors, () => props.themeRevision], updateColors, { deep: true })
 
 watch(() => props.fontFamily, async (font) => {
   if (!terminal) return
@@ -212,6 +215,7 @@ onMounted(async () => {
   term.loadAddon(fitPlugin)
   term.open(container.value)
   terminal = term
+  updateColors()
   fitAddon = fitPlugin
 
   offInput = term.onData((input: string) => {

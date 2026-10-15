@@ -23,7 +23,7 @@ test('defaults work with no saved WebView preferences', () => {
 test('all expanded preferences persist across GUI reopen', () => {
   const saved = {
     ...prefs.defaults,
-    theme: 'pine',
+    theme: 'builtin:pine',
     fontFamily: 'jetbrains',
     fontSize: 17,
     uiFontSize: 15,
@@ -85,6 +85,14 @@ test('bad saved values are clamped or safely ignored', () => {
 test('corrupt settings recover defaults without crashing UI', () => {
   values.set('diggerterm:preferences:v1', '{broken json')
   assert.deepEqual(prefs.readPreferences(), prefs.defaults)
+})
+
+test('theme IDs migrate and preserve user theme identity until catalog refresh', () => {
+  values.set('diggerterm:preferences:v1', JSON.stringify({ theme: 'pine' }))
+  assert.equal(prefs.readPreferences().theme, 'builtin:pine')
+  values.set('diggerterm:preferences:v1', JSON.stringify({ theme: 'user:暮光', customCSS: false }))
+  assert.equal(prefs.readPreferences().theme, 'user:暮光')
+  assert.equal(prefs.readPreferences().customCSS, false)
 })
 
 test('new setting labels appear in both UI languages', () => {

@@ -1,19 +1,51 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import {
-  chosenLocale, defaults, fonts, lineHeightOptions, paddingOptions, palettes,
+  chosenLocale, defaults, fonts, lineHeightOptions, paddingOptions,
   readPreferences, refreshOptions, scrollbackOptions, scrollSpeedOptions,
-  themes, translate, writePreferences,
+  translate, writePreferences,
   type TextKey, type ThemeId, type LanguageId,
 } from './uiPreferences'
 import { Events } from '@wailsio/runtime'
 import TerminalPanel from './components/TerminalPanel.vue'
+import { themeRegistry, themeVariables, type ThemeOption } from './userThemes'
+import { ListThemes } from '../bindings/github.com/xswt442-cmd/DiggerTerm/themeservice'
 import { Create, CreateLocal, CreateSSH, Forget, List, Observe, Profiles, Rename, SetUILanguage, SSHHosts, Terminate } from '../bindings/github.com/xswt442-cmd/DiggerTerm/sessionservice'
 import type { Info, Profile } from '../bindings/github.com/xswt442-cmd/DiggerTerm/internal/session/models'
 import type { Process as ObservedProcess, Snapshot as ObservedSnapshot } from '../bindings/github.com/xswt442-cmd/DiggerTerm/internal/observe/models'
 
 const preferences = ref(readPreferences())
-const palette = computed(() => palettes[preferences.value.theme])
+const themeOptions = ref<ThemeOption[]>(themeRegistry([]))
+const chosenTheme = computed(() => themeOptions.value.find(theme => theme.id === preferences.value.theme) ?? themeOptions.value[0]!)
+const palette = computed(() => chosenTheme.value.palette)
+const themeDirectory = ref('')
+const themeErrors = ref<{ file: string; message: string }[]>([])
+const globalCSS = ref('')
+const themeRevision = ref(0)
+let themeStyle: HTMLStyleElement | undefined
+async function applyTheme() {
+  themeStyle ??= document.createElement('style')
+  const variables = Object.entries(themeVariables(palette.value)).map(([key, value]) => `${key}:${value}`).join(';')
+  themeStyle.textContent = `.layout[data-dt-theme]{${variables}}\n` +
+    (preferences.value.customCSS ? chosenTheme.value.css + '\n' + globalCSS.value : '')
+  document.head.append(themeStyle)
+  await nextTick()
+  themeRevision.value++
+}
+watch([chosenTheme, globalCSS, () => preferences.value.customCSS], () => { void applyTheme() })
+async function refreshThemes() {
+  try {
+    const catalog = await ListThemes()
+    themeDirectory.value = catalog.directory
+    themeErrors.value = catalog.errors ?? []
+    themeOptions.value = themeRegistry(catalog.themes ?? [])
+    globalCSS.value = catalog.customCSS
+    if (!themeOptions.value.some(theme => theme.id === preferences.value.theme)) {
+      preferences.value.theme = defaults.theme
+      themeErrors.value.push({ file: '', message: locale.value === 'zh' ? '所选主题已不可用，已恢复默认配色。' : 'Selected theme unavailable; restored default.' })
+    }
+  } catch (error) { reportError(error) }
+}
 const locale = computed(() => chosenLocale(preferences.value.language))
 const t = (key: TextKey, replacements?: Record<string, string | number>) => translate(locale.value, key, replacements)
 const kindLabel = (kind: string) => t(kind === 'terminal' ? 'kindTerminal' : kind === 'agent' ? 'kindAgent' : kind === 'descendant' ? 'kindDescendant' : 'kindOther')
@@ -82,6 +114,7 @@ function resetSection() {
   switch (settingsTab.value) {
     case 'appearance':
       preferences.value.theme = defaults.theme
+      preferences.value.customCSS = false
       preferences.value.language = defaults.language
       preferences.value.uiFontSize = defaults.uiFontSize
       resetLayout()
@@ -278,6 +311,8 @@ watch([() => preferences.value.observeEnabled, () => preferences.value.observeRe
   () => startObservationPolling())
 
 onMounted(async () => {
+  void applyTheme()
+  void refreshThemes()
   syncNativeLanguage(locale.value)
   offDaemonDisconnected = Events.On('daemon:disconnected', (event) => {
     errorMessage.value = String(event.data || 'Session daemon disconnected')
@@ -310,6 +345,7 @@ onMounted(async () => {
 })
 
 onBeforeUnmount(() => {
+  themeStyle?.remove()
   if (observationTimer) clearInterval(observationTimer)
   offExit?.()
   offRename?.()
@@ -319,7 +355,7 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <main class="layout" :style="{ ...palette.css, '--ui-font-scale': preferences.uiFontSize / 12 }" @keydown.esc="settingsOpen = false">
+  <main class="layout" :data-dt-theme="preferences.theme" :style="{ '--ui-font-scale': preferences.uiFontSize / 12 }" @keydown.esc="settingsOpen = false">
     <aside class="sidebar" :style="{ width: preferences.sidebarWidth + 'px' }">
       <header class="brand">
         <img class="brand-logo" src="/favicon.svg" alt="DiggerTerm" width="31" height="31" />
@@ -485,16 +521,23 @@ onBeforeUnmount(() => {
             <div class="setting-block">
               <label class="setting-label">{{ t('colors') }}</label>
               <div class="theme-options">
-                <button v-for="theme in themes" :key="theme" type="button" class="theme-option"
-                  :class="{ chosen: preferences.theme === theme }"
-                  :aria-pressed="preferences.theme === theme"
-                  @click="updateTheme(theme)">
+                <button v-for="theme in themeOptions" :key="theme.id" type="button" class="theme-option"
+                  :class="{ chosen: preferences.theme === theme.id }"
+                  :aria-pressed="preferences.theme === theme.id"
+                  :title="theme.id"
+                  @click="updateTheme(theme.id)">
                   <span class="theme-chips" aria-hidden="true">
-                    <span v-for="color in palettes[theme].chips" :key="color" :style="{ background: color }" />
+                    <span v-for="(color, index) in theme.palette.chips" :key="index" :style="{ background: color }" />
                   </span>
-                  <span>{{ palettes[theme][locale] }}</span>
+                  <span>{{ theme.palette[locale] }}<small v-if="theme.id.startsWith('user:')"> · {{ theme.id }}</small></span>
                 </button>
               </div>
+              <button type="button" class="reset-layout" @click="refreshThemes">{{ t('refresh') }}</button>
+              <small class="setting-note">{{ themeDirectory }}</small>
+              <label class="setting-toggle"><span>{{ locale === 'zh' ? '启用主题 CSS 和 custom.css' : 'Enable theme CSS and custom.css' }}</span>
+                <input v-model="preferences.customCSS" type="checkbox" /></label>
+              <small class="setting-note">{{ locale === 'zh' ? '自定义 CSS 可能影响显示；恢复默认外观可禁用。' : 'Custom CSS can affect visibility; restore appearance to disable it.' }}</small>
+              <p v-for="(error, index) in themeErrors" :key="index" role="status" class="setting-note">{{ error.file }}: {{ error.message }}</p>
             </div>
             <div class="setting-block">
               <div class="setting-label setting-split">
@@ -658,7 +701,7 @@ onBeforeUnmount(() => {
             :scroll-sensitivity="preferences.scrollSensitivity"
             :right-click-selects-word="preferences.rightClickSelectsWord"
             :padding="preferences.terminalPadding"
-            :colors="palette.terminal" @error="reportError" />
+            :colors="palette.terminal" :theme-revision="themeRevision" @error="reportError" />
         </template>
         <div v-if="selectedExternalKey" class="observed-detail">
           <template v-if="activeObserved">
@@ -703,7 +746,8 @@ button:disabled { cursor: not-allowed; opacity: .55; }
 button:focus-visible, input:focus-visible, select:focus-visible, [role="separator"]:focus-visible {
   outline: 2px solid var(--accent); outline-offset: -1px;
 }
-.layout { display: flex; height: 100vh; width: 100%; min-height: 0; overflow: hidden; background: var(--canvas); color: var(--text); font-size: calc(12px * var(--ui-font-scale)); }
+.layout { display: flex; height: 100vh; width: 100%; min-height: 0; overflow: hidden; background: var(--canvas); color: var(--text); font-family: var(--dt-ui-font, "Segoe UI", system-ui, sans-serif); font-size: calc(12px * var(--ui-font-scale)); }
+.layout button, .layout input, .layout select { border-radius: var(--dt-radius, 5px); }
 .sidebar { position: relative; display: flex; flex-direction: column; flex: 0 0 auto; min-width: 216px; max-width: 500px; min-height: 0; background: var(--sidebar); padding: 11px 10px 0; z-index: 2; }
 .brand { display: flex; align-items: center; gap: 9px; height: 43px; padding: 0 5px; flex-shrink: 0; }
 .brand-logo { display: block; object-fit: contain; flex-shrink: 0; }

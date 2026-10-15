@@ -38,6 +38,8 @@ Keyboard shortcuts follow familiar Windows terminal behavior: **Ctrl+C** copies 
 
 ## Notes
 
+The development branch supports user themes: copy [example JSON/CSS files](examples/themes/) into `user/DiggerTerm/` under your home directory, then refresh Settings → Appearance. JSON `name` supplies the display name; optional `custom.css` overrides all themes. Appearance shows the resolved directory and configuration errors.
+
 Windows requires WebView2; binaries are unsigned. Linux builds target Ubuntu 24.04 and may not run on every distribution. Sessions are not guaranteed to survive daemon crashes or system reboots.
 
 [简体中文](README.md) · [CHANGELOG](CHANGELOG.md) · [Release guide](RELEASE.md) · [MIT License](LICENSE)
