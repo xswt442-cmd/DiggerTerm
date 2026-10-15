@@ -1,6 +1,7 @@
 package session
 
 import (
+	"crypto/rand"
 	"encoding/base64"
 	"errors"
 	"fmt"
@@ -62,19 +63,21 @@ type managed struct {
 }
 
 type Manager struct {
-	mu       sync.RWMutex
-	sessions map[string]*managed
-	order    []string
-	nextID   atomic.Uint64
-	output   func(Output)
-	exited   func(Info)
+	mu         sync.RWMutex
+	sessions   map[string]*managed
+	order      []string
+	nextID     atomic.Uint64
+	instanceID string
+	output     func(Output)
+	exited     func(Info)
 }
 
 func NewManager(output func(Output), exited func(Info)) *Manager {
 	return &Manager{
-		sessions: make(map[string]*managed),
-		output:   output,
-		exited:   exited,
+		sessions:   make(map[string]*managed),
+		instanceID: rand.Text(),
+		output:     output,
+		exited:     exited,
 	}
 }
 
@@ -177,7 +180,7 @@ func (m *Manager) createSpec(spec commandSpec, name, profile string, cols, rows 
 		return Info{}, fmt.Errorf("start %s: %w", spec.path, err)
 	}
 
-	id := strconv.FormatUint(m.nextID.Add(1), 10)
+	id := m.instanceID + "-" + strconv.FormatUint(m.nextID.Add(1), 10)
 	info := Info{ID: id, Name: name, Profile: profile, Status: "running"}
 	if cmd.Process != nil {
 		info.PID = cmd.Process.Pid
