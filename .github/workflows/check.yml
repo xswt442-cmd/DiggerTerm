@@ -27,17 +27,18 @@ jobs:
           cache-dependency-path: frontend/package-lock.json
       - name: Install frontend dependencies
         run: npm --prefix frontend ci
-      - name: Test desktop preferences
-        run: npm --prefix frontend run test:preferences
-      - name: Test terminal keyboard shortcuts
-        run: npm --prefix frontend run test:shortcuts
+      - name: Test frontend preferences, themes, shortcuts and layouts
+        run: npm --prefix frontend test
       # main.go embeds frontend/dist; the Vite build must precede go test/vet.
       - name: Build frontend
         run: npm --prefix frontend run build
       - name: Go tests and vet
         run: |
           go test ./...
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           go vet ./...
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          go test -tags server . -run TestUnsupportedNativeClipboardReportsFailure
       - name: Install pinned Wails CLI
         shell: pwsh
         run: |
