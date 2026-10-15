@@ -173,6 +173,18 @@ func (c *Client) Rename(id, name string) (session.Info, error) {
 func (c *Client) Write(id, data string) error {
 	return c.call(request{Method: "write", SessionID: id, Data: data}, nil)
 }
+
+// Attach acquires input and resize control for a managed session. Snapshot and
+// list operations remain available to every GUI connection.
+func (c *Client) Attach(id string) error {
+	return c.call(request{Method: "attach", SessionID: id}, nil)
+}
+
+// Detach releases control without stopping or otherwise changing the session.
+func (c *Client) Detach(id string) error {
+	return c.call(request{Method: "detach", SessionID: id}, nil)
+}
+
 func (c *Client) Resize(id string, cols, rows int) error {
 	return c.call(request{Method: "resize", SessionID: id, Cols: cols, Rows: rows}, nil)
 }
