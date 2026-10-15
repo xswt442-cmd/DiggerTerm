@@ -279,6 +279,11 @@ function onTerminalKeydown(event: KeyboardEvent) {
   // listener is attached only to the active terminal's DOM subtree.
   const term = terminal
   if (!props.active || !props.focused || !term) return
+  if (copyMenu.value && event.key === 'Escape') {
+    copyMenu.value = null
+    event.preventDefault(); event.stopPropagation()
+    return
+  }
   const target = event.target as HTMLElement
   if (!target.classList.contains('xterm-helper-textarea') && target.closest('input, select, textarea')) return
   const binding = matchBinding(event, props.bindings, 'terminal')
@@ -491,7 +496,7 @@ onBeforeUnmount(() => {
     </div>
     <Teleport to=".layout">
       <div v-if="copyMenu" ref="copyMenuElement" class="terminal-copy-menu" role="group" :aria-label="text('终端复制操作', 'Terminal copy actions')"
-        :style="{ left: copyMenu.x + 'px', top: copyMenu.y + 'px' }" @pointerdown.prevent @keydown.esc.stop="copyMenu = null">
+        :style="{ left: copyMenu.x + 'px', top: copyMenu.y + 'px' }" @pointerdown.prevent @keydown.esc.prevent.stop="copyMenu = null">
         <button type="button" @click="runCopyMenu('copy')">{{ text('复制选区', 'Copy selection') }}</button>
         <button type="button" :disabled="!connected || session.streamClosed || !!replayError || copyMode || session.status !== 'running'" @click="runCopyMenu('paste')">{{ text('粘贴', 'Paste') }}</button>
         <button type="button" @click="runCopyMenu('mode')">{{ copyMode ? text('退出复制模式', 'Exit copy mode') : text('进入复制模式', 'Enter copy mode') }}</button>
