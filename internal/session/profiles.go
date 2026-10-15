@@ -16,6 +16,7 @@ type commandSpec struct {
 	path string
 	args []string
 	dir  string
+	env  []string
 }
 
 // Profiles only lists commands supported by the current host. WSL is hosted
@@ -29,6 +30,9 @@ func Profiles() []Profile {
 		if _, err := exec.LookPath("wsl.exe"); err == nil {
 			result = append(result, Profile{ID: "wsl", Name: "WSL", Description: "Default Linux distribution"})
 		}
+		if spec, ok := bashCommandSpec(); ok {
+			result = append(result, Profile{ID: "bash", Name: "Git Bash", Description: spec.path})
+		}
 		if _, err := exec.LookPath("ssh.exe"); err == nil {
 			result = append(result, Profile{ID: "ssh", Name: "SSH", Description: "OpenSSH remote terminal"})
 		}
@@ -39,6 +43,9 @@ func Profiles() []Profile {
 		shell = "/bin/sh"
 	}
 	result := []Profile{{ID: "shell", Name: "Local Shell", Description: shell}}
+	if spec, ok := bashCommandSpec(); ok {
+		result = append(result, Profile{ID: "bash", Name: "Bash", Description: spec.path})
+	}
 	if _, err := exec.LookPath("ssh"); err == nil {
 		result = append(result, Profile{ID: "ssh", Name: "SSH", Description: "OpenSSH remote terminal"})
 	}
@@ -61,6 +68,8 @@ func profileCommand(id string) (commandSpec, bool) {
 				return commandSpec{path: "wsl.exe"}, true
 			}
 		}
+	case "bash":
+		return bashCommandSpec()
 	case "shell":
 		if runtime.GOOS != "windows" {
 			path := os.Getenv("SHELL")

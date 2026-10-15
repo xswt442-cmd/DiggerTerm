@@ -141,7 +141,7 @@ func (m *Manager) CreateLocal(profile, directory string, cols, rows int) (Info, 
 		return Info{}, fmt.Errorf("invalid terminal size %dx%d", cols, rows)
 	}
 	if directory != "" {
-		if profile != "powershell" && profile != "cmd" && profile != "shell" {
+		if profile != "powershell" && profile != "cmd" && profile != "shell" && profile != "bash" {
 			return Info{}, fmt.Errorf("custom working directory is not supported for %q", profile)
 		}
 		if !filepath.IsAbs(directory) {
@@ -193,6 +193,9 @@ func (m *Manager) createSpec(spec commandSpec, name, profile string, cols, rows 
 	}
 	cmd := terminal.Command(spec.path, spec.args...)
 	cmd.Dir = spec.dir
+	if len(spec.env) != 0 {
+		cmd.Env = append(os.Environ(), spec.env...)
+	}
 	if err = cmd.Start(); err != nil {
 		_ = terminal.Close()
 		return Info{}, fmt.Errorf("start %s: %w", spec.path, err)
