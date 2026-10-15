@@ -62,6 +62,14 @@ export function Profiles(): $CancellablePromise<session$0.Profile[] | null> {
     return $Call.ByID(531259195);
 }
 
+/**
+ * Reconnect only dials the existing daemon. It never starts or stops the
+ * daemon, and it returns the sessions currently managed by that process.
+ */
+export function Reconnect(): $CancellablePromise<session$0.Info[] | null> {
+    return $Call.ByID(2781747506);
+}
+
 export function Rename(id: string, name: string): $CancellablePromise<session$0.Info> {
     return $Call.ByID(628772759, id, name);
 }

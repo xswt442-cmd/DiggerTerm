@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"sync"
 
 	"github.com/wailsapp/wails/v3/pkg/application"
 	"github.com/xswt442-cmd/DiggerTerm/internal/daemon"
@@ -14,45 +15,120 @@ import (
 // SessionService is ONLY a Wails-to-IPC proxy. It never owns a PTY.
 // Closing the GUI/client connection does not terminate daemon sessions.
 type SessionService struct {
+	mu            sync.RWMutex
+	reconnectMu   sync.Mutex
+	app           *application.App
 	client        *daemon.Client
 	initErr       error
+	generation    uint64
 	setUILanguage func(string)
 }
 
 func NewSessionService(app *application.App) *SessionService {
-	client, err := daemon.EnsureClient(func(event string, raw json.RawMessage) {
+	service := &SessionService{app: app, generation: 1}
+	client, err := daemon.EnsureClient(service.eventHandler(1))
+	service.mu.Lock()
+	service.client = client
+	service.initErr = err
+	service.mu.Unlock()
+	return service
+}
+
+func (s *SessionService) eventHandler(generation uint64) func(string, json.RawMessage) {
+	return func(event string, raw json.RawMessage) {
+		s.mu.RLock()
+		defer s.mu.RUnlock()
+		if generation != s.generation || s.app == nil {
+			return
+		}
 		switch event {
 		case "terminal:output":
 			var output session.Output
 			if json.Unmarshal(raw, &output) == nil {
-				app.Event.Emit(event, output)
+				s.app.Event.Emit(event, output)
 			}
-		case "terminal:exit", "terminal:renamed":
+		case "terminal:exit", "terminal:renamed", "terminal:state":
 			var info session.Info
 			if json.Unmarshal(raw, &info) == nil {
-				app.Event.Emit(event, info)
+				s.app.Event.Emit(event, info)
 			}
 		case "daemon:disconnected":
-			app.Event.Emit(event, "Background service disconnected; existing session state may be unavailable.")
+			s.app.Event.Emit(event, "Background service disconnected; existing session state may be unavailable.")
 		}
-	})
-	return &SessionService{client: client, initErr: err}
+	}
 }
 
 func (s *SessionService) backend() (*daemon.Client, error) {
-	if s.client == nil {
-		if s.initErr != nil {
-			return nil, fmt.Errorf("connect session daemon: %w", s.initErr)
+	s.mu.RLock()
+	client, initErr := s.client, s.initErr
+	s.mu.RUnlock()
+	if client == nil {
+		if initErr != nil {
+			return nil, fmt.Errorf("connect session daemon: %w", initErr)
 		}
 		return nil, errors.New("session daemon unavailable")
 	}
-	return s.client, nil
+	return client, nil
 }
 
 func (s *SessionService) close() {
-	if s.client != nil {
-		_ = s.client.Close()
+	s.reconnectMu.Lock()
+	defer s.reconnectMu.Unlock()
+	s.mu.Lock()
+	s.generation++
+	client := s.client
+	s.client = nil
+	s.initErr = errors.New("session service closed")
+	s.mu.Unlock()
+	if client != nil {
+		_ = client.Close()
 	}
+}
+
+// Reconnect only dials the existing daemon. It never starts or stops the
+// daemon, and it returns the sessions currently managed by that process.
+func (s *SessionService) Reconnect() ([]session.Info, error) {
+	s.reconnectMu.Lock()
+	defer s.reconnectMu.Unlock()
+
+	s.mu.Lock()
+	s.generation++
+	generation := s.generation
+	previous := s.client
+	s.client = nil
+	s.initErr = errors.New("session daemon reconnecting")
+	s.mu.Unlock()
+	if previous != nil {
+		_ = previous.Close()
+	}
+
+	client, err := daemon.Dial(s.eventHandler(generation))
+	var current []session.Info
+	if err == nil {
+		current, err = client.List()
+		if err != nil {
+			_ = client.Close()
+		}
+	}
+	if err != nil {
+		s.mu.Lock()
+		if s.generation == generation {
+			s.initErr = err
+		}
+		s.mu.Unlock()
+		return nil, err
+	}
+	s.mu.Lock()
+	if s.generation != generation {
+		s.mu.Unlock()
+		_ = client.Close()
+		return nil, errors.New("session daemon reconnect was superseded")
+	}
+	s.client = client
+	s.initErr = nil
+	s.mu.Unlock()
+
+	return current, nil
 }
 
 // SetUILanguage changes only the GUI's native menu; it never touches the
