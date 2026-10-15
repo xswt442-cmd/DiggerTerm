@@ -2,6 +2,7 @@ package main
 
 import (
 	"errors"
+	"strings"
 
 	"github.com/wailsapp/wails/v3/pkg/application"
 )
@@ -13,8 +14,11 @@ type ClipboardService struct {
 }
 
 func (s *ClipboardService) WriteText(text string) error {
+	if strings.ContainsRune(text, '\x00') {
+		return errors.New("clipboard text cannot contain NUL")
+	}
 	if !s.app.Clipboard.SetText(text) {
-		return errors.New("system clipboard write failed")
+		return writeClipboardFallback(text)
 	}
 	return nil
 }
@@ -22,7 +26,7 @@ func (s *ClipboardService) WriteText(text string) error {
 func (s *ClipboardService) ReadText() (string, error) {
 	text, ok := s.app.Clipboard.Text()
 	if !ok {
-		return "", errors.New("system clipboard read failed")
+		return readClipboardFallback()
 	}
 	return text, nil
 }
