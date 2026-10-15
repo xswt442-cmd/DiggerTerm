@@ -7,6 +7,7 @@ import {
   type TextKey, type ThemeId, type LanguageId,
 } from './uiPreferences'
 import { Events } from '@wailsio/runtime'
+import { mergeSessions } from './sessionState'
 import TerminalPanel from './components/TerminalPanel.vue'
 import PaneWorkspace from './components/PaneWorkspace.vue'
 import { assignSession, closeLeaf, emptyLayout, focusPane, leaves, resizeSplit, sanitizeLayout, splitLeaf, type SplitDirection } from './workspaceLayout'
@@ -15,7 +16,7 @@ import { defaultBindings, matchBinding, parseBindings } from './keybindings'
 import { ReadKeybindings } from '../bindings/github.com/xswt442-cmd/DiggerTerm/keybindingservice'
 import { themeRegistry, themeVariables, type ThemeOption } from './userThemes'
 import { ListThemes } from '../bindings/github.com/xswt442-cmd/DiggerTerm/themeservice'
-import { Create, CreateLocal, CreateSSH, Forget, List, Observe, Profiles, Rename, SetUILanguage, SSHHosts, Terminate } from '../bindings/github.com/xswt442-cmd/DiggerTerm/sessionservice'
+import { Create, CreateLocal, CreateSSH, Forget, List, Observe, Profiles, Reconnect, Rename, SetUILanguage, SSHHosts, Terminate } from '../bindings/github.com/xswt442-cmd/DiggerTerm/sessionservice'
 import type { Info, Profile } from '../bindings/github.com/xswt442-cmd/DiggerTerm/internal/session/models'
 import type { Process as ObservedProcess, Snapshot as ObservedSnapshot } from '../bindings/github.com/xswt442-cmd/DiggerTerm/internal/observe/models'
 
@@ -173,6 +174,28 @@ watch(() => preferences.value.defaultProfile, (value) => {
   if (value !== 'auto' && profiles.value.some(p => p.id === value)) profileId.value = value
 })
 const sessions = ref<Info[]>([])
+const daemonConnected = ref(false)
+const reconnecting = ref(false)
+const connectionRevision = ref(0)
+async function reconnectDaemon() {
+  if (reconnecting.value) return
+  reconnecting.value = true
+  daemonConnected.value = false
+  try {
+    const existing = await Reconnect()
+    sessions.value = mergeSessions(sessions.value, existing ?? [], true)
+    if (!layoutReady) restoreWorkspace(sessions.value)
+    else layout.value = sanitizeLayout(layout.value, new Set(sessions.value.filter(session => session.status === 'running').map(session => session.id)))
+    connectionRevision.value++
+    daemonConnected.value = true
+    errorMessage.value = ''
+    if (!profiles.value.length) {
+      profiles.value = await Profiles() ?? []
+      profileId.value = profiles.value.find(profile => profile.id === preferences.value.defaultProfile)?.id ?? profiles.value[0]?.id ?? ''
+    }
+  } catch (error) { reportError(error) }
+  finally { reconnecting.value = false }
+}
 const profiles = ref<Profile[]>([])
 const layout = ref(emptyLayout())
 const paneLeaves = computed(() => leaves(layout.value))
@@ -232,11 +255,18 @@ const filteredSessions = computed(() => sessions.value.filter((s) => (s.name + '
 const filteredObserved = computed(() => observedProcesses.value.filter((p) => (p.name + ' ' + p.kind + ' ' + p.pid + ' ' + p.distribution).toLowerCase().includes(query.value.trim().toLowerCase())))
 const activeObserved = computed(() => observedProcesses.value.find((p) => p.key === selectedExternalKey.value))
 const activeSession = computed(() => sessions.value.find((s) => s.id === selectedId.value))
+function sessionStatus(session: Info): string {
+  if (!daemonConnected.value) return locale.value === 'zh' ? 'Daemon 失联' : 'Daemon disconnected'
+  if (session.status === 'exited') return t('exited')
+  if (session.streamClosed) return locale.value === 'zh' ? 'PTY 输出已关闭' : 'PTY stream closed'
+  return t('running')
+}
 let observationTimer: ReturnType<typeof setInterval> | undefined
 let offExit: (() => void) | undefined
 let offRename: (() => void) | undefined
 let offQuitBlocked: (() => void) | undefined
 let offDaemonDisconnected: (() => void) | undefined
+let offState: (() => void) | undefined
 
 function reportError(err: unknown) {
   errorMessage.value = err instanceof Error ? err.message : String(err)
@@ -270,7 +300,7 @@ async function refreshObserved() {
 }
 
 async function createSession() {
-  if (!profileId.value || creating.value) return
+  if (!daemonConnected.value || !profileId.value || creating.value) return
   creating.value = true
   errorMessage.value = ''
   try {
@@ -289,7 +319,7 @@ async function createSession() {
         ? await CreateLocal(profileId.value, preferences.value.defaultDirectory.trim(), 100, 30)
         : await Create(profileId.value, 100, 30)
     }
-    sessions.value = [...sessions.value, info]
+    sessions.value = mergeSessions(sessions.value, [info])
     if (preferences.value.activateNewSession || (!selectedId.value && !selectedExternalKey.value)) {
       selectManaged(info.id)
     }
@@ -323,7 +353,7 @@ async function saveRename() {
   renaming.value = true
   try {
     const changed = await Rename(id, renameDraft.value)
-    sessions.value = sessions.value.map((s) => s.id === changed.id ? changed : s)
+    sessions.value = mergeSessions(sessions.value, [changed])
     editingSessionId.value = null
   } catch (err) {
     reportError(err)
@@ -379,19 +409,24 @@ onMounted(async () => {
   void refreshThemes()
   syncNativeLanguage(locale.value)
   offDaemonDisconnected = Events.On('daemon:disconnected', (event) => {
+    daemonConnected.value = false
     errorMessage.value = String(event.data || 'Session daemon disconnected')
   })
   offRename = Events.On('terminal:renamed', (event) => {
     const info = event.data as Info
-    if (info?.id) sessions.value = sessions.value.map((s) => s.id === info.id ? info : s)
+    if (info?.id) sessions.value = mergeSessions(sessions.value, [info])
   })
   offQuitBlocked = Events.On('terminal:quit-blocked', (event) => {
     errorMessage.value = String(event.data)
   })
+  offState = Events.On('terminal:state', (event) => {
+    const info = event.data as Info
+    if (info?.id) sessions.value = mergeSessions(sessions.value, [info])
+  })
   offExit = Events.On('terminal:exit', (event) => {
     const info = event.data as Info
     if (!info) return
-    sessions.value = sessions.value.map((s) => s.id === info.id ? info : s)
+    sessions.value = mergeSessions(sessions.value, [info])
   })
   startObservationPolling()
   // Suggestions contain only literal Host aliases; errors never prevent manual SSH entry.
@@ -401,8 +436,9 @@ onMounted(async () => {
     profiles.value = available ?? []
     profileId.value = profiles.value.find(p => p.id === preferences.value.defaultProfile)?.id ??
       profiles.value[0]?.id ?? ''
-    sessions.value = existing ?? []
+    sessions.value = mergeSessions(sessions.value, existing ?? [], true)
     restoreWorkspace(sessions.value)
+    daemonConnected.value = true
   } catch (err) {
     reportError(err)
   }
@@ -415,6 +451,7 @@ onBeforeUnmount(() => {
   offRename?.()
   offQuitBlocked?.()
   offDaemonDisconnected?.()
+  offState?.()
 })
 </script>
 
@@ -449,7 +486,7 @@ onBeforeUnmount(() => {
           v-if="profileId !== 'ssh'"
           type="button"
           class="create"
-          :disabled="!profileId || creating"
+          :disabled="!daemonConnected || !profileId || creating"
           :title="t('new')"
           :aria-label="t('new')"
           @click="createSession"
@@ -465,7 +502,7 @@ onBeforeUnmount(() => {
         <div class="ssh-port-row">
           <input v-model="sshPort" type="number" min="1" max="65535" step="1"
             :placeholder="t('sshPort')" :aria-label="t('sshPort')" :disabled="creating" />
-          <button type="submit" :disabled="creating || !sshTarget.trim()">{{ t('connect') }}</button>
+          <button type="submit" :disabled="!daemonConnected || creating || !sshTarget.trim()">{{ t('connect') }}</button>
         </div>
         <small :title="t('connectHint')">{{ t('connectHint') }}</small>
       </form>
@@ -497,13 +534,14 @@ onBeforeUnmount(() => {
                   :aria-current="selectedId === s.id ? 'page' : undefined"
                   @click="selectManaged(s.id)">
                   <span class="session-name">{{ s.name }} <span class="session-id" :title="s.id">#{{ s.id.split('-').at(-1) }}</span></span>
-                  <span class="session-meta"><span :class="['dot', s.status]" />
-                    {{ s.status === 'running' ? t('running') : t('exited') }}<span v-if="preferences.showPid"> · PID {{ s.pid }}</span>
+                  <span class="session-meta"><span class="dot" :class="{ running: daemonConnected && s.status === 'running' && !s.streamClosed }" />
+                    {{ sessionStatus(s) }}<span v-if="preferences.showPid"> · PID {{ s.pid }}</span>
                   </span>
                 </button>
                 <button type="button" class="session-action" :title="t('rename')"
                   :aria-label="t('rename') + ' ' + s.name" @click="startRename(s)">✎</button>
                 <button type="button" class="session-action" :title="t(s.status === 'running' ? 'terminate' : 'remove')"
+                  :disabled="!daemonConnected"
                   :aria-label="t(s.status === 'running' ? 'terminate' : 'remove') + ' ' + s.name"
                   @click="s.status === 'running' ? terminateSession(s) : removeExited(s)">×</button>
               </template>
@@ -691,6 +729,7 @@ onBeforeUnmount(() => {
           </template>
 
           <template v-else-if="settingsTab === 'sessions'">
+            <button type="button" class="reset-layout" :disabled="reconnecting" @click="reconnectDaemon">{{ locale === 'zh' ? '重连 Daemon，保留会话' : 'Reconnect daemon, keep sessions' }}</button>
             <label class="setting-row">
               <span>{{ t('profileDefault') }}</span>
               <select v-model="preferences.defaultProfile">
@@ -753,12 +792,13 @@ onBeforeUnmount(() => {
           <button type="button" @click="splitPane('vertical')">{{ locale === 'zh' ? '向下分屏' : 'Split down' }}</button>
           <button type="button" @click="focusNextPane">{{ locale === 'zh' ? '下一面板' : 'Next pane' }}</button>
         </div>
-        <span class="status" :class="{ live: activeSession?.status === 'running' }">
-          {{ selectedExternalKey ? t('observedStatus') : (activeSession ? (activeSession.status === 'running' ? t('running') : t('exited')) : t('noSelection')) }}
+        <span class="status" :class="{ live: daemonConnected && activeSession?.status === 'running' && !activeSession.streamClosed }">
+          {{ selectedExternalKey ? t('observedStatus') : !daemonConnected ? (locale === 'zh' ? 'Daemon 连接不可用' : 'Daemon unavailable') : (activeSession ? sessionStatus(activeSession) : t('noSelection')) }}
         </span>
       </header>
       <div v-if="errorMessage" class="error-bar" role="alert">
         <span>{{ errorMessage }}</span>
+        <button v-if="!daemonConnected" type="button" :disabled="reconnecting" @click="reconnectDaemon">{{ locale === 'zh' ? '重连 Daemon' : 'Reconnect daemon' }}</button>
         <button type="button" aria-label="Dismiss error" @click="errorMessage = ''">×</button>
       </div>
       <div class="terminal-area">
@@ -769,13 +809,13 @@ onBeforeUnmount(() => {
               <select :value="pane.sessionId ?? ''" :aria-label="locale === 'zh' ? '选择托管会话' : 'Choose managed session'"
                 @change="changePaneSession(pane.paneId, $event)">
                 <option value="">{{ locale === 'zh' ? '选择会话（仅显示）' : 'Choose session' }}</option>
-                <option v-for="session in sessions" :key="session.id" :value="session.id">{{ session.name }} · {{ t(session.status === 'running' ? 'running' : 'exited') }}</option>
+                <option v-for="session in sessions" :key="session.id" :value="session.id">{{ session.name }} · {{ sessionStatus(session) }}</option>
               </select>
               <button type="button" :disabled="paneLeaves.length <= 1" :aria-label="locale === 'zh' ? '关闭面板，保留会话' : 'Close pane, keep session'" @click="closePane(pane.paneId)">×</button>
             </header>
             <div class="workspace-pane-body">
-              <TerminalPanel v-if="pane.sessionId && sessionById.has(pane.sessionId)" :key="pane.sessionId"
-                :session="sessionById.get(pane.sessionId)!" :active="!selectedExternalKey" :focused="focused && !settingsOpen"
+              <TerminalPanel v-if="pane.sessionId && sessionById.has(pane.sessionId)" :key="pane.sessionId + ':' + connectionRevision"
+                :session="sessionById.get(pane.sessionId)!" :active="!selectedExternalKey" :focused="focused && !settingsOpen" :connected="daemonConnected"
                 :font-size="preferences.fontSize" :font-family="preferences.fontFamily"
                 :line-height="preferences.lineHeight" :scrollback="preferences.scrollback"
                 :cursor-style="preferences.cursorStyle" :cursor-blink="preferences.cursorBlink"
@@ -814,7 +854,7 @@ onBeforeUnmount(() => {
         </div>
       </div>
       <div v-if="preferences.showStatusBar" class="statusbar">
-        <span>{{ t('activeCount', { count: sessions.filter(s => s.status === 'running').length }) }} · {{ t('observedCount', { count: observedProcesses.length }) }}</span>
+        <span>{{ daemonConnected ? t('activeCount', { count: sessions.filter(s => s.status === 'running').length }) : (locale === 'zh' ? '会话状态未知' : 'Session state unknown') }} · {{ t('observedCount', { count: observedProcesses.length }) }}</span>
         <span>{{ t('persisted') }}</span>
       </div>
     </section>
