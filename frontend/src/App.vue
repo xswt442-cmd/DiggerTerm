@@ -315,7 +315,7 @@ async function createSession() {
       }
       info = await CreateSSH(target, port, 100, 30)
     } else {
-      info = preferences.value.defaultDirectory.trim() && ['powershell', 'cmd', 'shell'].includes(profileId.value)
+      info = preferences.value.defaultDirectory.trim() && ['powershell', 'cmd', 'shell', 'bash'].includes(profileId.value)
         ? await CreateLocal(profileId.value, preferences.value.defaultDirectory.trim(), 100, 30)
         : await Create(profileId.value, 100, 30)
     }
