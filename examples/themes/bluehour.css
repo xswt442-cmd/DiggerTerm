@@ -1,0 +1,6 @@
+.layout[data-dt-theme] {
+  --dt-accent: #9db8d6;
+  --dt-terminal-bg: #121a27;
+  --dt-terminal-fg: #e0e9f5;
+  --dt-terminal-cursor: #c0d7ee;
+}
