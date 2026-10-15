@@ -14,6 +14,7 @@ import (
 
 	"github.com/tdewolff/parse/v2"
 	"github.com/tdewolff/parse/v2/css"
+	"github.com/wailsapp/wails/v3/pkg/application"
 )
 
 const maxThemeFileSize = 128 * 1024
@@ -88,6 +89,21 @@ func (s *ThemeService) ThemeDirectory() (string, error) {
 		return "", errors.New("theme directory must be absolute")
 	}
 	return filepath.Clean(dir), nil
+}
+
+func (s *ThemeService) OpenThemeDirectory() error {
+	dir, err := s.ThemeDirectory()
+	if err != nil {
+		return err
+	}
+	info, err := os.Lstat(dir)
+	if err != nil {
+		return fmt.Errorf("inspect theme directory: %w", err)
+	}
+	if !info.IsDir() || info.Mode()&os.ModeSymlink != 0 {
+		return errors.New("theme directory must be a real directory")
+	}
+	return application.Get().Env.OpenFileManager(dir, false)
 }
 
 func (s *ThemeService) ListThemes() (ThemeCatalog, error) {
