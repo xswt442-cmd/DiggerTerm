@@ -28,7 +28,7 @@ Checksums: [SHA256SUMS](https://github.com/xswt442-cmd/DiggerTerm/releases/downl
 
 ## Features
 
-- **Multiple terminals:** sidebar navigation, search, rename, and resizable panes.
+- **Multiple terminals:** sidebar navigation, search and rename. The development branch adds nested horizontal/vertical splits, draggable dividers and layout restore; closing a pane keeps its session running.
 - **Local and remote shells:** PowerShell, CMD, WSL, Linux shells, and SSH.
 - **Persistent sessions:** the daemon keeps sessions running after the GUI exits; reconnect on restart.
 - **Read-only discovery:** inspect external terminal and agent process metadata without taking control.

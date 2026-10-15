@@ -8,6 +8,8 @@ import {
 } from './uiPreferences'
 import { Events } from '@wailsio/runtime'
 import TerminalPanel from './components/TerminalPanel.vue'
+import PaneWorkspace from './components/PaneWorkspace.vue'
+import { assignSession, closeLeaf, emptyLayout, focusPane, leaves, resizeSplit, sanitizeLayout, splitLeaf, type SplitDirection } from './workspaceLayout'
 import KeybindingsSettings from './components/KeybindingsSettings.vue'
 import { defaultBindings, matchBinding, parseBindings } from './keybindings'
 import { ReadKeybindings } from '../bindings/github.com/xswt442-cmd/DiggerTerm/keybindingservice'
@@ -66,10 +68,16 @@ async function reloadBindings() {
 function workspaceKey(event: KeyboardEvent) {
   if (settingsOpen.value || event.defaultPrevented) return
   const target = event.target as HTMLElement
-  if (!target.classList.contains('xterm-helper-textarea') && target.closest('input, textarea, select, button, [contenteditable="true"]')) return
+  if (!target.classList.contains('xterm-helper-textarea') && target.closest('input, textarea, select, [contenteditable="true"]')) return
   const action = matchBinding(event, bindings.value, 'workspace')
   if (action === 'openSettings') {
     event.preventDefault(); event.stopPropagation(); settingsOpen.value = true
+  } else if (action && !selectedExternalKey.value) {
+    event.preventDefault(); event.stopPropagation()
+    if (action === 'splitRight') splitPane('horizontal')
+    else if (action === 'splitDown') splitPane('vertical')
+    else if (action === 'focusNextPane') focusNextPane()
+    else if (action === 'closePane') closePane(layout.value.focusedPaneId)
   }
 }
 const paneStack = ref<HTMLElement | null>(null)
@@ -166,7 +174,44 @@ watch(() => preferences.value.defaultProfile, (value) => {
 })
 const sessions = ref<Info[]>([])
 const profiles = ref<Profile[]>([])
-const selectedId = ref<string | null>(null)
+const layout = ref(emptyLayout())
+const paneLeaves = computed(() => leaves(layout.value))
+const selectedId = computed(() => selectedExternalKey.value ? null : paneLeaves.value.find(pane => pane.paneId === layout.value.focusedPaneId)?.sessionId ?? null)
+let layoutReady = false
+const layoutStorageKey = 'diggerterm:workspace:v1'
+watch(layout, value => {
+  if (!layoutReady) return
+  try { localStorage.setItem(layoutStorageKey, JSON.stringify(value)) }
+  catch (error) { reportError(error) }
+}, { deep: true })
+function restoreWorkspace(existing: Info[]) {
+  let saved: unknown
+  try { saved = JSON.parse(localStorage.getItem(layoutStorageKey) || 'null') }
+  catch (error) { reportError(error) }
+  // Numeric IDs from older daemons cannot safely identify persisted sessions.
+  const valid = new Set(existing.filter(session => session.status === 'running' && /^[A-Z2-7]{26,}-[0-9]+$/.test(session.id)).map(session => session.id))
+  layout.value = sanitizeLayout(saved, valid)
+  if (!saved && existing.some(session => session.status === 'running')) {
+    layout.value = assignSession(layout.value, layout.value.focusedPaneId, existing.find(session => session.status === 'running')!.id)
+  }
+  layoutReady = true
+}
+function splitPane(direction: SplitDirection) {
+  if (selectedExternalKey.value) return
+  layout.value = splitLeaf(layout.value, layout.value.focusedPaneId, direction)
+}
+function closePane(paneId: string) { layout.value = closeLeaf(layout.value, paneId) }
+function focusNextPane() {
+  const index = paneLeaves.value.findIndex(pane => pane.paneId === layout.value.focusedPaneId)
+  layout.value = focusPane(layout.value, paneLeaves.value[(index + 1) % paneLeaves.value.length]!.paneId)
+}
+function changePaneSession(paneId: string, event: Event) {
+  const select = event.target as HTMLSelectElement
+  const id = select.value || null
+  if (id === null || sessions.value.some(session => session.id === id)) layout.value = assignSession(layout.value, paneId, id)
+  select.value = paneLeaves.value.find(pane => pane.paneId === paneId)?.sessionId ?? ''
+}
+const sessionById = computed(() => new Map(sessions.value.map(session => [session.id, session])))
 const profileId = ref('')
 const sshTarget = ref('')
 const sshPort = ref('')
@@ -199,12 +244,12 @@ function reportError(err: unknown) {
 
 // Observed PIDs are display-only. They are never sent to Write/Terminate.
 function selectManaged(id: string) {
+  if (!sessions.value.some(session => session.id === id)) return
   selectedExternalKey.value = null
-  selectedId.value = id
+  layout.value = assignSession(layout.value, layout.value.focusedPaneId, id)
 }
 
 function selectObserved(process: ObservedProcess) {
-  selectedId.value = null
   selectedExternalKey.value = process.key
 }
 
@@ -302,9 +347,7 @@ async function removeExited(info: Info) {
   try {
     await Forget(info.id)
     sessions.value = sessions.value.filter((s) => s.id !== info.id)
-    if (selectedId.value === info.id) {
-      selectedId.value = sessions.value[0]?.id ?? null
-    }
+    layout.value = sanitizeLayout(layout.value, new Set(sessions.value.map(session => session.id)))
   } catch (err) {
     reportError(err)
   }
@@ -316,7 +359,6 @@ function startObservationPolling() {
   if (!preferences.value.observeEnabled) {
     if (selectedExternalKey.value) {
       selectedExternalKey.value = null
-      selectedId.value = sessions.value[0]?.id ?? null
     }
     return
   }
@@ -360,7 +402,7 @@ onMounted(async () => {
     profileId.value = profiles.value.find(p => p.id === preferences.value.defaultProfile)?.id ??
       profiles.value[0]?.id ?? ''
     sessions.value = existing ?? []
-    selectedId.value = sessions.value[0]?.id ?? null
+    restoreWorkspace(sessions.value)
   } catch (err) {
     reportError(err)
   }
@@ -454,7 +496,7 @@ onBeforeUnmount(() => {
                 <button type="button" class="session-select"
                   :aria-current="selectedId === s.id ? 'page' : undefined"
                   @click="selectManaged(s.id)">
-                  <span class="session-name">{{ s.name }} <span class="session-id">#{{ s.id }}</span></span>
+                  <span class="session-name">{{ s.name }} <span class="session-id" :title="s.id">#{{ s.id.split('-').at(-1) }}</span></span>
                   <span class="session-meta"><span :class="['dot', s.status]" />
                     {{ s.status === 'running' ? t('running') : t('exited') }}<span v-if="preferences.showPid"> · PID {{ s.pid }}</span>
                   </span>
@@ -705,7 +747,12 @@ onBeforeUnmount(() => {
 
     <section class="content">
       <header class="toolbar">
-        <span class="current-name">{{ selectedExternalKey ? (activeObserved?.name ?? t('processGone')) : (activeSession ? activeSession.name + ' #' + activeSession.id : t('terminal')) }}</span>
+        <span class="current-name">{{ selectedExternalKey ? (activeObserved?.name ?? t('processGone')) : (activeSession?.name ?? t('terminal')) }}</span>
+        <div v-if="!selectedExternalKey" class="workspace-actions">
+          <button type="button" @click="splitPane('horizontal')">{{ locale === 'zh' ? '向右分屏' : 'Split right' }}</button>
+          <button type="button" @click="splitPane('vertical')">{{ locale === 'zh' ? '向下分屏' : 'Split down' }}</button>
+          <button type="button" @click="focusNextPane">{{ locale === 'zh' ? '下一面板' : 'Next pane' }}</button>
+        </div>
         <span class="status" :class="{ live: activeSession?.status === 'running' }">
           {{ selectedExternalKey ? t('observedStatus') : (activeSession ? (activeSession.status === 'running' ? t('running') : t('exited')) : t('noSelection')) }}
         </span>
@@ -715,17 +762,32 @@ onBeforeUnmount(() => {
         <button type="button" aria-label="Dismiss error" @click="errorMessage = ''">×</button>
       </div>
       <div class="terminal-area">
-        <template v-for="s in sessions" :key="s.id">
-          <TerminalPanel :session="s" :active="s.id === selectedId"
-            :font-size="preferences.fontSize" :font-family="preferences.fontFamily"
-            :line-height="preferences.lineHeight" :scrollback="preferences.scrollback"
-            :cursor-style="preferences.cursorStyle" :cursor-blink="preferences.cursorBlink"
-            :keyboard-mode="preferences.keyboardMode"
-            :scroll-sensitivity="preferences.scrollSensitivity"
-            :right-click-selects-word="preferences.rightClickSelectsWord"
-            :padding="preferences.terminalPadding"
-            :colors="palette.terminal" :theme-revision="themeRevision" :locale="locale" :bindings="bindings" @error="reportError" />
-        </template>
+        <PaneWorkspace v-show="!selectedExternalKey" :layout="layout"
+          @focus="layout = focusPane(layout, $event)" @resize="(id, ratio) => layout = resizeSplit(layout, id, ratio)">
+          <template #default="{ pane, focused }">
+            <header class="workspace-pane-head">
+              <select :value="pane.sessionId ?? ''" :aria-label="locale === 'zh' ? '选择托管会话' : 'Choose managed session'"
+                @change="changePaneSession(pane.paneId, $event)">
+                <option value="">{{ locale === 'zh' ? '选择会话（仅显示）' : 'Choose session' }}</option>
+                <option v-for="session in sessions" :key="session.id" :value="session.id">{{ session.name }} · {{ t(session.status === 'running' ? 'running' : 'exited') }}</option>
+              </select>
+              <button type="button" :disabled="paneLeaves.length <= 1" :aria-label="locale === 'zh' ? '关闭面板，保留会话' : 'Close pane, keep session'" @click="closePane(pane.paneId)">×</button>
+            </header>
+            <div class="workspace-pane-body">
+              <TerminalPanel v-if="pane.sessionId && sessionById.has(pane.sessionId)" :key="pane.sessionId"
+                :session="sessionById.get(pane.sessionId)!" :active="!selectedExternalKey" :focused="focused && !settingsOpen"
+                :font-size="preferences.fontSize" :font-family="preferences.fontFamily"
+                :line-height="preferences.lineHeight" :scrollback="preferences.scrollback"
+                :cursor-style="preferences.cursorStyle" :cursor-blink="preferences.cursorBlink"
+                :keyboard-mode="preferences.keyboardMode"
+                :scroll-sensitivity="preferences.scrollSensitivity"
+                :right-click-selects-word="preferences.rightClickSelectsWord"
+                :padding="preferences.terminalPadding"
+                :colors="palette.terminal" :theme-revision="themeRevision" :locale="locale" :bindings="bindings" @error="reportError" />
+              <p v-else class="pane-placeholder">{{ locale === 'zh' ? '从侧栏或上方选择托管会话。关闭面板仅分离视图。' : 'Choose a managed session here or in the sidebar. Closing a pane only detaches its view.' }}</p>
+            </div>
+          </template>
+        </PaneWorkspace>
         <div v-if="selectedExternalKey" class="observed-detail">
           <template v-if="activeObserved">
             <div class="observed-kicker">{{ t('readOnly') }}</div>
@@ -771,6 +833,12 @@ button:focus-visible, input:focus-visible, select:focus-visible, [role="separato
 }
 .layout { display: flex; height: 100vh; width: 100%; min-height: 0; overflow: hidden; background: var(--canvas); color: var(--text); font-family: var(--dt-ui-font, "Segoe UI", system-ui, sans-serif); font-size: calc(12px * var(--ui-font-scale)); }
 .layout button, .layout input, .layout select { border-radius: var(--dt-radius, 5px); }
+.workspace-actions { display: flex; gap: 5px; flex-wrap: wrap; }
+.workspace-actions button, .workspace-pane-head button, .workspace-pane-head select { color: var(--text); background: var(--surface); border: 1px solid var(--border); padding: 4px; font-size: 10px; }
+.workspace-pane-head { height: 30px; display: flex; gap: 5px; padding: 3px; align-items: center; border-bottom: 1px solid var(--border-faint); }
+.workspace-pane-head select { min-width: 0; flex: 1; }
+.workspace-pane-body { position: absolute; inset: 30px 0 0; }
+.pane-placeholder { color: var(--muted); font-size: 12px; padding: 10px; }
 .sidebar { position: relative; display: flex; flex-direction: column; flex: 0 0 auto; min-width: 216px; max-width: 500px; min-height: 0; background: var(--sidebar); padding: 11px 10px 0; z-index: 2; }
 .brand { display: flex; align-items: center; gap: 9px; height: 43px; padding: 0 5px; flex-shrink: 0; }
 .brand-logo { display: block; object-fit: contain; flex-shrink: 0; }

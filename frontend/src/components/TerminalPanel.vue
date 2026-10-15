@@ -2,18 +2,21 @@
 import { nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { Terminal } from '@xterm/xterm'
 import { FitAddon } from '@xterm/addon-fit'
-import { Clipboard, Events } from '@wailsio/runtime'
+import { Events } from '@wailsio/runtime'
+import { ReadText, WriteText } from '../../bindings/github.com/xswt442-cmd/DiggerTerm/clipboardservice'
 import { Resize, Snapshot, Write } from '../../bindings/github.com/xswt442-cmd/DiggerTerm/sessionservice'
 import type { Info } from '../../bindings/github.com/xswt442-cmd/DiggerTerm/internal/session/models'
 import { fonts, type Palette, type FontId, type CursorStyle, type KeyboardMode, type Locale } from '../uiPreferences'
 import { decideTerminalShortcut } from '../terminalShortcuts'
 import { terminalColors } from '../userThemes'
 import { matchBinding, type Binding } from '../keybindings'
+import { queueSessionOperation, updateAttachment } from '../terminalAttachment'
 import '@xterm/xterm/css/xterm.css'
 
 const props = defineProps<{
   session: Info
   active: boolean
+  focused: boolean
   fontSize: number
   fontFamily: FontId
   lineHeight: number
@@ -35,6 +38,8 @@ const copyMode = ref(false)
 const copyText = ref('')
 const copyEditor = ref<HTMLTextAreaElement | null>(null)
 const notice = ref('')
+const controlled = ref(false)
+const attachmentError = ref('')
 const text = (zh: string, en: string) => props.locale === 'zh' ? zh : en
 
 interface OutputEvent {
@@ -52,6 +57,7 @@ let pending: OutputEvent[] = []
 let replaying = true
 let lastOffset = 0
 let writeQueue: Promise<void> = Promise.resolve()
+let lastSize = ''
 
 function decodeBase64(data: string): Uint8Array {
   const raw = atob(data)
@@ -71,13 +77,21 @@ function writeEvent(event: OutputEvent) {
 }
 
 function fit() {
-  if (!props.active || !terminal || !fitAddon || !container.value || container.value.clientWidth === 0) return
+  if (!props.active || !controlled.value || !terminal || !fitAddon || !container.value || container.value.clientWidth === 0 || container.value.clientHeight === 0) return
   try {
-    fitAddon.fit()
-    const cols = terminal.cols
-    const rows = terminal.rows
-    if (cols > 0 && rows > 0 && props.session.status === 'running') {
-      void Resize(props.session.id, cols, rows).catch((err: unknown) => {
+    const size = fitAddon.proposeDimensions()
+    if (!size || size.cols < 1 || size.rows < 1) return
+    const cols = Math.min(500, size.cols)
+    const rows = Math.min(500, size.rows)
+    if (terminal.cols !== cols || terminal.rows !== rows) terminal.resize(cols, rows)
+    const key = `${cols}:${rows}`
+    if (key !== lastSize && props.session.status === 'running') {
+      lastSize = key
+      const term = terminal
+      void queueSessionOperation(props.session.id, async () => {
+        if (terminal === term && controlled.value && props.active && key === lastSize) await Resize(props.session.id, cols, rows)
+      }).catch((err: unknown) => {
+        lastSize = ''
         emit('error', String(err))
       })
     }
@@ -87,7 +101,56 @@ function fit() {
 }
 
 function focus() {
-  if (!copyMode.value) terminal?.focus()
+  if (props.active && props.focused && !copyMode.value) terminal?.focus()
+}
+
+async function acquireControl() {
+  const term = terminal
+  try {
+    await updateAttachment(props.session.id, true)
+    if (terminal !== term) return
+    controlled.value = true
+    attachmentError.value = ''
+    fit()
+  } catch (err) {
+    if (terminal === term) {
+      controlled.value = false
+      attachmentError.value = String(err).includes('unsupported daemon method')
+        ? text('Daemon 需要更新。请完成现有会话后手动停止旧 Daemon，再重新打开。', 'Daemon update required. Finish sessions and explicitly stop the old daemon, then reopen.')
+        : String(err)
+    }
+  }
+}
+
+async function replaySnapshot(term: Terminal) {
+  replaying = true
+  pending = []
+  try {
+    const snapshot = await Snapshot(props.session.id)
+    if (terminal !== term) return
+    const raw = decodeBase64(snapshot.data)
+    if (raw.length) term.write(raw)
+    lastOffset = snapshot.offset
+  } catch (err) {
+    emit('error', String(err))
+  } finally {
+    pending.sort((a, b) => a.offset - b.offset)
+    for (const event of pending) writeEvent(event)
+    pending = []
+    replaying = false
+  }
+}
+
+async function reconnectView() {
+  const term = terminal
+  if (!term) return
+  await acquireControl()
+  if (controlled.value && terminal === term) {
+    term.reset()
+    lastOffset = 0
+    await replaySnapshot(term)
+    focus()
+  }
 }
 
 async function copySelection() {
@@ -104,10 +167,10 @@ async function copySelection() {
 
 async function pasteClipboard() {
   const term = terminal
-  if (!props.active || !term || copyMode.value || props.session.status !== 'running') return
+  if (!props.active || !props.focused || !controlled.value || !term || copyMode.value || props.session.status !== 'running') return
   try {
     const value = await readClipboard()
-    if (terminal === term && props.active && !copyMode.value && props.session.status === 'running') term.paste(value)
+    if (terminal === term && props.active && props.focused && controlled.value && !copyMode.value && props.session.status === 'running') term.paste(value)
   } catch (err) { notice.value = text('粘贴失败，请重试：', 'Paste failed; retry: ') + String(err) }
 }
 
@@ -146,7 +209,7 @@ function onCopyEditorKey(event: KeyboardEvent) {
 // navigator.clipboard in desktop WebViews (particularly under Linux/WSLg).
 async function writeClipboard(text: string) {
   try {
-    await Clipboard.SetText(text)
+    await WriteText(text)
   } catch (nativeError) {
     if (!navigator.clipboard?.writeText) throw nativeError
     await navigator.clipboard.writeText(text)
@@ -155,7 +218,7 @@ async function writeClipboard(text: string) {
 
 async function readClipboard(): Promise<string> {
   try {
-    return await Clipboard.Text()
+    return await ReadText()
   } catch (nativeError) {
     if (!navigator.clipboard?.readText) throw nativeError
     return navigator.clipboard.readText()
@@ -169,9 +232,9 @@ function onTerminalKeydown(event: KeyboardEvent) {
   // Do not steal shortcuts from the sidebar, search or settings. The
   // listener is attached only to the active terminal's DOM subtree.
   const term = terminal
-  if (!props.active || !term) return
+  if (!props.active || !props.focused || !term) return
   const target = event.target as HTMLElement
-  if (!target.classList.contains('xterm-helper-textarea') && target.closest('input, select, textarea, button')) return
+  if (!target.classList.contains('xterm-helper-textarea') && target.closest('input, select, textarea')) return
   const binding = matchBinding(event, props.bindings, 'terminal')
   if (binding) {
     event.preventDefault(); event.stopPropagation()
@@ -181,6 +244,7 @@ function onTerminalKeydown(event: KeyboardEvent) {
     return
   }
   if (copyMode.value) return
+  if (target.closest('button')) return
   const shortcut = decideTerminalShortcut(
     event, term.hasSelection(), isMac, props.keyboardMode, term.buffer.active.type === 'alternate', false,
   )
@@ -192,7 +256,7 @@ function onTerminalKeydown(event: KeyboardEvent) {
   event.stopPropagation()
 
   if (shortcut.kind === 'input') {
-    if (props.session.status === 'running') {
+    if (controlled.value && props.session.status === 'running') {
       term.input(shortcut.data, true) // goes through onData -> ordered daemon IPC
     }
     return
@@ -257,6 +321,12 @@ watch(() => props.active, async (active) => {
     focus()
   }
 })
+watch(() => props.focused, async (focused) => {
+  if (focused) {
+    await nextTick()
+    if (!document.activeElement?.matches('select,input,textarea:not(.xterm-helper-textarea)')) focus()
+  }
+})
 
 onMounted(async () => {
   if (!container.value) return
@@ -281,17 +351,19 @@ onMounted(async () => {
   fitAddon = fitPlugin
 
   offInput = term.onData((input: string) => {
-    if (!props.active || copyMode.value || props.session.status !== 'running') return
+    if (!props.active || !props.focused || !controlled.value || copyMode.value || props.session.status !== 'running') return
     // Keep keystrokes in order even if the IPC layer resolves asynchronously.
     writeQueue = writeQueue
-      .then(() => Write(props.session.id, input))
+      .then(() => queueSessionOperation(props.session.id, async () => {
+        if (terminal === term && controlled.value && props.session.status === 'running') await Write(props.session.id, input)
+      }))
       .catch((err: unknown) => emit('error', String(err)))
   })
 
   // Install listener before snapshot so no output is lost during bootstrap.
   offOutput = Events.On('terminal:output', (evt) => {
     const event = evt.data as OutputEvent
-    if (!event || event.id !== props.session.id) return
+    if (!controlled.value || !event || event.id !== props.session.id) return
     if (replaying) pending.push(event)
     else writeEvent(event)
   })
@@ -299,26 +371,17 @@ onMounted(async () => {
   observer = new ResizeObserver(fit)
   observer.observe(container.value)
   await nextTick()
+  await acquireControl()
+  if (terminal !== term || !controlled.value) return
   fit()
   if (props.active) focus()
 
-  try {
-    const snapshot = await Snapshot(props.session.id)
-    if (terminal !== term) return
-    const raw = decodeBase64(snapshot.data)
-    if (raw.length) term.write(raw)
-    lastOffset = snapshot.offset
-  } catch (err) {
-    emit('error', String(err))
-  } finally {
-    pending.sort((a, b) => a.offset - b.offset)
-    for (const event of pending) writeEvent(event)
-    pending = []
-    replaying = false
-  }
+  await replaySnapshot(term)
 })
 
 onBeforeUnmount(() => {
+  controlled.value = false
+  void updateAttachment(props.session.id, false).catch((error: unknown) => emit('error', String(error)))
   observer?.disconnect()
   offOutput?.()
   offInput?.dispose()
@@ -334,18 +397,23 @@ onBeforeUnmount(() => {
     @keydown.capture="onTerminalKeydown"
   >
     <div class="terminal-actions">
-      <button type="button" @click="copySelection">{{ text('复制选区', 'Copy') }}</button>
-      <button type="button" :disabled="copyMode || session.status !== 'running'" @click="pasteClipboard">{{ text('粘贴', 'Paste') }}</button>
-      <button type="button" :aria-pressed="copyMode" @click="toggleCopyMode">{{ copyMode ? text('退出复制模式', 'Exit copy mode') : text('复制模式', 'Copy mode') }}</button>
+      <button type="button" :disabled="!controlled" @click="copySelection">{{ text('复制选区', 'Copy') }}</button>
+      <button type="button" :disabled="!controlled || copyMode || session.status !== 'running'" @click="pasteClipboard">{{ text('粘贴', 'Paste') }}</button>
+      <button type="button" :disabled="!controlled" :aria-pressed="copyMode" @click="toggleCopyMode">{{ copyMode ? text('退出复制模式', 'Exit copy mode') : text('复制模式', 'Copy mode') }}</button>
       <small>{{ text('Shift 拖选 · macOS Option 拖选', 'Shift-drag · macOS Option-drag') }}</small>
     </div>
     <div v-if="notice" class="copy-notice" role="status">{{ notice }}</div>
+    <div v-if="attachmentError" class="copy-notice" role="status">
+      {{ text('会话尚未连接：', 'Session not attached: ') }}{{ attachmentError }}
+      <button type="button" @click="reconnectView">{{ text('重试连接', 'Retry attach') }}</button>
+    </div>
+    <div v-if="session.status === 'exited'" class="copy-notice" role="status">{{ text('会话已结束', 'Session ended') }} {{ session.message }}</div>
     <div class="terminal-content">
       <div v-if="copyMode" class="copy-overlay">
         <small>{{ text('当前可见文字的只读副本；选择后复制，Esc 返回终端。', 'Read-only copy of visible text. Select and copy; Escape returns to the terminal.') }}</small>
         <textarea ref="copyEditor" :value="copyText" readonly spellcheck="false" :aria-label="text('复制模式文字', 'Copy mode text')" @keydown="onCopyEditorKey" />
       </div>
-      <div ref="container" class="xterm-host" :style="{ padding: props.padding + 'px' }" @click="focus" />
+      <div ref="container" class="xterm-host" :style="{ padding: props.padding + 'px', visibility: controlled ? 'visible' : 'hidden' }" @click="focus" />
     </div>
   </div>
 </template>
