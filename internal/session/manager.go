@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -32,12 +33,19 @@ var (
 )
 
 type Info struct {
-	ID      string `json:"id"`
-	Name    string `json:"name"`
-	Profile string `json:"profile"`
-	Status  string `json:"status"`
-	PID     int    `json:"pid"`
-	Message string `json:"message"`
+	ID           string `json:"id"`
+	Name         string `json:"name"`
+	Profile      string `json:"profile"`
+	Status       string `json:"status"`
+	PID          int    `json:"pid"`
+	Message      string `json:"message"`
+	StartedAt    string `json:"startedAt"`
+	ExitedAt     string `json:"exitedAt"`
+	ExitCode     *int   `json:"exitCode"`
+	ExitReason   string `json:"exitReason"`
+	StreamClosed bool   `json:"streamClosed"`
+	StreamError  string `json:"streamError"`
+	Revision     uint64 `json:"revision"`
 }
 
 type Output struct {
@@ -47,19 +55,22 @@ type Output struct {
 }
 
 type Replay struct {
-	Data   string `json:"data"`
-	Offset uint64 `json:"offset"`
+	Data      string `json:"data"`
+	Offset    uint64 `json:"offset"`
+	Truncated bool   `json:"truncated"`
 }
 
 type managed struct {
-	mu       sync.Mutex
-	writeMu  sync.Mutex
-	info     Info
-	pty      pty.Pty
-	cmd      *pty.Cmd
-	history  []byte
-	offset   uint64
-	readDone chan struct{}
+	mu                   sync.Mutex
+	writeMu              sync.Mutex
+	info                 Info
+	pty                  pty.Pty
+	cmd                  *pty.Cmd
+	history              []byte
+	offset               uint64
+	readDone             chan struct{}
+	processDone          bool
+	terminationRequested bool
 }
 
 type Manager struct {
@@ -70,6 +81,7 @@ type Manager struct {
 	instanceID string
 	output     func(Output)
 	exited     func(Info)
+	state      func(Info)
 }
 
 func NewManager(output func(Output), exited func(Info)) *Manager {
@@ -79,6 +91,12 @@ func NewManager(output func(Output), exited func(Info)) *Manager {
 		output:     output,
 		exited:     exited,
 	}
+}
+
+func (m *Manager) SetStateHandler(handler func(Info)) {
+	m.mu.Lock()
+	m.state = handler
+	m.mu.Unlock()
 }
 
 func (m *Manager) List() []Info {
@@ -181,7 +199,10 @@ func (m *Manager) createSpec(spec commandSpec, name, profile string, cols, rows 
 	}
 
 	id := m.instanceID + "-" + strconv.FormatUint(m.nextID.Add(1), 10)
-	info := Info{ID: id, Name: name, Profile: profile, Status: "running"}
+	info := Info{
+		ID: id, Name: name, Profile: profile, Status: "running",
+		StartedAt: time.Now().UTC().Format(time.RFC3339Nano), Revision: 1,
+	}
 	if cmd.Process != nil {
 		info.PID = cmd.Process.Pid
 	}
@@ -226,6 +247,23 @@ func (m *Manager) readLoop(s *managed) {
 			}
 		}
 		if err != nil {
+			s.mu.Lock()
+			if !s.info.StreamClosed {
+				s.info.StreamClosed = true
+				if !expectedPTYReadEnd(err) && !s.processDone {
+					s.info.StreamError = "read-failed"
+				}
+				s.info.Revision++
+			}
+			info := s.info
+			s.mu.Unlock()
+			log.Printf("session_stream_closed id=%q pid=%d profile=%q error_category=%q", info.ID, info.PID, info.Profile, info.StreamError)
+			m.mu.RLock()
+			handler := m.state
+			m.mu.RUnlock()
+			if handler != nil {
+				handler(info)
+			}
 			return
 		}
 	}
@@ -233,25 +271,62 @@ func (m *Manager) readLoop(s *managed) {
 
 func (m *Manager) waitLoop(s *managed) {
 	err := s.cmd.Wait()
+	ptyClosed := false
+	s.mu.Lock()
+	s.processDone = true
+	s.mu.Unlock()
 	// Allow the PTY reader a short, bounded interval to drain SSH errors
 	// (especially host-key rejection) before the ConPTY is closed.
 	select {
 	case <-s.readDone:
 	case <-time.After(300 * time.Millisecond):
+		s.writeMu.Lock()
+		_ = s.pty.Close()
+		s.writeMu.Unlock()
+		ptyClosed = true
+		select {
+		case <-s.readDone:
+		case <-time.After(300 * time.Millisecond):
+		}
 	}
 	s.mu.Lock()
-	s.info.Status = "exited"
+	if !s.info.StreamClosed {
+		s.info.StreamClosed = true
+		s.info.StreamError = "reader-close-timeout"
+		s.info.Revision++
+	}
 	if err != nil {
 		s.info.Message = err.Error()
 	}
+	if state := s.cmd.ProcessState; state != nil {
+		code := state.ExitCode()
+		s.info.ExitCode = &code
+	}
+	if s.terminationRequested {
+		s.info.ExitReason = "user-terminated"
+	} else if s.info.Profile == "ssh" {
+		s.info.ExitReason = "ssh-client-exit"
+	} else {
+		s.info.ExitReason = "process-exit"
+	}
+	s.info.Status = "exited"
+	s.info.ExitedAt = time.Now().UTC().Format(time.RFC3339Nano)
+	s.info.Revision++
 	info := s.info
 	s.mu.Unlock()
 
 	// The PTY belongs to this managed session. Its final close must not happen
 	// when a tab is switched or hidden; it happens on process exit only.
-	s.writeMu.Lock()
-	_ = s.pty.Close()
-	s.writeMu.Unlock()
+	if !ptyClosed {
+		s.writeMu.Lock()
+		_ = s.pty.Close()
+		s.writeMu.Unlock()
+	}
+	exitCode := "unknown"
+	if info.ExitCode != nil {
+		exitCode = strconv.Itoa(*info.ExitCode)
+	}
+	log.Printf("session_exit id=%q pid=%d profile=%q exit_code=%s started_at=%q exited_at=%q", info.ID, info.PID, info.Profile, exitCode, info.StartedAt, info.ExitedAt)
 	if m.exited != nil {
 		m.exited(info)
 	}
@@ -275,6 +350,7 @@ func (m *Manager) Rename(id, name string) (Info, error) {
 	}
 	s.mu.Lock()
 	s.info.Name = name
+	s.info.Revision++
 	info := s.info
 	s.mu.Unlock()
 	return info, nil
@@ -326,8 +402,9 @@ func (m *Manager) Snapshot(id string) (Replay, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return Replay{
-		Data:   base64.StdEncoding.EncodeToString(s.history),
-		Offset: s.offset,
+		Data:      base64.StdEncoding.EncodeToString(s.history),
+		Offset:    s.offset,
+		Truncated: s.offset > uint64(len(s.history)),
 	}, nil
 }
 
@@ -340,11 +417,20 @@ func (m *Manager) Terminate(id string) error {
 	}
 	s.mu.Lock()
 	running := s.info.Status == "running"
+	if running {
+		s.terminationRequested = true
+	}
 	s.mu.Unlock()
 	if !running {
 		return ErrNotRunning
 	}
-	return s.cmd.Process.Kill()
+	if err := s.cmd.Process.Kill(); err != nil {
+		s.mu.Lock()
+		s.terminationRequested = false
+		s.mu.Unlock()
+		return err
+	}
+	return nil
 }
 
 // Forget deliberately refuses running sessions: removing their owner without

@@ -8,6 +8,13 @@ export interface Info {
     "status": string;
     "pid": number;
     "message": string;
+    "startedAt": string;
+    "exitedAt": string;
+    "exitCode": number | null;
+    "exitReason": string;
+    "streamClosed": boolean;
+    "streamError": string;
+    "revision": number;
 }
 
 export interface Profile {
@@ -19,4 +26,5 @@ export interface Profile {
 export interface Replay {
     "data": string;
     "offset": number;
+    "truncated": boolean;
 }

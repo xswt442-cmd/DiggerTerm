@@ -85,6 +85,9 @@ func TestSSHIPCIsDaemonOwned(t *testing.T) {
 	if len(items) != 1 || items[0].Status != "exited" {
 		t.Fatalf("SSH did not finish after server rejected connection: %+v", items)
 	}
+	if items[0].ExitCode == nil || *items[0].ExitCode != 255 || items[0].ExitReason != "ssh-client-exit" || items[0].ExitedAt == "" {
+		t.Fatalf("SSH failure diagnostics did not reach the IPC client: %+v", items[0])
+	}
 	if err := second.Forget(info.ID); err != nil {
 		t.Fatal(err)
 	}

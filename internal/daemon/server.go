@@ -148,6 +148,7 @@ func NewServer(listener net.Listener) *Server {
 		func(output session.Output) { s.broadcast("terminal:output", output) },
 		func(info session.Info) { s.broadcast("terminal:exit", info) },
 	)
+	s.manager.SetStateHandler(func(info session.Info) { s.broadcast("terminal:state", info) })
 	return s
 }
 
