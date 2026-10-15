@@ -54,9 +54,8 @@ func (s *KeybindingService) KeybindingsPath() (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("find user home directory: %w", err)
 	}
-	home, err = filepath.Abs(home)
-	if err != nil {
-		return "", fmt.Errorf("resolve user home directory: %w", err)
+	if !filepath.IsAbs(home) {
+		return "", errors.New("user home directory must be absolute")
 	}
 	return filepath.Join(home, "user", "DiggerTerm", "keybindings.json"), nil
 }
@@ -103,15 +102,24 @@ func (s *KeybindingService) ReadKeybindings() (string, error) {
 
 // OpenKeybindings opens only the fixed GUI configuration file on explicit request.
 func (s *KeybindingService) OpenKeybindings() error {
-	if _, err := s.ReadKeybindings(); err != nil {
+	root, missing, err := s.openConfigRoot(false)
+	if err != nil {
 		return err
+	}
+	if missing {
+		return errors.New("save keybindings before opening the file")
+	}
+	defer root.Close()
+	info, err := root.Lstat("keybindings.json")
+	if err != nil {
+		return err
+	}
+	if !info.Mode().IsRegular() {
+		return errors.New("keybindings.json must be a regular file")
 	}
 	path, err := s.KeybindingsPath()
 	if err != nil {
 		return err
-	}
-	if _, err := os.Stat(path); err != nil {
-		return fmt.Errorf("save keybindings before opening the file: %w", err)
 	}
 	return application.Get().Browser.OpenFile(path)
 }
@@ -179,9 +187,8 @@ func (s *KeybindingService) openConfigRoot(create bool) (*os.Root, bool, error) 
 	if err != nil {
 		return nil, false, fmt.Errorf("find user home directory: %w", err)
 	}
-	home, err = filepath.Abs(home)
-	if err != nil {
-		return nil, false, fmt.Errorf("resolve user home directory: %w", err)
+	if !filepath.IsAbs(home) {
+		return nil, false, errors.New("user home directory must be absolute")
 	}
 	root, err := os.OpenRoot(home)
 	if err != nil {

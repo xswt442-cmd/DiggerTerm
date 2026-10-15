@@ -79,6 +79,19 @@ func TestValidateKeybindingsAllowsSimultaneousSwap(t *testing.T) {
 	}
 }
 
+func TestKeybindingServiceRejectsRelativeHome(t *testing.T) {
+	service := &KeybindingService{homeDirectory: func() (string, error) { return "relative-home", nil }}
+	if _, err := service.KeybindingsPath(); err == nil {
+		t.Fatal("accepted relative config path")
+	}
+	if _, err := service.ReadKeybindings(); err == nil {
+		t.Fatal("read configuration relative to program directory")
+	}
+	if err := service.SaveKeybindings(`{"version":1,"bindings":[]}`); err == nil {
+		t.Fatal("wrote configuration relative to program directory")
+	}
+}
+
 func TestKeybindingServiceRejectsSymlinkedConfigDirectory(t *testing.T) {
 	if os.Getenv("GOOS") == "windows" {
 		t.Skip("directory symlink creation may require elevated Windows privileges")

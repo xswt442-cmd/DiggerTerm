@@ -160,3 +160,20 @@ func TestThemeRefreshReflectsNamesAndDeletedFiles(t *testing.T) {
 		t.Fatalf("refresh returned stale theme metadata: %+v, %v", second, err)
 	}
 }
+
+func TestThemeDirectoryRejectsRelativeHomeAndLinkedParent(t *testing.T) {
+	if _, err := themeDirectoryForHome("relative-home"); err == nil {
+		t.Fatal("relative home must not resolve against the program directory")
+	}
+	home := t.TempDir()
+	expected := filepath.Join(home, "user", "DiggerTerm")
+	if dir, err := themeDirectoryForHome(home); err != nil || dir != expected {
+		t.Fatalf("wrong anchored directory: %q, %v", dir, err)
+	}
+	if err := os.Symlink(t.TempDir(), filepath.Join(home, "user")); err != nil {
+		t.Skipf("symlink creation unavailable: %v", err)
+	}
+	if _, err := themeDirectoryForHome(home); err == nil {
+		t.Fatal("linked user parent must not redirect theme reads")
+	}
+}

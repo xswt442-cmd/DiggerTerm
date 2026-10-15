@@ -62,8 +62,21 @@ func NewThemeService() *ThemeService {
 		if err != nil {
 			return "", fmt.Errorf("find user home directory: %w", err)
 		}
-		return filepath.Join(home, "user", "DiggerTerm"), nil
+		return themeDirectoryForHome(home)
 	}}
+}
+
+func themeDirectoryForHome(home string) (string, error) {
+	if !filepath.IsAbs(home) {
+		return "", errors.New("user home directory must be absolute")
+	}
+	parent := filepath.Join(home, "user")
+	if info, err := os.Lstat(parent); err == nil && (!info.IsDir() || info.Mode()&os.ModeSymlink != 0) {
+		return "", errors.New("user theme parent must be a real directory")
+	} else if err != nil && !errors.Is(err, os.ErrNotExist) {
+		return "", fmt.Errorf("inspect user theme parent: %w", err)
+	}
+	return filepath.Join(home, "user", "DiggerTerm"), nil
 }
 
 func (s *ThemeService) ThemeDirectory() (string, error) {
@@ -71,7 +84,10 @@ func (s *ThemeService) ThemeDirectory() (string, error) {
 	if err != nil {
 		return "", err
 	}
-	return filepath.Abs(dir)
+	if !filepath.IsAbs(dir) {
+		return "", errors.New("theme directory must be absolute")
+	}
+	return filepath.Clean(dir), nil
 }
 
 func (s *ThemeService) ListThemes() (ThemeCatalog, error) {
