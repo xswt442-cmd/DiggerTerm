@@ -49,4 +49,5 @@ desktop.ini
 .cursor/
 .workbuddy/
 .aider*
+.playwright-cli/
 *.local.md
