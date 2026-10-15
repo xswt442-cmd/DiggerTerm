@@ -365,7 +365,7 @@ watch(() => props.active, async (active) => {
     await nextTick()
     fit()
     focus()
-  }
+  } else copyMenu.value = null
 })
 watch(() => props.focused, async (focused) => {
   if (focused) {
@@ -489,12 +489,14 @@ onBeforeUnmount(() => {
       </div>
       <div ref="container" class="xterm-host" :style="{ padding: props.padding + 'px', visibility: controlled ? 'visible' : 'hidden' }" @click="focus" />
     </div>
-    <div v-if="copyMenu" ref="copyMenuElement" class="terminal-copy-menu" role="group" :aria-label="text('终端复制操作', 'Terminal copy actions')"
-      :style="{ left: copyMenu.x + 'px', top: copyMenu.y + 'px' }" @pointerdown.prevent @keydown.esc.stop="copyMenu = null">
-      <button type="button" @click="runCopyMenu('copy')">{{ text('复制选区', 'Copy selection') }}</button>
-      <button type="button" :disabled="!connected || session.streamClosed || !!replayError || copyMode || session.status !== 'running'" @click="runCopyMenu('paste')">{{ text('粘贴', 'Paste') }}</button>
-      <button type="button" @click="runCopyMenu('mode')">{{ copyMode ? text('退出复制模式', 'Exit copy mode') : text('进入复制模式', 'Enter copy mode') }}</button>
-    </div>
+    <Teleport to=".layout">
+      <div v-if="copyMenu" ref="copyMenuElement" class="terminal-copy-menu" role="group" :aria-label="text('终端复制操作', 'Terminal copy actions')"
+        :style="{ left: copyMenu.x + 'px', top: copyMenu.y + 'px' }" @pointerdown.prevent @keydown.esc.stop="copyMenu = null">
+        <button type="button" @click="runCopyMenu('copy')">{{ text('复制选区', 'Copy selection') }}</button>
+        <button type="button" :disabled="!connected || session.streamClosed || !!replayError || copyMode || session.status !== 'running'" @click="runCopyMenu('paste')">{{ text('粘贴', 'Paste') }}</button>
+        <button type="button" @click="runCopyMenu('mode')">{{ copyMode ? text('退出复制模式', 'Exit copy mode') : text('进入复制模式', 'Enter copy mode') }}</button>
+      </div>
+    </Teleport>
   </div>
 </template>
 
