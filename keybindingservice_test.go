@@ -15,7 +15,7 @@ func TestKeybindingServiceReadAbsentAndSaveValidatedConfig(t *testing.T) {
 		t.Fatalf("ReadKeybindings() = %q, %v; want empty config without error", content, err)
 	}
 	path, err := service.KeybindingsPath()
-	if err != nil || path != filepath.Join(home, "user", "DiggerTerm", "keybindings.json") {
+	if err != nil || path != filepath.Join(home, "DiggerTerm", "keybindings.json") {
 		t.Fatalf("KeybindingsPath() = %q, %v", path, err)
 	}
 	config := `{"version":1,"bindings":[{"action":"splitRight","scope":"workspace","keys":["Ctrl+Shift+F8"]},{"action":"toggleCopyMode","scope":"terminal","keys":[]}]}`
@@ -36,6 +36,20 @@ func TestKeybindingServiceReadAbsentAndSaveValidatedConfig(t *testing.T) {
 	content, err = service.ReadKeybindings()
 	if err != nil || content != `{"version":1,"bindings":[]}` {
 		t.Fatalf("read replacement = %q, %v", content, err)
+	}
+}
+
+func TestNewKeybindingServiceUsesOSHomeDirectory(t *testing.T) {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		t.Fatal(err)
+	}
+	path, err := NewKeybindingService().KeybindingsPath()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if expected := filepath.Join(home, "DiggerTerm", "keybindings.json"); path != expected {
+		t.Fatalf("KeybindingsPath() = %q, want %q", path, expected)
 	}
 }
 
@@ -98,14 +112,14 @@ func TestKeybindingServiceRejectsSymlinkedConfigDirectory(t *testing.T) {
 	}
 	home := t.TempDir()
 	outside := t.TempDir()
-	if err := os.Symlink(outside, filepath.Join(home, "user")); err != nil {
+	if err := os.Symlink(outside, filepath.Join(home, "DiggerTerm")); err != nil {
 		t.Skipf("create symlink: %v", err)
 	}
 	service := &KeybindingService{homeDirectory: func() (string, error) { return home, nil }}
 	if err := service.SaveKeybindings(`{"version":1,"bindings":[]}`); err == nil {
 		t.Fatal("SaveKeybindings followed a symlinked user directory")
 	}
-	if _, err := os.Stat(filepath.Join(outside, "DiggerTerm")); !os.IsNotExist(err) {
+	if _, err := os.Stat(filepath.Join(outside, "keybindings.json")); !os.IsNotExist(err) {
 		t.Fatalf("wrote outside the expected directory: %v", err)
 	}
 }

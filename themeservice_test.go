@@ -119,6 +119,29 @@ func TestThemeDirectoryAndMissingDirectory(t *testing.T) {
 	}
 }
 
+func TestEnsureThemeDirectoryCreatesMissingHomePath(t *testing.T) {
+	home := t.TempDir()
+	dir := filepath.Join(home, "DiggerTerm")
+	if err := ensureThemeDirectory(dir); err != nil {
+		t.Fatal(err)
+	}
+	info, err := os.Lstat(dir)
+	if err != nil || !info.IsDir() || info.Mode()&os.ModeSymlink != 0 {
+		t.Fatalf("expected real config directory at %q: info=%v err=%v", dir, info, err)
+	}
+}
+
+func TestEnsureThemeDirectoryRejectsSymlinkedDirectories(t *testing.T) {
+	home := t.TempDir()
+	dir := filepath.Join(home, "DiggerTerm")
+	if err := os.Symlink(t.TempDir(), dir); err != nil {
+		t.Skipf("symlink creation unavailable: %v", err)
+	}
+	if err := ensureThemeDirectory(dir); err == nil {
+		t.Fatal("linked config directory must not be opened")
+	}
+}
+
 func TestCSSParserRejectsAtRulesAndAcceptsThemeVariables(t *testing.T) {
 	if err := validateThemeCSS([]byte(`.layout[data-dt-theme]{--dt-terminal-cursor:#fff}`)); err != nil {
 		t.Fatal(err)
@@ -161,19 +184,27 @@ func TestThemeRefreshReflectsNamesAndDeletedFiles(t *testing.T) {
 	}
 }
 
-func TestThemeDirectoryRejectsRelativeHomeAndLinkedParent(t *testing.T) {
+func TestThemeDirectoryUsesUserHome(t *testing.T) {
 	if _, err := themeDirectoryForHome("relative-home"); err == nil {
-		t.Fatal("relative home must not resolve against the program directory")
+		t.Fatal("relative home directory must not resolve against the program directory")
 	}
 	home := t.TempDir()
-	expected := filepath.Join(home, "user", "DiggerTerm")
+	expected := filepath.Join(home, "DiggerTerm")
 	if dir, err := themeDirectoryForHome(home); err != nil || dir != expected {
 		t.Fatalf("wrong anchored directory: %q, %v", dir, err)
 	}
-	if err := os.Symlink(t.TempDir(), filepath.Join(home, "user")); err != nil {
-		t.Skipf("symlink creation unavailable: %v", err)
+}
+
+func TestNewThemeServiceUsesOSHomeDirectory(t *testing.T) {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		t.Fatal(err)
 	}
-	if _, err := themeDirectoryForHome(home); err == nil {
-		t.Fatal("linked user parent must not redirect theme reads")
+	dir, err := NewThemeService().ThemeDirectory()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if expected := filepath.Join(home, "DiggerTerm"); dir != expected {
+		t.Fatalf("ThemeDirectory() = %q, want %q", dir, expected)
 	}
 }

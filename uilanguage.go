@@ -14,14 +14,14 @@ func trayLabelsFor(locale string) trayLanguageLabels {
 		return trayLanguageLabels{
 			tooltip: "DiggerTerm · 终端工作区",
 			show:    "显示 DiggerTerm",
-			quit:    "退出界面（会话继续运行）",
-			stop:    "停止后台服务并退出（仅无运行中会话时）",
+			quit:    "仅退出 DiggerTerm",
+			stop:    "停止所有会话并退出",
 		}
 	}
 	return trayLanguageLabels{
 		tooltip: "DiggerTerm · terminal workspace",
 		show:    "Show DiggerTerm",
-		quit:    "Quit UI (sessions keep running)",
-		stop:    "Stop daemon and quit (only when idle)",
+		quit:    "Quit DiggerTerm",
+		stop:    "Stop all sessions and quit",
 	}
 }

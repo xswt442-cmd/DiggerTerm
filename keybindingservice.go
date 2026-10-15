@@ -57,7 +57,7 @@ func (s *KeybindingService) KeybindingsPath() (string, error) {
 	if !filepath.IsAbs(home) {
 		return "", errors.New("user home directory must be absolute")
 	}
-	return filepath.Join(home, "user", "DiggerTerm", "keybindings.json"), nil
+	return filepath.Join(home, "DiggerTerm", "keybindings.json"), nil
 }
 
 func (s *KeybindingService) ReadKeybindings() (string, error) {
@@ -194,13 +194,8 @@ func (s *KeybindingService) openConfigRoot(create bool) (*os.Root, bool, error) 
 	if err != nil {
 		return nil, false, fmt.Errorf("open user home directory: %w", err)
 	}
-	userRoot, missing, err := openDirectory(root, "user", create)
+	configRoot, missing, err := openDirectory(root, "DiggerTerm", create)
 	_ = root.Close()
-	if err != nil || missing {
-		return nil, missing, err
-	}
-	configRoot, missing, err := openDirectory(userRoot, "DiggerTerm", create)
-	_ = userRoot.Close()
 	if err != nil || missing {
 		return nil, missing, err
 	}

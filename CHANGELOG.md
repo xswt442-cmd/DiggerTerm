@@ -23,9 +23,9 @@ Changes are recorded in a format inspired by [Keep a Changelog](https://keepacha
 - Added manual daemon reconnection, session exit/PTY stream diagnostics, output gap detection, and bounded replay warnings.
 - Added Windows Git Bash without falling back to WSL when it is unavailable, plus native Bash on Unix.
 
-画面恢复仍受限于最近 256 KiB 原始输出，不能保证还原完整的全屏终端状态。用户报告的 SSH 闲置断联尚未在现场复现。Windows 原生 WebView2 跨应用剪贴板和部分平台 GUI 矩阵仍未完成验收，详见[验证记录](docs/development-validation.md)。
+画面恢复仍受限于最近 256 KiB 原始输出，不能保证还原完整的全屏终端状态。用户报告的 SSH 闲置断联尚未在现场复现。Windows 原生 WebView2 跨应用剪贴板和部分平台 GUI 矩阵仍未完成验收。
 
-Recovery still uses the latest 256 KiB of raw output and cannot reproduce every full-screen terminal state. The reported idle SSH disconnect still needs field reproduction. Some native WebView2 clipboard and platform GUI checks remain unverified; see the [validation report](docs/development-validation.md).
+Recovery still uses the latest 256 KiB of raw output and cannot reproduce every full-screen terminal state. The reported idle SSH disconnect still needs field reproduction. Some native WebView2 clipboard and platform GUI checks remain unverified.
 
 **下载 / Downloads**（Windows 未签名；Linux 主要针对 Ubuntu 24.04）:
 

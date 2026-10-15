@@ -19,6 +19,10 @@ export function ListThemes(): $CancellablePromise<$models.ThemeCatalog> {
     return $Call.ByID(2467410722);
 }
 
+export function OpenThemeDirectory(): $CancellablePromise<void> {
+    return $Call.ByID(87965800);
+}
+
 export function ThemeDirectory(): $CancellablePromise<string> {
     return $Call.ByID(3090814736);
 }

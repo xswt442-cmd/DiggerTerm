@@ -6,16 +6,17 @@ import {
   translate, writePreferences,
   type TextKey, type ThemeId, type LanguageId,
 } from './uiPreferences'
-import { Events } from '@wailsio/runtime'
+import { Browser, Events } from '@wailsio/runtime'
+import packageInfo from '../package.json'
 import { mergeSessions } from './sessionState'
 import TerminalPanel from './components/TerminalPanel.vue'
 import PaneWorkspace from './components/PaneWorkspace.vue'
 import { assignSession, closeLeaf, emptyLayout, focusPane, leaves, resizeSplit, sanitizeLayout, splitLeaf, type SplitDirection } from './workspaceLayout'
 import KeybindingsSettings from './components/KeybindingsSettings.vue'
 import { defaultBindings, matchBinding, parseBindings } from './keybindings'
-import { ReadKeybindings } from '../bindings/github.com/xswt442-cmd/DiggerTerm/keybindingservice'
+import { KeybindingsPath, ReadKeybindings } from '../bindings/github.com/xswt442-cmd/DiggerTerm/keybindingservice'
 import { themeRegistry, themeVariables, type ThemeOption } from './userThemes'
-import { ListThemes } from '../bindings/github.com/xswt442-cmd/DiggerTerm/themeservice'
+import { ListThemes, OpenThemeDirectory } from '../bindings/github.com/xswt442-cmd/DiggerTerm/themeservice'
 import { Create, CreateLocal, CreateSSH, Forget, List, Observe, Profiles, Reconnect, Rename, SetUILanguage, SSHHosts, Terminate } from '../bindings/github.com/xswt442-cmd/DiggerTerm/sessionservice'
 import type { Info, Profile } from '../bindings/github.com/xswt442-cmd/DiggerTerm/internal/session/models'
 import type { Process as ObservedProcess, Snapshot as ObservedSnapshot } from '../bindings/github.com/xswt442-cmd/DiggerTerm/internal/observe/models'
@@ -25,6 +26,7 @@ const themeOptions = ref<ThemeOption[]>(themeRegistry([]))
 const chosenTheme = computed(() => themeOptions.value.find(theme => theme.id === preferences.value.theme) ?? themeOptions.value[0]!)
 const palette = computed(() => chosenTheme.value.palette)
 const themeDirectory = ref('')
+const keybindingsPath = ref('')
 const themeErrors = ref<{ file: string; message: string }[]>([])
 const globalCSS = ref('')
 const themeRevision = ref(0)
@@ -56,7 +58,11 @@ const locale = computed(() => chosenLocale(preferences.value.language))
 const t = (key: TextKey, replacements?: Record<string, string | number>) => translate(locale.value, key, replacements)
 const kindLabel = (kind: string) => t(kind === 'terminal' ? 'kindTerminal' : kind === 'agent' ? 'kindAgent' : kind === 'descendant' ? 'kindDescendant' : 'kindOther')
 const settingsOpen = ref(false)
-const settingsTab = ref<'appearance' | 'terminal' | 'sessions' | 'observed' | 'keybindings'>('appearance')
+const settingsTab = ref<'appearance' | 'terminal' | 'sessions' | 'observed' | 'keybindings' | 'help'>('appearance')
+const appVersion = packageInfo.version
+const updateStatus = ref('')
+const updateAvailable = ref(false)
+const checkingUpdate = ref(false)
 const isMac = /Mac/i.test(navigator.userAgent)
 const bindings = ref(defaultBindings(isMac))
 async function reloadBindings() {
@@ -168,6 +174,70 @@ function resetSection() {
       break
   }
 }
+function compareVersions(left: string, right: string) {
+  const a = left.split('.').map(Number)
+  const b = right.split('.').map(Number)
+  for (let index = 0; index < 3; index++) {
+    if (a[index] !== b[index]) return a[index]! - b[index]!
+  }
+  return 0
+}
+async function checkForUpdates() {
+  checkingUpdate.value = true
+  updateStatus.value = ''
+  try {
+    const response = await fetch('https://api.github.com/repos/xswt442-cmd/DiggerTerm/releases/latest', {
+      headers: { Accept: 'application/vnd.github+json' },
+    })
+    if (!response.ok) throw new Error(`HTTP ${response.status}`)
+    const release: unknown = await response.json()
+    if (!release || typeof release !== 'object' || !('tag_name' in release) ||
+      typeof release.tag_name !== 'string' || !/^v?\d+\.\d+\.\d+$/.test(release.tag_name)) {
+      throw new Error('Invalid latest release version')
+    }
+    const latestVersion = release.tag_name.replace(/^v/, '')
+    updateAvailable.value = compareVersions(latestVersion, appVersion) > 0
+    updateStatus.value = updateAvailable.value
+      ? (locale.value === 'zh' ? `发现新版本 ${release.tag_name}` : `Version ${release.tag_name} is available`)
+      : (locale.value === 'zh' ? '当前已是最新版本' : 'You are up to date')
+  } catch {
+    updateAvailable.value = false
+    updateStatus.value = locale.value === 'zh' ? '检查更新失败' : 'Could not check for updates'
+  } finally {
+    checkingUpdate.value = false
+  }
+}
+async function openReleasePage() {
+  try { await Browser.OpenURL('https://github.com/xswt442-cmd/DiggerTerm/releases/latest') }
+  catch (error) { reportError(error) }
+}
+async function openThemeDirectory() {
+  try { await OpenThemeDirectory() }
+  catch (error) { reportError(error) }
+}
+function themeConfigPath(fileName: string) {
+  if (!themeDirectory.value) return ''
+  const separator = themeDirectory.value.includes('\\') ? '\\' : '/'
+  return `${themeDirectory.value.replace(/[\\/]+$/, '')}${separator}${fileName}`
+}
+const helpConfigPaths = computed(() => [
+  {
+    label: locale.value === 'zh' ? '主题 JSON 文件' : 'Theme JSON file',
+    path: themeConfigPath(locale.value === 'zh' ? '<主题名>.json' : '<theme-name>.json'),
+  },
+  {
+    label: locale.value === 'zh' ? '主题 CSS 文件' : 'Theme CSS file',
+    path: themeConfigPath(locale.value === 'zh' ? '<主题名>.css' : '<theme-name>.css'),
+  },
+  {
+    label: locale.value === 'zh' ? '全局 CSS 覆盖' : 'Global CSS override',
+    path: themeConfigPath('custom.css'),
+  },
+  {
+    label: locale.value === 'zh' ? '快捷键配置文件' : 'Shortcut config file',
+    path: keybindingsPath.value,
+  },
+])
 const localProfiles = computed(() => profiles.value.filter(p => p.id !== 'ssh'))
 const fontChoices = Object.entries(fonts).map(([id, font]) => ({ id, name: font.name }))
 watch(() => preferences.value.defaultProfile, (value) => {
@@ -405,6 +475,7 @@ watch([() => preferences.value.observeEnabled, () => preferences.value.observeRe
 
 onMounted(async () => {
   void reloadBindings()
+  void KeybindingsPath().then(value => { keybindingsPath.value = value }).catch(reportError)
   void applyTheme()
   void refreshThemes()
   syncNativeLanguage(locale.value)
@@ -588,9 +659,6 @@ onBeforeUnmount(() => {
             </button>
           </nav>
           <div v-if="externalSnapshot?.truncated" class="pane-note">{{ t('limited') }}</div>
-          <div v-if="externalSnapshot?.note" class="pane-note muted-note" :title="externalSnapshot.note">
-            {{ t('observedNote') }}
-          </div>
         </section>
       </div>
 
@@ -611,11 +679,11 @@ onBeforeUnmount(() => {
           <button type="button" :title="t('close')" :aria-label="t('close')" @click="settingsOpen = false">×</button>
         </header>
         <div class="settings-tabs" role="tablist" :aria-label="t('settingsTitle')">
-          <button v-for="tab in (['appearance', 'terminal', 'sessions', 'observed', 'keybindings'] as const)"
+          <button v-for="tab in (['appearance', 'terminal', 'sessions', 'observed', 'keybindings', 'help'] as const)"
             :key="tab" type="button" role="tab" :aria-selected="settingsTab === tab"
             :class="{ chosen: settingsTab === tab }"
             @click="settingsTab = tab">
-            {{ tab === 'keybindings' ? (locale === 'zh' ? '快捷键' : 'Keys') : t(tab === 'appearance' ? 'appearanceTab' : tab === 'terminal' ? 'terminalTab' : tab === 'sessions' ? 'sessionTab' : 'monitorTab') }}
+            {{ tab === 'keybindings' ? (locale === 'zh' ? '快捷键' : 'Keys') : tab === 'help' ? (locale === 'zh' ? '帮助' : 'Help') : t(tab === 'appearance' ? 'appearanceTab' : tab === 'terminal' ? 'terminalTab' : tab === 'sessions' ? 'sessionTab' : 'monitorTab') }}
           </button>
         </div>
         <div class="settings-scroll" role="tabpanel">
@@ -631,15 +699,19 @@ onBeforeUnmount(() => {
                   <span class="theme-chips" aria-hidden="true">
                     <span v-for="(color, index) in theme.palette.chips" :key="index" :style="{ background: color }" />
                   </span>
-                  <span>{{ theme.palette[locale] }}<small v-if="theme.id.startsWith('user:')"> · {{ theme.id }}</small></span>
+                  <span>{{ theme.palette[locale] }}</span>
                 </button>
               </div>
               <button type="button" class="reset-layout" @click="refreshThemes">{{ t('refresh') }}</button>
-              <small class="setting-note">{{ themeDirectory }}</small>
-              <label class="setting-toggle"><span>{{ locale === 'zh' ? '启用主题 CSS 和 custom.css' : 'Enable theme CSS and custom.css' }}</span>
-                <input v-model="preferences.customCSS" type="checkbox" /></label>
-              <small class="setting-note">{{ locale === 'zh' ? '自定义 CSS 可能影响显示；恢复默认外观可禁用。' : 'Custom CSS can affect visibility; restore appearance to disable it.' }}</small>
-              <p v-for="(error, index) in themeErrors" :key="index" role="status" class="setting-note">{{ error.file }}: {{ error.message }}</p>
+              <div class="theme-config-row">
+                <small class="theme-config-path" :title="themeDirectory">{{ themeDirectory }}</small>
+              </div>
+              <div class="theme-css-row">
+                <label class="setting-toggle"><span>{{ locale === 'zh' ? '启用主题 CSS 和 custom.css' : 'Enable theme CSS and custom.css' }}</span>
+                  <input v-model="preferences.customCSS" type="checkbox" /></label>
+                <button type="button" class="reset-layout" @click="openThemeDirectory">{{ locale === 'zh' ? '前往配置' : 'Open config' }}</button>
+              </div>
+              <p v-for="(error, index) in themeErrors" :key="index" role="alert" class="setting-error">{{ error.file }}: {{ error.message }}</p>
             </div>
             <div class="setting-block">
               <div class="setting-label setting-split">
@@ -657,7 +729,6 @@ onBeforeUnmount(() => {
                 <option value="en">English</option>
               </select>
             </label>
-            <small class="setting-note">{{ t('workspaceHint') }}</small>
             <button type="button" class="reset-layout" @click="resetLayout">{{ t('resetLayout') }}</button>
           </template>
 
@@ -676,15 +747,6 @@ onBeforeUnmount(() => {
               <input id="font-size-slider" v-model.number="preferences.fontSize"
                 class="font-slider" type="range" min="11" max="20" step="1" />
             </div>
-            <label class="setting-row">
-              <span>{{ t('keyboardMode') }}</span>
-              <select v-model="preferences.keyboardMode">
-                <option value="smart">{{ t('keyboardSmart') }}</option>
-                <option value="desktop">{{ t('keyboardDesktop') }}</option>
-                <option value="native">{{ t('keyboardNative') }}</option>
-              </select>
-            </label>
-            <small class="setting-note">{{ t('keyboardHint') }}</small>
             <div class="setting-grid">
               <label class="setting-stack">
                 <span>{{ t('scrollback') }}</span>
@@ -725,7 +787,6 @@ onBeforeUnmount(() => {
               <label class="setting-toggle"><span>{{ t('rightClickWord') }}</span>
                 <input v-model="preferences.rightClickSelectsWord" type="checkbox" /></label>
             </div>
-            <small class="setting-note">{{ t('fontMissing') }} {{ t('scrollbackHint') }}</small>
           </template>
 
           <template v-else-if="settingsTab === 'sessions'">
@@ -744,7 +805,6 @@ onBeforeUnmount(() => {
               <input id="default-directory" v-model="preferences.defaultDirectory"
                 class="directory-input" type="text" spellcheck="false" autocomplete="off"
                 maxlength="512" :placeholder="t('directoryPlaceholder')" />
-              <small class="setting-note">{{ t('defaultDirectoryHint') }}</small>
             </div>
           </template>
 
@@ -763,10 +823,40 @@ onBeforeUnmount(() => {
               <input v-model="preferences.showPid" type="checkbox" /></label>
             <label class="setting-toggle"><span>{{ t('showStatusBar') }}</span>
               <input v-model="preferences.showStatusBar" type="checkbox" /></label>
-            <small class="setting-note">{{ t('observeHint') }}</small>
           </template>
-          <KeybindingsSettings v-else-if="settingsTab === 'keybindings'" :locale="locale" :bindings="bindings" :is-mac="isMac" @changed="bindings = $event" />
-          <button v-if="settingsTab !== 'keybindings'" type="button" class="reset-layout compact-reset" @click="resetSection">
+          <template v-else-if="settingsTab === 'keybindings'">
+            <label class="setting-row">
+              <span>{{ t('keyboardMode') }}</span>
+              <select v-model="preferences.keyboardMode">
+                <option value="smart">{{ t('keyboardSmart') }}</option>
+                <option value="desktop">{{ t('keyboardDesktop') }}</option>
+                <option value="native">{{ t('keyboardNative') }}</option>
+              </select>
+            </label>
+            <KeybindingsSettings :locale="locale" :bindings="bindings" :is-mac="isMac" @changed="bindings = $event" />
+          </template>
+          <template v-else-if="settingsTab === 'help'">
+            <div class="setting-block">
+              <label class="setting-label">{{ locale === 'zh' ? '应用版本' : 'App version' }}</label>
+              <span class="help-value">{{ appVersion }}</span>
+            </div>
+            <div class="setting-block">
+              <label class="setting-label">{{ locale === 'zh' ? '主题配置目录' : 'Theme config directory' }}</label>
+              <span class="help-path" :title="themeDirectory">{{ themeDirectory }}</span>
+            </div>
+            <div v-for="item in helpConfigPaths" :key="item.label" class="setting-block">
+              <label class="setting-label">{{ item.label }}</label>
+              <span class="help-path" :title="item.path">{{ item.path }}</span>
+            </div>
+            <button type="button" class="reset-layout" :disabled="checkingUpdate" @click="checkForUpdates">
+              {{ checkingUpdate ? (locale === 'zh' ? '正在检查…' : 'Checking…') : (locale === 'zh' ? '检查更新' : 'Check for updates') }}
+            </button>
+            <p v-if="updateStatus" class="update-status" role="status">{{ updateStatus }}</p>
+            <button v-if="updateAvailable" type="button" class="reset-layout" @click="openReleasePage">
+              {{ locale === 'zh' ? '查看下载' : 'View download' }}
+            </button>
+          </template>
+          <button v-if="!['keybindings', 'help'].includes(settingsTab)" type="button" class="reset-layout compact-reset" @click="resetSection">
             {{ t(settingsTab === 'appearance' ? 'resetAppearance' : settingsTab === 'terminal' ? 'resetTerminal' : settingsTab === 'sessions' ? 'resetSessions' : 'resetObserved') }}
           </button>
         </div>
@@ -824,7 +914,7 @@ onBeforeUnmount(() => {
                 :right-click-selects-word="preferences.rightClickSelectsWord"
                 :padding="preferences.terminalPadding"
                 :colors="palette.terminal" :theme-revision="themeRevision" :locale="locale" :bindings="bindings" @error="reportError" />
-              <p v-else class="pane-placeholder">{{ locale === 'zh' ? '从侧栏或上方选择托管会话。关闭面板仅分离视图。' : 'Choose a managed session here or in the sidebar. Closing a pane only detaches its view.' }}</p>
+              <p v-else-if="sessions.length > 0" class="pane-placeholder">{{ locale === 'zh' ? '从侧栏或上方选择托管会话。关闭面板仅分离视图。' : 'Choose a managed session here or in the sidebar. Closing a pane only detaches its view.' }}</p>
             </div>
           </template>
         </PaneWorkspace>
@@ -846,11 +936,11 @@ onBeforeUnmount(() => {
             <p>{{ t('processGoneDetail') }}</p>
           </template>
         </div>
-        <div v-if="sessions.length === 0 && !selectedExternalKey" class="empty-state">
+        <div v-if="sessions.length === 0 && !selectedExternalKey && paneLeaves.length === 1" class="empty-state">
           <img src="/favicon.svg" alt="" width="36" height="36" />
           <h1>{{ t('emptyTitle') }}</h1>
           <p>{{ t('emptyDesc') }}</p>
-          <p class="hint">{{ t('emptyHint') }}</p>
+          <p>{{ t('emptyHint') }}</p>
         </div>
       </div>
       <div v-if="preferences.showStatusBar" class="statusbar">
@@ -932,7 +1022,6 @@ button:focus-visible, input:focus-visible, select:focus-visible, [role="separato
 .observed-source { display: inline; margin-left: 4px; padding: 1px 3px; border: 1px solid var(--border); border-radius: 3px; color: var(--muted); font-size: calc(9px * var(--ui-font-scale)); font-weight: 400; }
 .observed-message { padding-top: 3px; padding-bottom: 3px; }
 .pane-note { font-size: calc(10px * var(--ui-font-scale)); color: var(--faint); padding: 4px 6px 2px; flex: 0 0 auto; }
-.muted-note { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; line-height: 1.35; max-height: 30px; }
 .sidebar-footer { position: relative; flex: 0 0 auto; border-top: 1px solid var(--border-faint); padding: 5px 0 6px; background: var(--sidebar); }
 .settings-trigger { display: flex; gap: 9px; width: 100%; align-items: center; height: 31px; padding: 0 8px; background: transparent; color: var(--muted); border: 0; border-radius: 5px; text-align: left; font-size: calc(11px * var(--ui-font-scale)); }
 .settings-trigger:hover, .settings-trigger[aria-expanded="true"] { color: var(--text); background: var(--surface-hover); }
@@ -958,6 +1047,14 @@ button:focus-visible, input:focus-visible, select:focus-visible, [role="separato
 .theme-option.chosen { color: var(--text); border-color: var(--accent); }
 .theme-chips { display: flex; flex: 0 0 auto; overflow: hidden; width: 32px; height: 15px; border-radius: 3px; border: 1px solid #ffffff22; }
 .theme-chips span { flex: 1; }
+.theme-config-row { min-width: 0; }
+.theme-config-path { display: block; overflow: hidden; color: var(--faint); font-size: calc(8px * var(--ui-font-scale)); line-height: 1.2; text-overflow: ellipsis; white-space: nowrap; }
+.theme-css-row { display: flex; align-items: center; gap: 5px; }
+.theme-css-row .setting-toggle { min-width: 0; flex: 1 1 auto; font-size: calc(9px * var(--ui-font-scale)); }
+.setting-error { margin: 0; color: var(--negative); font-size: calc(9px * var(--ui-font-scale)); }
+.help-value { font-size: calc(10px * var(--ui-font-scale)); }
+.help-path { overflow-wrap: anywhere; color: var(--text); font-family: Consolas, monospace; font-size: calc(9px * var(--ui-font-scale)); }
+.update-status { margin: 0; color: var(--text); font-size: calc(10px * var(--ui-font-scale)); }
 .font-slider { width: 100%; margin: 2px 0; accent-color: var(--accent); }
 .setting-block select, .directory-input, .setting-row select, .setting-stack select { min-width: 0; width: 100%; height: 28px; padding: 0 5px; color: var(--text); background: var(--surface); border: 1px solid var(--border); border-radius: 5px; font-size: calc(10px * var(--ui-font-scale)); }
 .setting-row { display: grid; grid-template-columns: 90px minmax(0, 1fr); align-items: center; gap: 7px; min-height: 29px; color: var(--text); font-size: calc(10px * var(--ui-font-scale)); font-weight: 600; }
@@ -968,7 +1065,6 @@ button:focus-visible, input:focus-visible, select:focus-visible, [role="separato
 .setting-toggle input { width: 14px; height: 14px; flex: 0 0 auto; margin: 0; accent-color: var(--accent); }
 .settings-scroll select:disabled { opacity: .4; }
 .directory-input { font-family: Consolas, monospace; }
-.setting-note { color: var(--faint); line-height: 1.35; font-size: calc(9px * var(--ui-font-scale)); }
 .reset-layout { align-self: flex-start; padding: 5px 8px; border-radius: 4px; background: transparent; border: 1px solid var(--border); color: var(--muted); font-size: calc(10px * var(--ui-font-scale)); }
 .reset-layout:hover { color: var(--text); }
 .compact-reset { margin-top: 2px; }
@@ -993,8 +1089,8 @@ button:focus-visible, input:focus-visible, select:focus-visible, [role="separato
 .observed-detail p { max-width: 560px; margin-top: 22px; }
 .empty-state { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 25px; text-align: center; }
 .empty-state h1 { margin: 14px 0 6px; font-size: calc(17px * var(--ui-font-scale)); }
-.empty-state p { font-size: calc(12px * var(--ui-font-scale)); color: var(--muted); line-height: 1.6; max-width: 380px; }
-.empty-state .hint { font-size: calc(11px * var(--ui-font-scale)); color: var(--faint); }
+.empty-state p { margin: 0; font-size: calc(12px * var(--ui-font-scale)); color: var(--muted); line-height: 1.35; max-width: 380px; }
+.empty-state p + p { margin-top: 2px; }
 .statusbar { flex: 0 0 26px; height: 26px; display: flex; align-items: center; justify-content: space-between; gap: 14px; padding: 0 12px; border-top: 1px solid var(--border-faint); color: var(--faint); font-size: calc(10px * var(--ui-font-scale)); }
 @media (max-width: 820px) { .statusbar span:last-child { display: none; } }
 @media (max-height: 480px) { .brand { height: 34px; } .sidebar-search { margin: 3px 0 6px; } .settings-scroll { gap: 9px; } }

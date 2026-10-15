@@ -11,6 +11,9 @@ func TestTrayLabelsForLocale(t *testing.T) {
 		if lang == "zh" && labels.show == trayLabelsFor("en").show {
 			t.Fatal("Chinese tray menu has not been translated")
 		}
+		if lang == "zh" && (labels.quit != "仅退出 DiggerTerm" || labels.stop != "停止所有会话并退出") {
+			t.Fatalf("unexpected Chinese tray menu labels: %+v", labels)
+		}
 	}
 }
 func TestSetUILanguageValidation(t *testing.T) {
