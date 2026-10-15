@@ -1,7 +1,11 @@
 package session
 
 import (
+	"os"
+	"os/exec"
+	"path/filepath"
 	"reflect"
+	"strconv"
 	"strings"
 	"testing"
 )
@@ -46,5 +50,46 @@ func TestSSHCommandConstruction(t *testing.T) {
 	}
 	if _, err := NewManager(nil, nil).CreateSSH("host", 0, 0, 24); err == nil {
 		t.Fatal("invalid PTY size should not start SSH")
+	}
+}
+
+func TestSSHCommandPreservesConfiguredKeepalive(t *testing.T) {
+	for _, interval := range []string{"37", "0"} {
+		t.Run("interval_"+interval, func(t *testing.T) {
+			spec, err := sshCommand("diggerterm-test-alias", 0)
+			if err != nil {
+				t.Fatal(err)
+			}
+			for _, arg := range spec.args {
+				if strings.Contains(strings.ToLower(arg), "serveralive") {
+					t.Fatalf("sshCommand overrides ssh_config keepalive: %q", arg)
+				}
+			}
+
+			config := filepath.Join(t.TempDir(), "ssh_config")
+			contents := "Host diggerterm-test-alias\n  ServerAliveInterval " + interval + "\n  ServerAliveCountMax 5\n"
+			if err := os.WriteFile(config, []byte(contents), 0600); err != nil {
+				t.Fatal(err)
+			}
+
+			args := append([]string{"-G", "-F", config}, spec.args...)
+			output, err := exec.Command(spec.path, args...).Output()
+			if err != nil {
+				t.Fatalf("OpenSSH config evaluation: %v", err)
+			}
+			values := make(map[string]string)
+			for _, line := range strings.Split(string(output), "\n") {
+				fields := strings.Fields(line)
+				if len(fields) == 2 {
+					values[fields[0]] = fields[1]
+				}
+			}
+			if got := values["serveraliveinterval"]; got != interval {
+				t.Fatalf("effective ServerAliveInterval = %q, want %q", got, interval)
+			}
+			if got, want := values["serveralivecountmax"], strconv.Itoa(5); got != want {
+				t.Fatalf("effective ServerAliveCountMax = %q, want %q", got, want)
+			}
+		})
 	}
 }
