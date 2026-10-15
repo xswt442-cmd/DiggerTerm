@@ -71,13 +71,7 @@ func themeDirectoryForHome(home string) (string, error) {
 	if !filepath.IsAbs(home) {
 		return "", errors.New("user home directory must be absolute")
 	}
-	parent := filepath.Join(home, "user")
-	if info, err := os.Lstat(parent); err == nil && (!info.IsDir() || info.Mode()&os.ModeSymlink != 0) {
-		return "", errors.New("user theme parent must be a real directory")
-	} else if err != nil && !errors.Is(err, os.ErrNotExist) {
-		return "", fmt.Errorf("inspect user theme parent: %w", err)
-	}
-	return filepath.Join(home, "user", "DiggerTerm"), nil
+	return filepath.Join(home, "DiggerTerm"), nil
 }
 
 func (s *ThemeService) ThemeDirectory() (string, error) {
@@ -96,6 +90,34 @@ func (s *ThemeService) OpenThemeDirectory() error {
 	if err != nil {
 		return err
 	}
+	if err := ensureThemeDirectory(dir); err != nil {
+		return fmt.Errorf("prepare theme directory: %w", err)
+	}
+	return application.Get().Env.OpenFileManager(dir, false)
+}
+
+func ensureThemeDirectory(dir string) error {
+	if !filepath.IsAbs(dir) {
+		return errors.New("theme directory must be absolute")
+	}
+	parent := filepath.Dir(dir)
+	if _, err := os.Lstat(parent); errors.Is(err, os.ErrNotExist) {
+		if err := os.Mkdir(parent, 0o700); err != nil && !errors.Is(err, os.ErrExist) {
+			return fmt.Errorf("create theme parent: %w", err)
+		}
+	} else if err != nil {
+		return fmt.Errorf("inspect theme parent: %w", err)
+	}
+	parentInfo, err := os.Lstat(parent)
+	if err != nil {
+		return fmt.Errorf("inspect theme parent: %w", err)
+	}
+	if !parentInfo.IsDir() || parentInfo.Mode()&os.ModeSymlink != 0 {
+		return errors.New("theme parent must be a real directory")
+	}
+	if err := os.Mkdir(dir, 0o700); err != nil && !errors.Is(err, os.ErrExist) {
+		return fmt.Errorf("create theme directory: %w", err)
+	}
 	info, err := os.Lstat(dir)
 	if err != nil {
 		return fmt.Errorf("inspect theme directory: %w", err)
@@ -103,7 +125,7 @@ func (s *ThemeService) OpenThemeDirectory() error {
 	if !info.IsDir() || info.Mode()&os.ModeSymlink != 0 {
 		return errors.New("theme directory must be a real directory")
 	}
-	return application.Get().Env.OpenFileManager(dir, false)
+	return nil
 }
 
 func (s *ThemeService) ListThemes() (ThemeCatalog, error) {
