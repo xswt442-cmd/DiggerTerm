@@ -151,6 +151,22 @@ func (s *SessionService) Resize(id string, cols, rows int) error {
 	return c.Resize(id, cols, rows)
 }
 
+func (s *SessionService) Attach(id string) error {
+	c, err := s.backend()
+	if err != nil {
+		return err
+	}
+	return c.Attach(id)
+}
+
+func (s *SessionService) Detach(id string) error {
+	c, err := s.backend()
+	if err != nil {
+		return err
+	}
+	return c.Detach(id)
+}
+
 func (s *SessionService) Snapshot(id string) (session.Replay, error) {
 	c, err := s.backend()
 	if err != nil {
