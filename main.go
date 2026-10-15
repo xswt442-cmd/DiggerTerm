@@ -60,6 +60,9 @@ func runGUI() {
 		log.Printf("session daemon startup: %v", sessions.initErr)
 	}
 	app.RegisterService(application.NewService(sessions))
+	app.RegisterService(application.NewService(NewThemeService()))
+	app.RegisterService(application.NewService(NewKeybindingService()))
+	app.RegisterService(application.NewService(&ClipboardService{app: app}))
 
 	window := app.Window.NewWithOptions(application.WebviewWindowOptions{
 		Title:            "DiggerTerm",

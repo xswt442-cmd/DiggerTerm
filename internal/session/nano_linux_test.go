@@ -68,7 +68,8 @@ func TestGNUNanoNativeControlKeys(t *testing.T) {
 		t.Fatalf("nano did not %s; snapshot tail: %q", what, raw)
 	}
 	wait("start", 8*time.Second, func(output string) bool {
-		return strings.Contains(output, "GNU nano")
+		// The title can contain only the filename when its path is long.
+		return strings.Contains(output, "\x1b[?1049h") && strings.Contains(output, "^O") && strings.Contains(output, "^X")
 	})
 	if err := m.Write(info.ID, "DIGGERTERM_NANO_NATIVE_KEYS"); err != nil {
 		t.Fatal(err)

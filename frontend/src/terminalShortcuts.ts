@@ -4,7 +4,7 @@
  * On Windows/Linux Ctrl+C copies a selection, or sends ETX (SIGINT) when
  * nothing is selected. Ctrl+V pastes. Ctrl+Shift+C/V and Insert variants
  * are explicit clipboard shortcuts. In smart mode, alternate-screen apps
- * such as nano keep Ctrl+C and Ctrl+V as native terminal input. Every
+ * keep Ctrl+V and unselected Ctrl+C as native terminal input. Every
  * other Ctrl+letter goes to the PTY, never to browser accelerators.
  *
  * macOS keeps Cmd+C/V for the clipboard and Ctrl+C for terminal SIGINT.
@@ -29,6 +29,7 @@ export function decideTerminalShortcut(
   isMac: boolean,
   mode: KeyboardMode = 'smart',
   alternateScreen = false,
+  explicitClipboard = true,
 ): TerminalKeyAction {
   const native = mode === 'native' || (mode === 'smart' && alternateScreen)
   const pass: TerminalKeyAction = { kind: 'pass' }
@@ -38,22 +39,22 @@ export function decideTerminalShortcut(
   const control = event.ctrlKey && !event.metaKey
   const command = isMac && event.metaKey && !event.ctrlKey
 
-  if (command) {
+  if (command && explicitClipboard) {
     if (key === 'c') return { kind: 'copy' }
     if (key === 'v') return { kind: 'paste' }
     return pass
   }
   if (event.metaKey) return pass
 
-  if (control && key === 'insert' && !event.shiftKey) return { kind: 'copy' }
-  if (key === 'insert' && event.shiftKey && !control) return { kind: 'paste' }
+  if (explicitClipboard && control && key === 'insert' && !event.shiftKey) return { kind: 'copy' }
+  if (explicitClipboard && key === 'insert' && event.shiftKey && !control) return { kind: 'paste' }
 
   if (!control) return pass
 
-  if (event.shiftKey && key === 'c' && !isMac) return { kind: 'copy' }
-  if (event.shiftKey && key === 'v' && !isMac) return { kind: 'paste' }
+  if (explicitClipboard && event.shiftKey && key === 'c' && !isMac) return { kind: 'copy' }
+  if (explicitClipboard && event.shiftKey && key === 'v' && !isMac) return { kind: 'paste' }
   if (!event.shiftKey && key === 'c') {
-    if (!isMac && hasSelection && !native) return { kind: 'copy' }
+    if (!isMac && hasSelection && mode !== 'native') return { kind: 'copy' }
     return { kind: 'input', data: '\x03' }
   }
   if (!event.shiftKey && key === 'v' && !isMac && !native) return { kind: 'paste' }

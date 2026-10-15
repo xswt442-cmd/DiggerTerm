@@ -1,5 +1,6 @@
 /** GUI preferences are private to this WebView; they do not change session ownership. */
-export type ThemeId = 'nightfall' | 'graphite' | 'pine' | 'bluehour'
+export type BuiltinThemeId = 'nightfall' | 'graphite' | 'pine' | 'bluehour'
+export type ThemeId = `builtin:${BuiltinThemeId}` | `user:${string}`
 export type LanguageId = 'system' | 'zh' | 'en'
 export type Locale = 'zh' | 'en'
 export type FontId = 'cascadia' | 'consolas' | 'jetbrains' | 'fira' | 'monospace'
@@ -20,6 +21,7 @@ export const refreshOptions = [0, 15, 30, 60] as const
 
 export interface UIPreferences {
   theme: ThemeId
+  customCSS: boolean
   fontSize: number
   uiFontSize: number
   fontFamily: FontId
@@ -44,7 +46,7 @@ export interface UIPreferences {
 }
 
 export const defaults: UIPreferences = {
-  theme: 'nightfall', fontSize: 13, uiFontSize: 12, fontFamily: 'cascadia', language: 'system',
+  theme: 'builtin:nightfall', customCSS: true, fontSize: 13, uiFontSize: 12, fontFamily: 'cascadia', language: 'system',
   sidebarWidth: 280, managedRatio: 0.42, defaultDirectory: '', defaultProfile: 'auto',
   scrollback: 5000, lineHeight: 1.25, scrollSensitivity: 1, terminalPadding: 14,
   cursorStyle: 'block', keyboardMode: 'smart', cursorBlink: true, rightClickSelectsWord: false,
@@ -53,12 +55,15 @@ export const defaults: UIPreferences = {
 }
 
 const key = 'diggerterm:preferences:v1'
-export const themes: ThemeId[] = ['nightfall', 'graphite', 'pine', 'bluehour']
+export const themes: BuiltinThemeId[] = ['nightfall', 'graphite', 'pine', 'bluehour']
 
-type TerminalTheme = {
+export type TerminalTheme = {
   background: string; foreground: string; cursor: string
   selectionBackground: string; black: string; red: string; green: string
   yellow: string; blue: string; magenta: string; cyan: string; white: string
+  brightBlack?: string; brightRed?: string; brightGreen?: string; brightYellow?: string
+  brightBlue?: string; brightMagenta?: string; brightCyan?: string; brightWhite?: string
+  cursorAccent?: string; selectionForeground?: string; selectionInactiveBackground?: string
 }
 export type Palette = {
   zh: string
@@ -74,7 +79,7 @@ const term = (background: string, foreground: string, cursor: string, selectionB
   blue: '#92accf', magenta: '#b8a5c9', cyan: '#99c2bf', white: '#d9dde2',
 })
 
-export const palettes: Record<ThemeId, Palette> = {
+export const palettes: Record<BuiltinThemeId, Palette> = {
   nightfall: {
     zh: '夜航', en: 'Nightfall', chips: ['#1b1f26', '#101318', '#bca58b'],
     css: {
@@ -129,7 +134,11 @@ export function readPreferences(): UIPreferences {
   const result = { ...defaults }
   try {
     const saved = JSON.parse(localStorage.getItem(key) || '{}') as Partial<UIPreferences>
-    if (saved.theme && themes.includes(saved.theme)) result.theme = saved.theme
+    if (typeof saved.theme === 'string') {
+      const legacy = saved.theme as BuiltinThemeId
+      if (themes.includes(legacy)) result.theme = `builtin:${legacy}`
+      else if (/^(builtin:(nightfall|graphite|pine|bluehour)|user:[^/\\\x00-\x1f]{1,128})$/.test(saved.theme)) result.theme = saved.theme
+    }
     if (saved.language && ['system', 'zh', 'en'].includes(saved.language)) result.language = saved.language
     if (typeof saved.fontSize === 'number' && Number.isFinite(saved.fontSize)) result.fontSize = Math.max(11, Math.min(20, Math.round(saved.fontSize)))
     if (typeof saved.uiFontSize === 'number' && Number.isFinite(saved.uiFontSize)) result.uiFontSize = Math.max(10, Math.min(16, Math.round(saved.uiFontSize)))
@@ -145,7 +154,7 @@ export function readPreferences(): UIPreferences {
     if (saved.scrollSensitivity && scrollSpeedOptions.includes(saved.scrollSensitivity as typeof scrollSpeedOptions[number])) result.scrollSensitivity = saved.scrollSensitivity
     if (saved.terminalPadding && paddingOptions.includes(saved.terminalPadding as typeof paddingOptions[number])) result.terminalPadding = saved.terminalPadding
     if (saved.observeRefreshSeconds !== undefined && refreshOptions.includes(saved.observeRefreshSeconds as typeof refreshOptions[number])) result.observeRefreshSeconds = saved.observeRefreshSeconds
-    for (const name of ['cursorBlink', 'rightClickSelectsWord', 'activateNewSession',
+    for (const name of ['customCSS', 'cursorBlink', 'rightClickSelectsWord', 'activateNewSession',
       'observeEnabled', 'showPid', 'showStatusBar'] as const) {
       if (typeof saved[name] === 'boolean') result[name] = saved[name]
     }
@@ -170,7 +179,7 @@ const text = {
     save: '保存', cancel: '取消', running: '运行中', exited: '已退出', observedStatus: '只读',
     settings: '设置', settingsTitle: '界面设置', settingsDescription: '仅影响界面和之后新建的本地 Shell。',
     colors: '配色', fonts: '终端字体大小', uiFontSize: '界面字号', language: '界面语言', system: '跟随系统',
-    defaultDirectory: '新建 Shell 默认路径', defaultDirectoryHint: '留空沿用默认路径，仅作用于 PowerShell / CMD 和本机 Shell，不作用于 WSL / SSH。',
+    defaultDirectory: '新建 Shell 默认路径', defaultDirectoryHint: '留空沿用默认路径，仅作用于 PowerShell / CMD、Bash 和本机 Shell，不作用于 WSL / SSH。',
     directoryPlaceholder: '留空使用默认路径', resetLayout: '重置分栏大小', close: '关闭设置',
     widthHandle: '调整左侧栏宽度', heightHandle: '调整上下区域比例',
     errorDaemon: '后台 Daemon 版本较旧。请先完成正在运行的会话，停止旧 Daemon，再重新打开。',
@@ -182,7 +191,7 @@ const text = {
     activeCount: '{count} 个运行中', observedCount: '{count} 个观察对象',
     persisted: '退出界面不会结束后台会话',
     emptyTitle: '一个窗口，管理多个终端。',
-    emptyDesc: '从左侧创建 PowerShell、CMD、WSL 或 SSH 会话。',
+    emptyDesc: '从左侧选择可用 Shell，创建本地、Bash、WSL 或 SSH 会话。',
     emptyHint: 'GUI 退出后由 Daemon 保持会话；外部进程仍然只读。',
     confirmTerminate: '终止 {name} (PID {pid})？该终端将结束。',
     sshRequired: '请输入 SSH 主机别名或 user@hostname。',
@@ -218,7 +227,7 @@ const text = {
     save: 'Save', cancel: 'Cancel', running: 'Running', exited: 'Exited', observedStatus: 'Read only',
     settings: 'Settings', settingsTitle: 'Appearance & preferences', settingsDescription: 'Affects the GUI and future local shell sessions only.',
     colors: 'Color theme', fonts: 'Terminal font size', uiFontSize: 'Interface font size', language: 'Interface language', system: 'Follow system',
-    defaultDirectory: 'New shell working directory', defaultDirectoryHint: 'Leave blank for the default. Applies to PowerShell / CMD and local shells, not WSL or SSH.',
+    defaultDirectory: 'New shell working directory', defaultDirectoryHint: 'Leave blank for the default. Applies to PowerShell / CMD, Bash and local shells, not WSL or SSH.',
     directoryPlaceholder: 'Default when empty', resetLayout: 'Reset splitter sizes', close: 'Close settings',
     widthHandle: 'Resize sidebar', heightHandle: 'Resize managed / observed panes',
     errorDaemon: 'An older daemon is running. Finish sessions, stop it, then reopen the app.',
@@ -230,7 +239,7 @@ const text = {
     activeCount: '{count} running', observedCount: '{count} observed',
     persisted: 'GUI exit keeps background sessions alive',
     emptyTitle: 'Your terminals, one workspace.',
-    emptyDesc: 'Start a PowerShell, CMD, WSL or SSH session from the sidebar.',
+    emptyDesc: 'Choose an available shell to start a local, Bash, WSL or SSH session from the sidebar.',
     emptyHint: 'Running daemon sessions outlive the GUI. External processes remain read only.',
     confirmTerminate: 'Terminate {name} (PID {pid})? This ends the terminal.',
     sshRequired: 'Enter an SSH host alias or user@hostname.',

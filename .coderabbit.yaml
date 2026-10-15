@@ -1,0 +1,67 @@
+# yaml-language-server: $schema=https://coderabbit.ai/integrations/schema.v2.json
+language: zh-CN
+tone_instructions: >-
+  请简洁、具体地说明问题与复现条件，优先报告真实的正确性、安全边界、
+  兼容性及发布风险；不要重复格式化建议、猜测性重构建议或已有 CI 结果。
+  对发现的问题指出受影响的文件、执行路径和可行修复方向。
+
+reviews:
+  profile: chill
+  request_changes_workflow: false
+  high_level_summary: false
+  poem: false
+  # Review comments are advisory; CI remains the merge gate.
+  commit_status: false
+  auto_review:
+    enabled: true
+    drafts: false
+    base_branches:
+      - "^dev$"
+      - "^main$"
+  path_instructions:
+    - path: "internal/daemon/**"
+      instructions: >-
+        The daemon alone owns PTYs. IPC must remain private to the OS user.
+        Check per-session input/resize control, independent request queues,
+        disconnect cleanup and instance-scoped session IDs. GUI disconnects
+        must not terminate sessions; explicit daemon stop must refuse while
+        sessions run. Read-only refresh must not block behind another session.
+    - path: "internal/session/**"
+      instructions: >-
+        Keep platform-specific PTY, ConPTY and WSL behavior behind narrow
+        interfaces. On Windows, Bash means an installed Git Bash executable,
+        never PATH bash.exe, the System32 WSL shim or a silent WSL fallback.
+        Preserve working directories and session ownership. System OpenSSH
+        retains authentication, host-key checks and user configuration;
+        recovery must not resend commands. Logs must not expose hosts, users,
+        keys, tokens or raw PTY output. Bounded replay is not a lossless screen.
+    - path: "internal/observe/**"
+      instructions: >-
+        External process discovery is read-only current-user metadata.
+        Never add terminal input, termination or arbitrary PTY takeover for
+        observed processes. Keep Windows and WSL PID namespaces distinct.
+    - path: "frontend/**"
+      instructions: >-
+        The GUI is an IPC client, not a process owner. Closing panes only
+        detaches views. Keep one interactive pane per managed session and
+        route input, paste and resize to the correct session and focused pane.
+        Preserve snapshot/output byte offsets and detect gaps or truncation.
+        Respect IME, AltGr and native editor shortcuts. Check real selections,
+        clipboard failures and copy-mode text ranges without logging content.
+        External observation must never gain terminal controls. Versioned
+        generated Wails bindings must agree with Go service interfaces.
+    - path: "*.go"
+      instructions: >-
+        GUI lifecycle and manual IPC reconnect must not terminate sessions,
+        restart the daemon or replay commands. GUI-only theme and shortcut
+        services use the fixed user-home user/DiggerTerm directory, bounded
+        regular files and confined paths; reject link/path escapes, remote
+        CSS resources and executable shortcut configuration. Clipboard stays
+        in the GUI process and must report failures without exposing content.
+    - path: ".github/workflows/**"
+      instructions: >-
+        Preserve Windows/Linux build and test checks, pinned Wails tooling,
+        version and artifact verification, SHA-256 checks and immutable
+        published assets. Publishing requires a v* tag; manual release
+        workflow runs are build-only. Check permissions and shell-specific
+        failure propagation. Do not weaken these release conditions.

@@ -18,6 +18,10 @@ import * as observe$0 from "./internal/observe/models.js";
 // @ts-ignore: Unused imports
 import * as session$0 from "./internal/session/models.js";
 
+export function Attach(id: string): $CancellablePromise<void> {
+    return $Call.ByID(294244360, id);
+}
+
 export function Create(profile: string, cols: number, rows: number): $CancellablePromise<session$0.Info> {
     return $Call.ByID(727494345, profile, cols, rows);
 }
@@ -32,6 +36,10 @@ export function CreateLocal(profile: string, directory: string, cols: number, ro
 
 export function CreateSSH(target: string, port: number, cols: number, rows: number): $CancellablePromise<session$0.Info> {
     return $Call.ByID(2921322589, target, port, cols, rows);
+}
+
+export function Detach(id: string): $CancellablePromise<void> {
+    return $Call.ByID(3975562206, id);
 }
 
 export function Forget(id: string): $CancellablePromise<void> {
@@ -52,6 +60,14 @@ export function Observe(): $CancellablePromise<observe$0.Snapshot> {
 
 export function Profiles(): $CancellablePromise<session$0.Profile[] | null> {
     return $Call.ByID(531259195);
+}
+
+/**
+ * Reconnect only dials the existing daemon. It never starts or stops the
+ * daemon, and it returns the sessions currently managed by that process.
+ */
+export function Reconnect(): $CancellablePromise<session$0.Info[] | null> {
+    return $Call.ByID(2781747506);
 }
 
 export function Rename(id: string, name: string): $CancellablePromise<session$0.Info> {

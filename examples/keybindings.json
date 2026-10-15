@@ -1,0 +1,9 @@
+{
+  "version": 1,
+  "bindings": [
+    { "action": "copySelection", "scope": "terminal", "keys": ["Ctrl+Shift+C", "Ctrl+Insert"] },
+    { "action": "pasteClipboard", "scope": "terminal", "keys": ["Ctrl+Shift+V", "Shift+Insert"] },
+    { "action": "splitRight", "scope": "workspace", "keys": ["Ctrl+Shift+ArrowRight"] },
+    { "action": "splitDown", "scope": "workspace", "keys": ["Ctrl+Shift+ArrowDown"] }
+  ]
+}

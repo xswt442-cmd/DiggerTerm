@@ -4,11 +4,15 @@
   "version": "0.0.2",
   "type": "module",
   "scripts": {
+    "test": "node --test test/*.test.mjs",
     "dev": "vite",
     "build:dev": "vue-tsc && vite build --minify false --mode development",
     "build": "vue-tsc && vite build --mode production",
     "test:preferences": "node --test test/preferences.test.mjs",
     "test:shortcuts": "node --test test/terminal-shortcuts.test.mjs",
+    "test:themes": "node --test test/themes.test.mjs",
+    "test:keybindings": "node --test test/keybindings.test.mjs",
+    "test:layout": "node --test test/workspace-layout.test.mjs",
     "preview": "vite preview"
   },
   "dependencies": {
@@ -19,6 +23,7 @@
   },
   "devDependencies": {
     "@vitejs/plugin-vue": "^6.0.0",
+    "@xterm/headless": "5.5.0",
     "typescript": "~5.9.3",
     "vite": "^8.0.5",
     "vue-tsc": "^3.3.12"

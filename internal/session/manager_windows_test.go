@@ -9,6 +9,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"golang.org/x/sys/windows"
 )
 
 // Exercises the real Windows ConPTY backend, not a fake in-memory terminal.
@@ -46,6 +48,20 @@ func TestLocalShellWorkingDirectory(t *testing.T) {
 	if err := os.Mkdir(root, 0700); err != nil {
 		t.Fatal(err)
 	}
+	pathPointer, err := windows.UTF16PtrFromString(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	required, err := windows.GetLongPathName(pathPointer, nil, 0)
+	if err != nil || required == 0 {
+		t.Fatalf("resolve configured directory name: %v", err)
+	}
+	pathBuffer := make([]uint16, required)
+	length, err := windows.GetLongPathName(pathPointer, &pathBuffer[0], required)
+	if err != nil {
+		t.Fatal(err)
+	}
+	canonicalRoot := windows.UTF16ToString(pathBuffer[:length])
 	for _, profile := range []string{"cmd", "powershell"} {
 		t.Run(profile, func(t *testing.T) {
 			info, err := m.CreateLocal(profile, root, 90, 26)
@@ -76,7 +92,9 @@ func TestLocalShellWorkingDirectory(t *testing.T) {
 				if err != nil {
 					t.Fatal(err)
 				}
-				if strings.Contains(strings.ToLower(string(raw)), strings.ToLower(root)) {
+				// PowerShell expands Windows 8.3 aliases such as RUNNER~1.
+				if strings.Contains(strings.ToLower(string(raw)), strings.ToLower(root)) ||
+					strings.Contains(strings.ToLower(string(raw)), strings.ToLower(canonicalRoot)) {
 					return
 				}
 				time.Sleep(65 * time.Millisecond)

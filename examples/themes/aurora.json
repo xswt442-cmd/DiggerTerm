@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "name": "暮光森林",
+  "description": "低饱和的森林配色",
+  "base": "pine",
+  "colors": {
+    "sidebar": "#202923",
+    "canvas": "#141b16",
+    "surface": "#2a352d",
+    "text": "#e0ebe2",
+    "muted": "#a3b1a6",
+    "accent": "#a8c9ad"
+  },
+  "terminal": {
+    "background": "#141b16",
+    "foreground": "#e0ebe2",
+    "cursor": "#c2dfc5",
+    "brightGreen": "#b8dfbd"
+  },
+  "appearance": {
+    "radius": 8,
+    "paneGap": 6
+  }
+}

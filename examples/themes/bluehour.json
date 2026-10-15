@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "name": "Blue Hour",
+  "description": "A muted blue terminal theme",
+  "base": "bluehour",
+  "colors": {
+    "sidebar": "#202a3a",
+    "canvas": "#121a27",
+    "surface": "#2b394e",
+    "text": "#e0e9f5",
+    "muted": "#a5b4ca",
+    "accent": "#9db8d6"
+  },
+  "terminal": {
+    "background": "#121a27",
+    "foreground": "#e0e9f5",
+    "cursor": "#c0d7ee",
+    "brightBlue": "#b0d1f0"
+  },
+  "appearance": {
+    "radius": 10,
+    "paneGap": 8
+  }
+}
