@@ -141,3 +141,22 @@ func TestThemeSizeErrorIncludesLimit(t *testing.T) {
 		t.Fatalf("size limit missing: %#v", catalog.Errors)
 	}
 }
+
+func TestThemeRefreshReflectsNamesAndDeletedFiles(t *testing.T) {
+	dir := t.TempDir()
+	service := testThemeService(dir)
+	writeFixture(t, dir, "forest.json", `{"version":1,"name":"松林工作台","base":"pine"}`)
+	writeFixture(t, dir, "ocean.json", `{"version":1,"name":"松林工作台","base":"bluehour"}`)
+	first, err := service.ListThemes()
+	if err != nil || len(first.Themes) != 2 || first.Themes[0].Name != first.Themes[1].Name || first.Themes[0].ID == first.Themes[1].ID {
+		t.Fatalf("same-name themes must retain distinct IDs: %+v, %v", first, err)
+	}
+	writeFixture(t, dir, "forest.json", `{"version":1,"name":"新的显示名称"}`)
+	if err := os.Remove(filepath.Join(dir, "ocean.json")); err != nil {
+		t.Fatal(err)
+	}
+	second, err := service.ListThemes()
+	if err != nil || len(second.Themes) != 1 || second.Themes[0].ID != "user:forest" || second.Themes[0].Name != "新的显示名称" {
+		t.Fatalf("refresh returned stale theme metadata: %+v, %v", second, err)
+	}
+}
