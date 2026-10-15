@@ -6,7 +6,7 @@ import { join } from 'node:path'
 const root = new URL('../', import.meta.url)
 const version = process.argv[2]
 if (!/^v\d+\.\d+\.\d+$/.test(version ?? '')) {
-  console.error('Expected a version tag such as v0.0.2')
+  console.error('Expected a version tag such as vX.Y.Z')
   process.exit(2)
 }
 const read = file => readFileSync(new URL(file, root), 'utf8')
