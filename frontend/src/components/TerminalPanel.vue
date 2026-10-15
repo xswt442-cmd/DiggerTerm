@@ -205,7 +205,7 @@ async function reconnectView() {
 async function copySelection() {
   const editor = copyEditor.value
   const selected = copyMode.value && editor
-    ? copyText.value.slice(editor.selectionStart, editor.selectionEnd)
+    ? editor.value.slice(editor.selectionStart, editor.selectionEnd)
     : terminal?.getSelection()
   if (!selected) { notice.value = text('请先选择文字；拖选无效时使用复制模式。', 'Select text first; use Copy mode if dragging does not select.'); return }
   try {
@@ -216,10 +216,10 @@ async function copySelection() {
 
 async function pasteClipboard() {
   const term = terminal
-  if (!props.active || !props.focused || !props.connected || recovering.value || replayError.value || !controlled.value || !term || copyMode.value || props.session.status !== 'running') return
+  if (!props.active || !props.focused || !props.connected || props.session.streamClosed || recovering.value || replayError.value || !controlled.value || !term || copyMode.value || props.session.status !== 'running') return
   try {
     const value = await readClipboard()
-    if (terminal === term && props.active && props.focused && props.connected && !recovering.value && !replayError.value && controlled.value && !copyMode.value && props.session.status === 'running') term.paste(value)
+    if (terminal === term && props.active && props.focused && props.connected && !props.session.streamClosed && !recovering.value && !replayError.value && controlled.value && !copyMode.value && props.session.status === 'running') term.paste(value)
   } catch (err) { notice.value = text('粘贴失败，请重试：', 'Paste failed; retry: ') + String(err) }
 }
 
@@ -302,7 +302,7 @@ function onTerminalKeydown(event: KeyboardEvent) {
   event.stopPropagation()
 
   if (shortcut.kind === 'input') {
-    if (props.connected && !recovering.value && !replayError.value && controlled.value && props.session.status === 'running') {
+    if (props.connected && !props.session.streamClosed && !recovering.value && !replayError.value && controlled.value && props.session.status === 'running') {
       term.input(shortcut.data, true) // goes through onData -> ordered daemon IPC
     }
     return
@@ -400,19 +400,19 @@ onMounted(async () => {
   updateColors()
   fitAddon = fitPlugin
   term.attachCustomKeyEventHandler((event) => {
-    const writable = props.active && props.focused && props.connected && controlled.value &&
+    const writable = props.active && props.focused && props.connected && !props.session.streamClosed && props.session.status === 'running' && controlled.value &&
       !copyMode.value && !recovering.value && !replayError.value
     if (!writable) event.preventDefault()
     return !!writable
   })
 
   offInput = term.onData((input: string) => {
-    if (!props.connected || replayError.value || !controlled.value || props.session.status !== 'running') return
+    if (!props.connected || props.session.streamClosed || replayError.value || !controlled.value || props.session.status !== 'running') return
     // onData also carries live terminal protocol replies, which background
     // panes must send. DOM key/paste handling separately guards user focus.
     writeQueue = writeQueue
       .then(() => queueSessionOperation(props.session.id, async () => {
-        if (terminal === term && props.connected && controlled.value && props.session.status === 'running') await Write(props.session.id, input)
+        if (terminal === term && props.connected && !props.session.streamClosed && controlled.value && props.session.status === 'running') await Write(props.session.id, input)
       }))
       .catch((err: unknown) => emit('error', String(err)))
   })
@@ -454,11 +454,11 @@ onBeforeUnmount(() => {
     class="terminal-panel"
     :class="{ hidden: !active }"
     @keydown.capture="onTerminalKeydown"
-    @paste.capture="(event) => { if (!focused || !connected || copyMode || recovering || replayError) { event.preventDefault(); event.stopPropagation() } }"
+    @paste.capture="(event) => { if (!focused || !connected || session.streamClosed || session.status !== 'running' || copyMode || recovering || replayError) { event.preventDefault(); event.stopPropagation() } }"
   >
     <div class="terminal-actions">
       <button type="button" :disabled="!controlled || recovering" @click="copySelection">{{ text('复制选区', 'Copy') }}</button>
-      <button type="button" :disabled="!connected || recovering || !!replayError || !controlled || copyMode || session.status !== 'running'" @click="pasteClipboard">{{ text('粘贴', 'Paste') }}</button>
+      <button type="button" :disabled="!connected || session.streamClosed || recovering || !!replayError || !controlled || copyMode || session.status !== 'running'" @click="pasteClipboard">{{ text('粘贴', 'Paste') }}</button>
       <button type="button" :disabled="!controlled || recovering" :aria-pressed="copyMode" @click="toggleCopyMode">{{ copyMode ? text('退出复制模式', 'Exit copy mode') : text('复制模式', 'Copy mode') }}</button>
       <button type="button" :disabled="!connected || recovering" @click="reconnectView">{{ text('重新回放', 'Replay') }}</button>
       <small>{{ text('可尝试 Shift 拖选（macOS Option）；无效时使用复制模式。', 'Try Shift-drag (Option on macOS); use Copy mode if unavailable.') }}</small>
@@ -471,6 +471,7 @@ onBeforeUnmount(() => {
       <button type="button" @click="reconnectView">{{ text('重试连接', 'Retry attach') }}</button>
     </div>
     <div v-if="session.status === 'exited'" class="copy-notice" role="status">{{ text('会话已结束', 'Session ended') }} {{ session.message }}</div>
+    <div v-else-if="session.streamClosed" class="copy-notice" role="status">{{ text('PTY 输出流已关闭，已暂停输入。', 'PTY output stream closed; input paused.') }}</div>
     <details class="session-diagnostics">
       <summary>{{ text('会话诊断', 'Session diagnostics') }}</summary>
       <dl>
@@ -484,14 +485,14 @@ onBeforeUnmount(() => {
     <div class="terminal-content" @contextmenu.prevent="openCopyMenu">
       <div v-if="copyMode" class="copy-overlay">
         <small>{{ text('当前可见文字的只读副本；选择后复制，Esc 返回终端。', 'Read-only copy of visible text. Select and copy; Escape returns to the terminal.') }}</small>
-        <textarea ref="copyEditor" :value="copyText" readonly spellcheck="false" :aria-label="text('复制模式文字', 'Copy mode text')" @keydown="onCopyEditorKey" />
+        <textarea ref="copyEditor" :value="copyText" readonly spellcheck="false" :aria-label="text('复制模式文字', 'Copy mode text')" @mousedown.right.prevent @keydown="onCopyEditorKey" />
       </div>
       <div ref="container" class="xterm-host" :style="{ padding: props.padding + 'px', visibility: controlled ? 'visible' : 'hidden' }" @click="focus" />
     </div>
     <div v-if="copyMenu" ref="copyMenuElement" class="terminal-copy-menu" role="group" :aria-label="text('终端复制操作', 'Terminal copy actions')"
       :style="{ left: copyMenu.x + 'px', top: copyMenu.y + 'px' }" @pointerdown.prevent @keydown.esc.stop="copyMenu = null">
       <button type="button" @click="runCopyMenu('copy')">{{ text('复制选区', 'Copy selection') }}</button>
-      <button type="button" :disabled="!connected || !!replayError || copyMode || session.status !== 'running'" @click="runCopyMenu('paste')">{{ text('粘贴', 'Paste') }}</button>
+      <button type="button" :disabled="!connected || session.streamClosed || !!replayError || copyMode || session.status !== 'running'" @click="runCopyMenu('paste')">{{ text('粘贴', 'Paste') }}</button>
       <button type="button" @click="runCopyMenu('mode')">{{ copyMode ? text('退出复制模式', 'Exit copy mode') : text('进入复制模式', 'Enter copy mode') }}</button>
     </div>
   </div>
