@@ -29,17 +29,19 @@ Checksums: [SHA256SUMS](https://github.com/xswt442-cmd/DiggerTerm/releases/downl
 ## Features
 
 - **Multiple terminals:** sidebar navigation, search and rename. The development branch adds nested horizontal/vertical splits, draggable dividers and layout restore; closing a pane keeps its session running.
-- **Local and remote shells:** PowerShell, CMD, WSL, Linux shells, and SSH.
+- **Local and remote shells:** PowerShell, CMD, WSL, Linux shells, and SSH; the development branch adds Windows Git Bash and native Bash when installed.
 - **Persistent sessions:** the daemon keeps sessions running after the GUI exits; reconnect on restart.
 - **Read-only discovery:** inspect external terminal and agent process metadata without taking control.
 - **Preferences:** dark themes, fonts, sizes, language, default shell, and working directory.
 
-**Ctrl+C** copies a terminal selection or interrupts without one; full-screen applications retain native control keys. The terminal toolbar provides Copy, Paste and a read-only copy mode. Use **Shift-drag** in mouse-reporting applications (Option on macOS). On the development branch, Settings → Keys records, validates and saves shortcuts to `keybindings.json` in the user theme directory ([example](examples/keybindings.json)).
+On the development branch, smart **Ctrl+C** copies a terminal selection or interrupts without one; full-screen applications retain native control keys. The terminal toolbar and context menu provide Copy, Paste and a read-only copy mode. Try **Shift-drag** in mouse-reporting applications (Option on macOS); use Copy mode if selection is unavailable. Settings → Keys records, validates and saves shortcuts to `keybindings.json` in the user theme directory ([example](examples/keybindings.json)).
 
 ## Notes
 
 The development branch supports user themes: copy [example JSON/CSS files](examples/themes/) into `user/DiggerTerm/` under your home directory, then refresh Settings → Appearance. JSON `name` supplies the display name; optional `custom.css` overrides all themes. Appearance shows the resolved directory and configuration errors.
 
 Windows requires WebView2; binaries are unsigned. Linux builds target Ubuntu 24.04 and may not run on every distribution. Sessions are not guaranteed to survive daemon crashes or system reboots.
+
+The development branch adds manual reconnection and session exit diagnostics. Recovery replays the latest 256 KiB of raw output; full-screen content may be incomplete. Reported SSH idle disconnects still need reproduction in the affected environment. [Validation and limits](docs/development-validation.md).
 
 [简体中文](README.md) · [CHANGELOG](CHANGELOG.md) · [Release guide](RELEASE.md) · [MIT License](LICENSE)

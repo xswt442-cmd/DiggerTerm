@@ -5,6 +5,14 @@ Changes are recorded in a format inspired by [Keep a Changelog](https://keepacha
 
 ## [Unreleased] / 未发布
 
+- 用户主目录 `user/DiggerTerm/` 下的 JSON/CSS 主题、动态刷新和示例；快捷键配置、录制、校验及恢复默认。
+- 左右/上下嵌套终端分屏、鼠标/键盘比例调整与布局保存；会话 ID 按 Daemon 实例隔离，同一会话限制一个 GUI 控制，关闭面板保留会话。
+- 全屏程序真实选区 Ctrl+C 复制、工具栏/右键入口与只读复制模式；精确提取文本选区、原生剪贴板失败检测、Windows 原生后备实现和浏览器回退。
+- 手动 IPC 重连、退出码/时间/PTY 流诊断、状态版本合并与输出缺口检测。画面恢复仍是有容量上限的原始输出回放；SSH 现场闲置问题未宣称修复。
+- Windows Git Bash 与本机 Bash 启动配置；Windows 仅识别 Git 安装中的 Bash，不使用 WSL 的同名程序。
+
+User JSON/CSS themes and configurable shortcuts; nested terminal panes with saved layouts and single-client control; selection copy and copy mode with checked clipboard errors and a Windows native fallback; manual IPC reconnection and exit/stream diagnostics; Git Bash on Windows and native Bash when installed. Bounded raw replay remains incomplete screen recovery; the reported SSH idle issue needs field reproduction. These changes are on `dev` and are not released.
+
 ## [0.0.2] - 2026-10-15
 
 ### 简体中文
