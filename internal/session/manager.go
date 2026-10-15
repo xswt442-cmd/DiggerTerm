@@ -420,6 +420,10 @@ func (m *Manager) Terminate(id string) error {
 	}
 	s.mu.Lock()
 	running := s.info.Status == "running"
+	if running && s.terminationRequested {
+		s.mu.Unlock()
+		return errors.New("session termination already requested")
+	}
 	if running {
 		s.terminationRequested = true
 	}

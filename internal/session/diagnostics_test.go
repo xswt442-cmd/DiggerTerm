@@ -80,6 +80,9 @@ func TestRenameAndUserTerminationAdvanceRevision(t *testing.T) {
 	if err := manager.Terminate(info.ID); err != nil {
 		t.Fatal(err)
 	}
+	if err := manager.Terminate(info.ID); err == nil {
+		t.Fatal("duplicate termination request must not overwrite the original exit reason")
+	}
 	final := waitForExitInfo(t, exited, info.ID)
 	if final.ExitReason != "user-terminated" || final.Status != "exited" || final.Revision <= rename.Revision {
 		t.Fatalf("termination metadata did not advance: %+v", final)
