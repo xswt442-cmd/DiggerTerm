@@ -74,9 +74,11 @@ test('Ordinary text, Ctrl+arrows, function keys, AltGr and IME never get stolen'
 test('Smart mode keeps nano and vim native Ctrl shortcuts in alternate screen', () => {
   const smart = (key, extra = {}, selection = false) =>
     decideTerminalShortcut(ctrl(key, extra), selection, false, 'smart', true)
-  for (const [key, code] of Object.entries({v:22, c:3, o:15, x:24, w:23, k:11, u:21, g:7, r:18})) {
+  for (const [key, code] of Object.entries({v:22, o:15, x:24, w:23, k:11, u:21, g:7, r:18})) {
     assert.deepEqual(smart(key, {}, true), {kind:'input',data:String.fromCharCode(code)})
   }
+  assert.deepEqual(smart('c', {}, true), {kind:'copy'})
+  assert.deepEqual(smart('c', {}, false), {kind:'input',data:'\x03'})
   assert.deepEqual(smart('v', {shiftKey:true}), {kind:'paste'})
   assert.deepEqual(smart('c', {shiftKey:true}), {kind:'copy'})
 })

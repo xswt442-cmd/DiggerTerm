@@ -61,6 +61,7 @@ func runGUI() {
 	}
 	app.RegisterService(application.NewService(sessions))
 	app.RegisterService(application.NewService(NewThemeService()))
+	app.RegisterService(application.NewService(NewKeybindingService()))
 
 	window := app.Window.NewWithOptions(application.WebviewWindowOptions{
 		Title:            "DiggerTerm",

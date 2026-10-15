@@ -5,9 +5,10 @@ import { FitAddon } from '@xterm/addon-fit'
 import { Clipboard, Events } from '@wailsio/runtime'
 import { Resize, Snapshot, Write } from '../../bindings/github.com/xswt442-cmd/DiggerTerm/sessionservice'
 import type { Info } from '../../bindings/github.com/xswt442-cmd/DiggerTerm/internal/session/models'
-import { fonts, type Palette, type FontId, type CursorStyle, type KeyboardMode } from '../uiPreferences'
+import { fonts, type Palette, type FontId, type CursorStyle, type KeyboardMode, type Locale } from '../uiPreferences'
 import { decideTerminalShortcut } from '../terminalShortcuts'
 import { terminalColors } from '../userThemes'
+import { matchBinding, type Binding } from '../keybindings'
 import '@xterm/xterm/css/xterm.css'
 
 const props = defineProps<{
@@ -25,9 +26,16 @@ const props = defineProps<{
   padding: number
   colors: Palette['terminal']
   themeRevision: number
+  locale: Locale
+  bindings: Binding[]
 }>()
 const emit = defineEmits<{ error: [message: string] }>()
 const container = ref<HTMLElement | null>(null)
+const copyMode = ref(false)
+const copyText = ref('')
+const copyEditor = ref<HTMLTextAreaElement | null>(null)
+const notice = ref('')
+const text = (zh: string, en: string) => props.locale === 'zh' ? zh : en
 
 interface OutputEvent {
   id: string
@@ -79,7 +87,59 @@ function fit() {
 }
 
 function focus() {
-  terminal?.focus()
+  if (!copyMode.value) terminal?.focus()
+}
+
+async function copySelection() {
+  const editor = copyEditor.value
+  const selected = copyMode.value && editor
+    ? copyText.value.slice(editor.selectionStart, editor.selectionEnd)
+    : terminal?.getSelection()
+  if (!selected) { notice.value = text('请先选择文字（鼠标模式下使用 Shift 拖动）', 'Select text first (use Shift-drag in mouse mode)'); return }
+  try {
+    await writeClipboard(selected)
+    notice.value = text('已复制', 'Copied')
+  } catch (err) { notice.value = text('复制失败，请重试：', 'Copy failed; retry: ') + String(err) }
+}
+
+async function pasteClipboard() {
+  const term = terminal
+  if (!props.active || !term || copyMode.value || props.session.status !== 'running') return
+  try {
+    const value = await readClipboard()
+    if (terminal === term && props.active && !copyMode.value && props.session.status === 'running') term.paste(value)
+  } catch (err) { notice.value = text('粘贴失败，请重试：', 'Paste failed; retry: ') + String(err) }
+}
+
+async function toggleCopyMode() {
+  copyMode.value = !copyMode.value
+  notice.value = ''
+  if (copyMode.value && terminal) {
+    const buffer = terminal.buffer.active
+    const lines: string[] = []
+    for (let row = 0; row < terminal.rows; row++) {
+      const line = buffer.getLine(buffer.viewportY + row)
+      if (line) lines.push(line.translateToString(true))
+    }
+    copyText.value = lines.join('\n')
+    await nextTick()
+    copyEditor.value?.focus()
+  } else {
+    copyText.value = ''
+    await nextTick()
+    focus()
+  }
+}
+
+function onCopyEditorKey(event: KeyboardEvent) {
+  event.stopPropagation()
+  if (event.isComposing || event.altKey || event.getModifierState('AltGraph')) return
+  const copy = matchBinding(event, props.bindings, 'terminal')
+  if (event.key === 'Escape' || copy === 'toggleCopyMode') {
+    event.preventDefault(); void toggleCopyMode()
+  } else if (copy === 'copySelection' || (event.key.toLowerCase() === 'c' && (isMac ? event.metaKey : event.ctrlKey))) {
+    event.preventDefault(); void copySelection()
+  }
 }
 
 // Wails supplies a native clipboard bridge, which is more dependable than
@@ -110,8 +170,19 @@ function onTerminalKeydown(event: KeyboardEvent) {
   // listener is attached only to the active terminal's DOM subtree.
   const term = terminal
   if (!props.active || !term) return
+  const target = event.target as HTMLElement
+  if (!target.classList.contains('xterm-helper-textarea') && target.closest('input, select, textarea, button')) return
+  const binding = matchBinding(event, props.bindings, 'terminal')
+  if (binding) {
+    event.preventDefault(); event.stopPropagation()
+    if (binding === 'copySelection') void copySelection()
+    else if (binding === 'pasteClipboard') void pasteClipboard()
+    else if (binding === 'toggleCopyMode') void toggleCopyMode()
+    return
+  }
+  if (copyMode.value) return
   const shortcut = decideTerminalShortcut(
-    event, term.hasSelection(), isMac, props.keyboardMode, term.buffer.active.type === 'alternate',
+    event, term.hasSelection(), isMac, props.keyboardMode, term.buffer.active.type === 'alternate', false,
   )
   if (shortcut.kind === 'pass') return
 
@@ -127,21 +198,11 @@ function onTerminalKeydown(event: KeyboardEvent) {
     return
   }
   if (shortcut.kind === 'copy') {
-    const selected = term.getSelection()
-    if (selected) {
-      void writeClipboard(selected).catch((err: unknown) => emit('error', String(err)))
-    }
+    void copySelection()
     return
   }
   if (shortcut.kind === 'paste' && props.session.status === 'running') {
-    void readClipboard()
-      .then((text) => {
-        if (text && terminal === term && props.active && props.session.status === 'running') {
-          // xterm.paste handles CR/LF normalization and bracketed paste mode.
-          term.paste(text)
-        }
-      })
-      .catch((err: unknown) => emit('error', String(err)))
+    void pasteClipboard()
   }
 }
 
@@ -208,6 +269,7 @@ onMounted(async () => {
     scrollback: props.scrollback,
     scrollSensitivity: props.scrollSensitivity,
     rightClickSelectsWord: props.rightClickSelectsWord,
+    macOptionClickForcesSelection: true,
     convertEol: false,
     theme: props.colors,
   })
@@ -219,7 +281,7 @@ onMounted(async () => {
   fitAddon = fitPlugin
 
   offInput = term.onData((input: string) => {
-    if (props.session.status !== 'running') return
+    if (!props.active || copyMode.value || props.session.status !== 'running') return
     // Keep keystrokes in order even if the IPC layer resolves asynchronously.
     writeQueue = writeQueue
       .then(() => Write(props.session.id, input))
@@ -242,6 +304,7 @@ onMounted(async () => {
 
   try {
     const snapshot = await Snapshot(props.session.id)
+    if (terminal !== term) return
     const raw = decodeBase64(snapshot.data)
     if (raw.length) term.write(raw)
     lastOffset = snapshot.offset
@@ -266,23 +329,45 @@ onBeforeUnmount(() => {
 
 <template>
   <div
-    ref="container"
     class="terminal-panel"
     :class="{ hidden: !active }"
-    :style="{ padding: props.padding + 'px' }"
-    @click="focus"
     @keydown.capture="onTerminalKeydown"
-  />
+  >
+    <div class="terminal-actions">
+      <button type="button" @click="copySelection">{{ text('复制选区', 'Copy') }}</button>
+      <button type="button" :disabled="copyMode || session.status !== 'running'" @click="pasteClipboard">{{ text('粘贴', 'Paste') }}</button>
+      <button type="button" :aria-pressed="copyMode" @click="toggleCopyMode">{{ copyMode ? text('退出复制模式', 'Exit copy mode') : text('复制模式', 'Copy mode') }}</button>
+      <small>{{ text('Shift 拖选 · macOS Option 拖选', 'Shift-drag · macOS Option-drag') }}</small>
+    </div>
+    <div v-if="notice" class="copy-notice" role="status">{{ notice }}</div>
+    <div class="terminal-content">
+      <div v-if="copyMode" class="copy-overlay">
+        <small>{{ text('当前可见文字的只读副本；选择后复制，Esc 返回终端。', 'Read-only copy of visible text. Select and copy; Escape returns to the terminal.') }}</small>
+        <textarea ref="copyEditor" :value="copyText" readonly spellcheck="false" :aria-label="text('复制模式文字', 'Copy mode text')" @keydown="onCopyEditorKey" />
+      </div>
+      <div ref="container" class="xterm-host" :style="{ padding: props.padding + 'px' }" @click="focus" />
+    </div>
+  </div>
 </template>
 
 <style scoped>
 .terminal-panel {
   position: absolute;
   inset: 0;
-  padding: 12px 16px;
+  display: flex;
+  flex-direction: column;
   overflow: hidden;
   background: var(--canvas);
 }
+.terminal-content { min-height: 0; flex: 1; position: relative; }
+.xterm-host { position: absolute; inset: 0; overflow: hidden; }
+.terminal-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; padding: 4px 8px; border-bottom: 1px solid var(--border-faint); }
+.terminal-actions button { color: var(--text); background: var(--surface); border: 1px solid var(--border); border-radius: var(--dt-radius, 4px); font-size: 11px; padding: 3px 6px; }
+.terminal-actions small, .copy-notice { color: var(--muted); font-size: 10px; }
+.copy-notice { padding: 4px 8px; }
+.copy-overlay { position: absolute; z-index: 2; inset: 0; display: flex; flex-direction: column; gap: 8px; padding: 8px; background: var(--canvas); }
+.copy-overlay small { color: var(--muted); }
+.copy-overlay textarea { flex: 1; min-height: 0; resize: none; background: var(--canvas); color: var(--text); border: 1px solid var(--border); font-family: monospace; }
 .terminal-panel.hidden {
   display: none;
 }

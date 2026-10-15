@@ -10,6 +10,7 @@
     "test:preferences": "node --test test/preferences.test.mjs",
     "test:shortcuts": "node --test test/terminal-shortcuts.test.mjs",
     "test:themes": "node --test test/themes.test.mjs",
+    "test:keybindings": "node --test test/keybindings.test.mjs",
     "preview": "vite preview"
   },
   "dependencies": {

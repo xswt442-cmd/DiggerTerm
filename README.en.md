@@ -34,7 +34,7 @@ Checksums: [SHA256SUMS](https://github.com/xswt442-cmd/DiggerTerm/releases/downl
 - **Read-only discovery:** inspect external terminal and agent process metadata without taking control.
 - **Preferences:** dark themes, fonts, sizes, language, default shell, and working directory.
 
-Keyboard shortcuts follow familiar Windows terminal behavior: **Ctrl+C** copies selected text or interrupts a running command; **Ctrl+V** pastes. Full-screen applications such as nano retain native control keys; **Ctrl+Shift+C/V** always copy/paste.
+**Ctrl+C** copies a terminal selection or interrupts without one; full-screen applications retain native control keys. The terminal toolbar provides Copy, Paste and a read-only copy mode. Use **Shift-drag** in mouse-reporting applications (Option on macOS). On the development branch, Settings → Keys records, validates and saves shortcuts to `keybindings.json` in the user theme directory ([example](examples/keybindings.json)).
 
 ## Notes
 

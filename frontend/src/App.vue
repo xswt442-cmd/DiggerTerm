@@ -8,6 +8,9 @@ import {
 } from './uiPreferences'
 import { Events } from '@wailsio/runtime'
 import TerminalPanel from './components/TerminalPanel.vue'
+import KeybindingsSettings from './components/KeybindingsSettings.vue'
+import { defaultBindings, matchBinding, parseBindings } from './keybindings'
+import { ReadKeybindings } from '../bindings/github.com/xswt442-cmd/DiggerTerm/keybindingservice'
 import { themeRegistry, themeVariables, type ThemeOption } from './userThemes'
 import { ListThemes } from '../bindings/github.com/xswt442-cmd/DiggerTerm/themeservice'
 import { Create, CreateLocal, CreateSSH, Forget, List, Observe, Profiles, Rename, SetUILanguage, SSHHosts, Terminate } from '../bindings/github.com/xswt442-cmd/DiggerTerm/sessionservice'
@@ -50,7 +53,25 @@ const locale = computed(() => chosenLocale(preferences.value.language))
 const t = (key: TextKey, replacements?: Record<string, string | number>) => translate(locale.value, key, replacements)
 const kindLabel = (kind: string) => t(kind === 'terminal' ? 'kindTerminal' : kind === 'agent' ? 'kindAgent' : kind === 'descendant' ? 'kindDescendant' : 'kindOther')
 const settingsOpen = ref(false)
-const settingsTab = ref<'appearance' | 'terminal' | 'sessions' | 'observed'>('appearance')
+const settingsTab = ref<'appearance' | 'terminal' | 'sessions' | 'observed' | 'keybindings'>('appearance')
+const isMac = /Mac/i.test(navigator.userAgent)
+const bindings = ref(defaultBindings(isMac))
+async function reloadBindings() {
+  try {
+    const source = await ReadKeybindings()
+    const overrides = source ? parseBindings(source, isMac) : []
+    bindings.value = defaultBindings(isMac).map(binding => overrides.find(item => item.action === binding.action) ?? binding)
+  } catch (error) { reportError(error) }
+}
+function workspaceKey(event: KeyboardEvent) {
+  if (settingsOpen.value || event.defaultPrevented) return
+  const target = event.target as HTMLElement
+  if (!target.classList.contains('xterm-helper-textarea') && target.closest('input, textarea, select, button, [contenteditable="true"]')) return
+  const action = matchBinding(event, bindings.value, 'workspace')
+  if (action === 'openSettings') {
+    event.preventDefault(); event.stopPropagation(); settingsOpen.value = true
+  }
+}
 const paneStack = ref<HTMLElement | null>(null)
 const dragging = ref<'width' | 'height' | null>(null)
 let dragOrigin = { x: 0, y: 0, width: 0, ratio: 0, height: 1 }
@@ -311,6 +332,7 @@ watch([() => preferences.value.observeEnabled, () => preferences.value.observeRe
   () => startObservationPolling())
 
 onMounted(async () => {
+  void reloadBindings()
   void applyTheme()
   void refreshThemes()
   syncNativeLanguage(locale.value)
@@ -355,7 +377,7 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <main class="layout" :data-dt-theme="preferences.theme" :style="{ '--ui-font-scale': preferences.uiFontSize / 12 }" @keydown.esc="settingsOpen = false">
+  <main class="layout" :data-dt-theme="preferences.theme" :style="{ '--ui-font-scale': preferences.uiFontSize / 12 }" @keydown.capture="workspaceKey" @keydown.esc="settingsOpen = false">
     <aside class="sidebar" :style="{ width: preferences.sidebarWidth + 'px' }">
       <header class="brand">
         <img class="brand-logo" src="/favicon.svg" alt="DiggerTerm" width="31" height="31" />
@@ -509,11 +531,11 @@ onBeforeUnmount(() => {
           <button type="button" :title="t('close')" :aria-label="t('close')" @click="settingsOpen = false">×</button>
         </header>
         <div class="settings-tabs" role="tablist" :aria-label="t('settingsTitle')">
-          <button v-for="tab in (['appearance', 'terminal', 'sessions', 'observed'] as const)"
+          <button v-for="tab in (['appearance', 'terminal', 'sessions', 'observed', 'keybindings'] as const)"
             :key="tab" type="button" role="tab" :aria-selected="settingsTab === tab"
             :class="{ chosen: settingsTab === tab }"
             @click="settingsTab = tab">
-            {{ t(tab === 'appearance' ? 'appearanceTab' : tab === 'terminal' ? 'terminalTab' : tab === 'sessions' ? 'sessionTab' : 'monitorTab') }}
+            {{ tab === 'keybindings' ? (locale === 'zh' ? '快捷键' : 'Keys') : t(tab === 'appearance' ? 'appearanceTab' : tab === 'terminal' ? 'terminalTab' : tab === 'sessions' ? 'sessionTab' : 'monitorTab') }}
           </button>
         </div>
         <div class="settings-scroll" role="tabpanel">
@@ -662,7 +684,8 @@ onBeforeUnmount(() => {
               <input v-model="preferences.showStatusBar" type="checkbox" /></label>
             <small class="setting-note">{{ t('observeHint') }}</small>
           </template>
-          <button type="button" class="reset-layout compact-reset" @click="resetSection">
+          <KeybindingsSettings v-else-if="settingsTab === 'keybindings'" :locale="locale" :bindings="bindings" :is-mac="isMac" @changed="bindings = $event" />
+          <button v-if="settingsTab !== 'keybindings'" type="button" class="reset-layout compact-reset" @click="resetSection">
             {{ t(settingsTab === 'appearance' ? 'resetAppearance' : settingsTab === 'terminal' ? 'resetTerminal' : settingsTab === 'sessions' ? 'resetSessions' : 'resetObserved') }}
           </button>
         </div>
@@ -701,7 +724,7 @@ onBeforeUnmount(() => {
             :scroll-sensitivity="preferences.scrollSensitivity"
             :right-click-selects-word="preferences.rightClickSelectsWord"
             :padding="preferences.terminalPadding"
-            :colors="palette.terminal" :theme-revision="themeRevision" @error="reportError" />
+            :colors="palette.terminal" :theme-revision="themeRevision" :locale="locale" :bindings="bindings" @error="reportError" />
         </template>
         <div v-if="selectedExternalKey" class="observed-detail">
           <template v-if="activeObserved">
