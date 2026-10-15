@@ -16,15 +16,15 @@
 
 ## 下载
 
-[v0.0.3 · GitHub Release](https://github.com/xswt442-cmd/DiggerTerm/releases/tag/v0.0.3)
+[v0.0.4 · GitHub Release](https://github.com/xswt442-cmd/DiggerTerm/releases/tag/v0.0.4)
 
 | 平台 | 安装包 |
 | --- | --- |
-| Windows x64 | [`.exe`](https://github.com/xswt442-cmd/DiggerTerm/releases/download/v0.0.3/DiggerTerm-v0.0.3-windows-amd64.exe) |
-| Linux x64 | [`.AppImage`](https://github.com/xswt442-cmd/DiggerTerm/releases/download/v0.0.3/DiggerTerm-v0.0.3-linux-x86_64.AppImage) |
-| Ubuntu / Debian x64 | [`.deb`](https://github.com/xswt442-cmd/DiggerTerm/releases/download/v0.0.3/DiggerTerm-v0.0.3-linux-amd64.deb) |
+| Windows x64 | [`.exe`](https://github.com/xswt442-cmd/DiggerTerm/releases/download/v0.0.4/DiggerTerm-v0.0.4-windows-amd64.exe) |
+| Linux x64 | [`.AppImage`](https://github.com/xswt442-cmd/DiggerTerm/releases/download/v0.0.4/DiggerTerm-v0.0.4-linux-x86_64.AppImage) |
+| Ubuntu / Debian x64 | [`.deb`](https://github.com/xswt442-cmd/DiggerTerm/releases/download/v0.0.4/DiggerTerm-v0.0.4-linux-amd64.deb) |
 
-下载校验：[SHA256SUMS](https://github.com/xswt442-cmd/DiggerTerm/releases/download/v0.0.3/SHA256SUMS)。
+下载校验：[SHA256SUMS](https://github.com/xswt442-cmd/DiggerTerm/releases/download/v0.0.4/SHA256SUMS)。
 
 ## 功能
 

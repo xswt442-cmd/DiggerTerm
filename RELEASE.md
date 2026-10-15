@@ -14,7 +14,7 @@
 2. **先验证再打 Tag**。可以从 GitHub Actions 手动执行 **Release → Run workflow**，传入 `vX.Y.Z`，此模式只构建并上传临时 CI 工件，**不会创建 Tag 或 GitHub Release**。同时进行本机 Windows/Ubuntu 测试，核对三种包的安装、托盘、终端、快捷键和依赖。
 3. 确认合并后的 `main` 对应已验收的源码，再创建并推送新的注释 Tag `vX.Y.Z`。Tag push 将触发同一 Release Workflow 的 Windows/Linux 构建，并在两端构建全部成功后计算 `SHA256SUMS`、验证安装包格式，再创建正式 GitHub Release。
 4. 核验 Release **只有三个可执行安装包和 `SHA256SUMS`**，回下载校验散列、打开 Release Notes、安装并启动。若失败，不要覆盖已发布的 Tag/附件；先定位问题，再决定修复版本。
-5. 保留 `dev` 作为后续开发分支；正式发布所需的版本和说明通过 PR 同步到 `main`。不要为发布重建或强推 `dev`。
+5. 发布完成后保留 `dev` 作为后续开发分支。若远端 `dev` 被临时删除，则从已发布的 `main` 提交恢复本地 `dev` 并推送，确认本地和远端 `dev` 与 `main` 指向同一提交；不要强推已有分支。
 
 ## 边界
 

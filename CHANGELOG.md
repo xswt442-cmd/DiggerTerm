@@ -5,6 +5,22 @@ Changes are recorded in a format inspired by [Keep a Changelog](https://keepacha
 
 ## [Unreleased] / 未发布
 
+## [0.0.4] - 2026-10-16
+
+### 简体中文
+
+- 设置新增帮助页，列出主题 JSON、主题 CSS、全局 `custom.css` 和快捷键配置的实际路径，并提供版本检查。
+- 快捷键配置支持逐项恢复默认值；快捷键模式移入快捷键设置。
+- 优化首页空状态与托盘退出菜单；无会话时分屏后隐藏欢迎层。
+- 主题与快捷键配置统一保存在当前用户主目录下的 `DiggerTerm/`。
+
+### English
+
+- Added a Help page with paths for theme JSON/CSS, global `custom.css`, and keybindings, plus update checks.
+- Added per-shortcut default reset and moved keyboard mode into shortcut settings.
+- Refined the home empty state and tray exit labels; the welcome panel hides after splitting an empty workspace.
+- Theme and shortcut configuration now share `DiggerTerm/` under the current user's home directory.
+
 ## [0.0.3]
 
 ### 简体中文
@@ -82,7 +98,8 @@ First public preview, released as a Windows x64 portable archive.
 - Sessions are not guaranteed to recover from daemon termination or an OS shutdown; raw-output replay is not a full screen-state snapshot.
 - No fully tested Linux/macOS desktop builds or release packages.
 
-[Unreleased]: https://github.com/xswt442-cmd/DiggerTerm/compare/v0.0.3...dev
+[Unreleased]: https://github.com/xswt442-cmd/DiggerTerm/compare/v0.0.4...dev
+[0.0.4]: https://github.com/xswt442-cmd/DiggerTerm/compare/v0.0.3...v0.0.4
 [0.0.3]: https://github.com/xswt442-cmd/DiggerTerm/compare/v0.0.2...v0.0.3
 [0.0.2]: https://github.com/xswt442-cmd/DiggerTerm/compare/v0.0.1...v0.0.2
 [0.0.1]: https://github.com/xswt442-cmd/DiggerTerm/releases/tag/v0.0.1
