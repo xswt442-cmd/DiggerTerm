@@ -102,3 +102,9 @@ test('new setting labels appear in both UI languages', () => {
     assert.notEqual(prefs.translate('en', key), '')
   }
 })
+
+test('home screen uses the requested concise guidance', () => {
+  assert.equal(prefs.translate('zh', 'emptyTitle'), '一个窗口，管理多个终端。')
+  assert.equal(prefs.translate('zh', 'emptyDesc'), '从左侧选择 Shell 并打开')
+  assert.equal(prefs.translate('zh', 'emptyHint'), '退出 DiggerTerm 后会话保留，外部进程仅只读')
+})

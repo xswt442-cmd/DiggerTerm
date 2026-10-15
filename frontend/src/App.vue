@@ -215,6 +215,29 @@ async function openThemeDirectory() {
   try { await OpenThemeDirectory() }
   catch (error) { reportError(error) }
 }
+function themeConfigPath(fileName: string) {
+  if (!themeDirectory.value) return ''
+  const separator = themeDirectory.value.includes('\\') ? '\\' : '/'
+  return `${themeDirectory.value.replace(/[\\/]+$/, '')}${separator}${fileName}`
+}
+const helpConfigPaths = computed(() => [
+  {
+    label: locale.value === 'zh' ? '主题 JSON 文件' : 'Theme JSON file',
+    path: themeConfigPath(locale.value === 'zh' ? '<主题名>.json' : '<theme-name>.json'),
+  },
+  {
+    label: locale.value === 'zh' ? '主题 CSS 文件' : 'Theme CSS file',
+    path: themeConfigPath(locale.value === 'zh' ? '<主题名>.css' : '<theme-name>.css'),
+  },
+  {
+    label: locale.value === 'zh' ? '全局 CSS 覆盖' : 'Global CSS override',
+    path: themeConfigPath('custom.css'),
+  },
+  {
+    label: locale.value === 'zh' ? '快捷键配置文件' : 'Shortcut config file',
+    path: keybindingsPath.value,
+  },
+])
 const localProfiles = computed(() => profiles.value.filter(p => p.id !== 'ssh'))
 const fontChoices = Object.entries(fonts).map(([id, font]) => ({ id, name: font.name }))
 watch(() => preferences.value.defaultProfile, (value) => {
@@ -821,9 +844,9 @@ onBeforeUnmount(() => {
               <label class="setting-label">{{ locale === 'zh' ? '主题配置目录' : 'Theme config directory' }}</label>
               <span class="help-path" :title="themeDirectory">{{ themeDirectory }}</span>
             </div>
-            <div class="setting-block">
-              <label class="setting-label">{{ locale === 'zh' ? '快捷键配置文件' : 'Shortcut config file' }}</label>
-              <span class="help-path" :title="keybindingsPath">{{ keybindingsPath }}</span>
+            <div v-for="item in helpConfigPaths" :key="item.label" class="setting-block">
+              <label class="setting-label">{{ item.label }}</label>
+              <span class="help-path" :title="item.path">{{ item.path }}</span>
             </div>
             <button type="button" class="reset-layout" :disabled="checkingUpdate" @click="checkForUpdates">
               {{ checkingUpdate ? (locale === 'zh' ? '正在检查…' : 'Checking…') : (locale === 'zh' ? '检查更新' : 'Check for updates') }}
@@ -891,7 +914,7 @@ onBeforeUnmount(() => {
                 :right-click-selects-word="preferences.rightClickSelectsWord"
                 :padding="preferences.terminalPadding"
                 :colors="palette.terminal" :theme-revision="themeRevision" :locale="locale" :bindings="bindings" @error="reportError" />
-              <p v-else class="pane-placeholder">{{ locale === 'zh' ? '从侧栏或上方选择托管会话。关闭面板仅分离视图。' : 'Choose a managed session here or in the sidebar. Closing a pane only detaches its view.' }}</p>
+              <p v-else-if="sessions.length > 0" class="pane-placeholder">{{ locale === 'zh' ? '从侧栏或上方选择托管会话。关闭面板仅分离视图。' : 'Choose a managed session here or in the sidebar. Closing a pane only detaches its view.' }}</p>
             </div>
           </template>
         </PaneWorkspace>
@@ -913,11 +936,11 @@ onBeforeUnmount(() => {
             <p>{{ t('processGoneDetail') }}</p>
           </template>
         </div>
-        <div v-if="sessions.length === 0 && !selectedExternalKey" class="empty-state">
+        <div v-if="sessions.length === 0 && !selectedExternalKey && paneLeaves.length === 1" class="empty-state">
           <img src="/favicon.svg" alt="" width="36" height="36" />
           <h1>{{ t('emptyTitle') }}</h1>
           <p>{{ t('emptyDesc') }}</p>
-          <p class="hint">{{ t('emptyHint') }}</p>
+          <p>{{ t('emptyHint') }}</p>
         </div>
       </div>
       <div v-if="preferences.showStatusBar" class="statusbar">
@@ -1066,8 +1089,8 @@ button:focus-visible, input:focus-visible, select:focus-visible, [role="separato
 .observed-detail p { max-width: 560px; margin-top: 22px; }
 .empty-state { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 25px; text-align: center; }
 .empty-state h1 { margin: 14px 0 6px; font-size: calc(17px * var(--ui-font-scale)); }
-.empty-state p { font-size: calc(12px * var(--ui-font-scale)); color: var(--muted); line-height: 1.6; max-width: 380px; }
-.empty-state .hint { font-size: calc(11px * var(--ui-font-scale)); color: var(--faint); }
+.empty-state p { margin: 0; font-size: calc(12px * var(--ui-font-scale)); color: var(--muted); line-height: 1.35; max-width: 380px; }
+.empty-state p + p { margin-top: 2px; }
 .statusbar { flex: 0 0 26px; height: 26px; display: flex; align-items: center; justify-content: space-between; gap: 14px; padding: 0 12px; border-top: 1px solid var(--border-faint); color: var(--faint); font-size: calc(10px * var(--ui-font-scale)); }
 @media (max-width: 820px) { .statusbar span:last-child { display: none; } }
 @media (max-height: 480px) { .brand { height: 34px; } .sidebar-search { margin: 3px 0 6px; } .settings-scroll { gap: 9px; } }
