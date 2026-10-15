@@ -5,13 +5,34 @@ Changes are recorded in a format inspired by [Keep a Changelog](https://keepacha
 
 ## [Unreleased] / 未发布
 
-- 用户主目录 `user/DiggerTerm/` 下的 JSON/CSS 主题、动态刷新和示例；快捷键配置、录制、校验及恢复默认。
-- 左右/上下嵌套终端分屏、鼠标/键盘比例调整与布局保存；会话 ID 按 Daemon 实例隔离，同一会话限制一个 GUI 控制，关闭面板保留会话。
-- 全屏程序真实选区 Ctrl+C 复制、工具栏/右键入口与只读复制模式；精确提取文本选区、原生剪贴板失败检测、Windows 原生后备实现和浏览器回退。
-- 手动 IPC 重连、退出码/时间/PTY 流诊断、状态版本合并与输出缺口检测。画面恢复仍是有容量上限的原始输出回放；SSH 现场闲置问题未宣称修复。
-- Windows Git Bash 与本机 Bash 启动配置；Windows 仅识别 Git 安装中的 Bash，不使用 WSL 的同名程序。
+## [0.0.3]
 
-User JSON/CSS themes and configurable shortcuts; nested terminal panes with saved layouts and single-client control; selection copy and copy mode with checked clipboard errors and a Windows native fallback; manual IPC reconnection and exit/stream diagnostics; Git Bash on Windows and native Bash when installed. Bounded raw replay remains incomplete screen recovery; the reported SSH idle issue needs field reproduction. These changes are on `dev` and are not released.
+### 简体中文
+
+- 新增用户 JSON/CSS 配色主题、外观刷新，以及快捷键录制、冲突检测和保存。
+- 新增可嵌套终端分屏和布局恢复，限制每个托管会话只有一个 GUI 控制端；关闭面板仅分离视图。
+- 改进全屏程序选区复制，新增工具栏、右键操作和只读复制模式；Windows 原生剪贴板增加后备处理。
+- 新增手动 Daemon 重连、会话退出码和 PTY 流诊断、输出缺口检测与回放截断提示。
+- Windows 新增 Git Bash，本机未安装时不会转到 WSL；Linux/macOS 使用本机 Bash。
+
+### English
+
+- Added user JSON/CSS themes, appearance refresh, shortcut recording, conflict checks, and persistence.
+- Added nested terminal panes and layout restore with one GUI controller per managed session; closing a pane only detaches its view.
+- Improved selection copy for full-screen applications, added toolbar/context-menu controls and read-only copy mode, and added a Windows native clipboard fallback.
+- Added manual daemon reconnection, session exit/PTY stream diagnostics, output gap detection, and bounded replay warnings.
+- Added Windows Git Bash without falling back to WSL when it is unavailable, plus native Bash on Unix.
+
+画面恢复仍受限于最近 256 KiB 原始输出，不能保证还原完整的全屏终端状态。用户报告的 SSH 闲置断联尚未在现场复现。Windows 原生 WebView2 跨应用剪贴板和部分平台 GUI 矩阵仍未完成验收，详见[验证记录](docs/development-validation.md)。
+
+Recovery still uses the latest 256 KiB of raw output and cannot reproduce every full-screen terminal state. The reported idle SSH disconnect still needs field reproduction. Some native WebView2 clipboard and platform GUI checks remain unverified; see the [validation report](docs/development-validation.md).
+
+**下载 / Downloads**（Windows 未签名；Linux 主要针对 Ubuntu 24.04）:
+
+- [Windows x64 EXE](https://github.com/xswt442-cmd/DiggerTerm/releases/download/v0.0.3/DiggerTerm-v0.0.3-windows-amd64.exe)
+- [Linux x86_64 AppImage](https://github.com/xswt442-cmd/DiggerTerm/releases/download/v0.0.3/DiggerTerm-v0.0.3-linux-x86_64.AppImage)
+- [Ubuntu/Debian amd64 DEB](https://github.com/xswt442-cmd/DiggerTerm/releases/download/v0.0.3/DiggerTerm-v0.0.3-linux-amd64.deb)
+- [SHA256SUMS](https://github.com/xswt442-cmd/DiggerTerm/releases/download/v0.0.3/SHA256SUMS)
 
 ## [0.0.2] - 2026-10-15
 
@@ -61,6 +82,7 @@ First public preview, released as a Windows x64 portable archive.
 - Sessions are not guaranteed to recover from daemon termination or an OS shutdown; raw-output replay is not a full screen-state snapshot.
 - No fully tested Linux/macOS desktop builds or release packages.
 
-[Unreleased]: https://github.com/xswt442-cmd/DiggerTerm/compare/v0.0.2...dev
+[Unreleased]: https://github.com/xswt442-cmd/DiggerTerm/compare/v0.0.3...dev
+[0.0.3]: https://github.com/xswt442-cmd/DiggerTerm/compare/v0.0.2...v0.0.3
 [0.0.2]: https://github.com/xswt442-cmd/DiggerTerm/compare/v0.0.1...v0.0.2
 [0.0.1]: https://github.com/xswt442-cmd/DiggerTerm/releases/tag/v0.0.1
