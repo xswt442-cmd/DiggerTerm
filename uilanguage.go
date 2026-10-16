@@ -7,6 +7,7 @@ type trayLanguageLabels struct {
 	show    string
 	quit    string
 	stop    string
+	stopAll string
 }
 
 func trayLabelsFor(locale string) trayLanguageLabels {
@@ -15,13 +16,15 @@ func trayLabelsFor(locale string) trayLanguageLabels {
 			tooltip: "DiggerTerm · 终端工作区",
 			show:    "显示 DiggerTerm",
 			quit:    "仅退出 DiggerTerm",
-			stop:    "停止所有会话并退出",
+			stop:    "停止空闲后台服务并退出",
+			stopAll: "停止所有会话并退出",
 		}
 	}
 	return trayLanguageLabels{
 		tooltip: "DiggerTerm · terminal workspace",
 		show:    "Show DiggerTerm",
 		quit:    "Quit DiggerTerm",
-		stop:    "Stop all sessions and quit",
+		stop:    "Stop idle background service and quit",
+		stopAll: "Stop all sessions and quit",
 	}
 }

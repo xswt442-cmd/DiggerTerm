@@ -109,6 +109,16 @@ func runGUI() {
 		}
 		app.Quit()
 	})
+	stopAllItem := menu.Add(trayLabelsFor("en").stopAll)
+	stopAllItem.OnClick(func(_ *application.Context) {
+		if err := sessions.stopAllSessionsAndDaemon(); err != nil {
+			window.Show()
+			window.Focus()
+			app.Event.Emit("terminal:quit-blocked", err.Error())
+			return
+		}
+		app.Quit()
+	})
 	tray.SetMenu(menu)
 	// MenuItem.SetLabel updates the native Windows/Linux/macOS menu in place.
 	// Do the update on Wails' main thread; tooltip dispatches there itself.
@@ -118,6 +128,7 @@ func runGUI() {
 			showItem.SetLabel(labels.show)
 			quitItem.SetLabel(labels.quit)
 			stopItem.SetLabel(labels.stop)
+			stopAllItem.SetLabel(labels.stopAll)
 		})
 		tray.SetTooltip(labels.tooltip)
 	}

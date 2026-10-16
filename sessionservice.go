@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"sync"
+	"time"
 
 	"github.com/wailsapp/wails/v3/pkg/application"
 	"github.com/xswt442-cmd/DiggerTerm/internal/daemon"
@@ -150,6 +151,64 @@ func (s *SessionService) stopDaemon() error {
 		return err
 	}
 	return client.Stop()
+}
+
+// stopAllSessionsAndDaemon ends only sessions returned by the daemon's
+// managed-session list. The daemon still enforces its running-session stop
+// guard, so sessions created concurrently cannot be orphaned by this action.
+func (s *SessionService) stopAllSessionsAndDaemon() error {
+	client, err := s.backend()
+	if err != nil {
+		return err
+	}
+
+	managed, err := client.List()
+	if err != nil {
+		return fmt.Errorf("list managed sessions: %w", err)
+	}
+	targets := make(map[string]struct{}, len(managed))
+	var terminationErrors []error
+	for _, info := range managed {
+		if info.Status != "running" {
+			continue
+		}
+		targets[info.ID] = struct{}{}
+		if err := client.Terminate(info.ID); err != nil {
+			terminationErrors = append(terminationErrors, fmt.Errorf("terminate managed session %s: %w", info.ID, err))
+		}
+	}
+
+	deadline := time.NewTimer(15 * time.Second)
+	defer deadline.Stop()
+	ticker := time.NewTicker(50 * time.Millisecond)
+	defer ticker.Stop()
+	for {
+		current, err := client.List()
+		if err != nil {
+			return fmt.Errorf("wait for managed sessions to exit: %w", err)
+		}
+		active := false
+		for _, info := range current {
+			if _, target := targets[info.ID]; target && info.Status == "running" {
+				active = true
+				break
+			}
+		}
+		if !active {
+			if err := client.Stop(); err != nil {
+				return fmt.Errorf("stop daemon after managed sessions exited: %w", err)
+			}
+			return nil
+		}
+
+		select {
+		case <-ticker.C:
+		case <-deadline.C:
+			return errors.Join(append([]error{
+				errors.New("timed out waiting for managed DiggerTerm sessions to exit"),
+			}, terminationErrors...)...)
+		}
+	}
 }
 
 func (s *SessionService) Profiles() ([]session.Profile, error) {

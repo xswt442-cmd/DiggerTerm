@@ -5,6 +5,9 @@ Changes are recorded in a format inspired by [Keep a Changelog](https://keepacha
 
 ## [Unreleased] / 未发布
 
+- 托盘菜单区分“停止空闲后台服务并退出”和“停止所有会话并退出”；批量操作只终止 Daemon 管理的会话，并等待退出后再停止 Daemon。
+- Tray actions distinguish stopping an idle daemon from explicitly terminating managed sessions; the daemon is stopped only after those sessions exit.
+
 ## [0.0.4] - 2026-10-16
 
 ### 简体中文
