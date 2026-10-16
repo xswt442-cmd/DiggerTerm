@@ -1,12 +1,51 @@
 package daemon
 
 import (
+	"context"
 	"errors"
 	"fmt"
+	"time"
 
-	"github.com/xswt442-cmd/DiggerTerm/internal/observe"
 	"github.com/xswt442-cmd/DiggerTerm/internal/session"
 )
+
+const observeTimeout = 40 * time.Second
+
+var errObserveInProgress = errors.New("process scan already in progress")
+
+// startObserve keeps a slow, read-only inventory scan off the peer's request
+// reader. A single server-wide slot bounds subprocesses and refresh pileup.
+func (s *Server) startObserve(p *peer, req request) {
+	select {
+	case s.observeSlots <- struct{}{}:
+	default:
+		p.publish(response(req.ID, nil, errObserveInProgress))
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), observeTimeout)
+	go func() {
+		defer cancel()
+		defer func() { <-s.observeSlots }()
+
+		go func() {
+			select {
+			case <-p.done:
+				cancel()
+			case <-ctx.Done():
+			}
+		}()
+
+		owned := make([]int, 0)
+		for _, managed := range s.manager.List() {
+			if managed.Status == "running" && managed.PID > 0 {
+				owned = append(owned, managed.PID)
+			}
+		}
+		snapshot, err := s.observeScan(ctx, owned)
+		p.publish(response(req.ID, snapshot, err))
+	}()
+}
 
 func isSessionQueuedMethod(method string) bool {
 	switch method {
@@ -82,17 +121,6 @@ func (s *Server) dispatch(p *peer, req request) message {
 	case "snapshot":
 		reply, err := s.manager.Snapshot(req.SessionID)
 		return response(req.ID, reply, err)
-	case "observe":
-		// No target PID parameter and no control operation. Only report
-		// current-user metadata, excluding daemon-owned PTY process trees.
-		owned := make([]int, 0)
-		for _, managed := range s.manager.List() {
-			if managed.Status == "running" && managed.PID > 0 {
-				owned = append(owned, managed.PID)
-			}
-		}
-		snapshot, err := observe.Scan(owned)
-		return response(req.ID, snapshot, err)
 	case "terminate":
 		return response(req.ID, nil, s.manager.Terminate(req.SessionID))
 	case "forget":

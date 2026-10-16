@@ -2,12 +2,14 @@ package daemon
 
 import (
 	"bufio"
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"net"
 	"sync"
 
+	"github.com/xswt442-cmd/DiggerTerm/internal/observe"
 	"github.com/xswt442-cmd/DiggerTerm/internal/session"
 )
 
@@ -21,10 +23,15 @@ type Server struct {
 	stopping     bool
 	attachmentMu sync.Mutex
 	leases       map[string]*sessionLease
+	observeSlots chan struct{}
+	observeScan  func(context.Context, []int) (observe.Snapshot, error)
 }
 
 func NewServer(listener net.Listener) *Server {
-	s := &Server{listener: listener, peers: make(map[*peer]struct{}), leases: make(map[string]*sessionLease)}
+	s := &Server{
+		listener: listener, peers: make(map[*peer]struct{}), leases: make(map[string]*sessionLease),
+		observeSlots: make(chan struct{}, 1), observeScan: observe.ScanContext,
+	}
 	s.manager = session.NewManager(
 		func(output session.Output) { s.broadcast("terminal:output", output) },
 		func(info session.Info) { s.broadcast("terminal:exit", info) },
@@ -147,6 +154,10 @@ func (s *Server) servePeer(p *peer) {
 			if !p.enqueueSessionRequest(s, req) {
 				break
 			}
+			continue
+		}
+		if req.Method == "observe" {
+			s.startObserve(p, req)
 			continue
 		}
 		reply := s.dispatch(p, req)

@@ -3,6 +3,7 @@
 package observe
 
 import (
+	"context"
 	"fmt"
 	"sort"
 	"strings"
@@ -34,7 +35,16 @@ type Snapshot struct {
 // Scan never opens PTY handles and never reads process command lines,
 // environments, terminal contents, or other private process memory.
 func Scan(ownedPIDs []int) (Snapshot, error) {
-	rows, supported, err := platformSnapshot()
+	return ScanContext(context.Background(), ownedPIDs)
+}
+
+// ScanContext inventories process metadata and stops when its caller cancels.
+// Platform subprocesses, including WSL scans, inherit this context.
+func ScanContext(ctx context.Context, ownedPIDs []int) (Snapshot, error) {
+	if err := ctx.Err(); err != nil {
+		return Snapshot{}, err
+	}
+	rows, supported, err := platformSnapshot(ctx)
 	if err != nil {
 		return Snapshot{}, err
 	}
@@ -52,7 +62,10 @@ func Scan(ownedPIDs []int) (Snapshot, error) {
 	for i := range win {
 		win[i].Source = "windows"
 	}
-	wsl, wslClipped, wslNote := platformWSLSnapshot()
+	wsl, wslClipped, wslNote := platformWSLSnapshotContext(ctx)
+	if err := ctx.Err(); err != nil {
+		return Snapshot{}, err
+	}
 	// The two OS namespaces can legitimately have the same numeric PID.
 	// Keep Windows and WSL processes in one explicitly scoped read-only list.
 	result.Processes = mergeObserved(win, wsl, maxObserved)
