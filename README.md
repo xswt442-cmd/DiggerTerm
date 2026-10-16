@@ -40,7 +40,7 @@
 
 支持用户主题：将 [示例 JSON/CSS](examples/themes/) 复制到当前用户主目录下的 `DiggerTerm/`，在“设置 → 外观”刷新并选择。外观页显示实际目录，并可直接打开该目录。主题名称读取 JSON 的 `name`；`custom.css` 提供可关闭的全局覆盖。快捷键配置也保存在该目录的 `keybindings.json` 中。
 
-Windows 需要 WebView2，安装包尚未签名。Linux 主要针对 Ubuntu 24.04 构建，其他发行版兼容性待验证。会话不保证在 Daemon 崩溃或系统重启后存活。
+Windows 需要 WebView2，安装包尚未签名。Linux 安装包基于 Ubuntu 24.04 构建，其他发行版可能需要相应的 GTK4、WebKitGTK 6 等系统依赖。会话不保证在 Daemon 崩溃或系统重启后存活。
 
 会话设置提供手动重连与退出诊断。新功能需要配套版本的 Daemon；更新时，先完成已有会话，再停止旧 Daemon 并打开新版应用。重新连接时会恢复最近的终端输出，长时间运行的全屏界面可能不完整。
 
