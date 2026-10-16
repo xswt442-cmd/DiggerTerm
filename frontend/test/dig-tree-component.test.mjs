@@ -87,6 +87,7 @@ try {
 
   function mountTree(initialGroups) {
     const groups = ref(initialGroups)
+    const expansionPreferences = ref({})
     const selected = []
     const App = {
       setup: () => () => h(DigTree, {
@@ -96,13 +97,15 @@ try {
         locale: 'en',
         label: 'Dig observed processes',
         kindLabel: kind => kind,
+        expansionPreferences: expansionPreferences.value,
         onSelect: process => selected.push(process.key),
+        onToggle: (key, expanded) => { expansionPreferences.value[key] = expanded },
       }),
     }
     const renderer = createRenderer(makeHost())
     const root = makeHost().createElement('root')
     renderer.createApp(App).mount(root)
-    return { root, groups, selected }
+    return { root, groups, selected, expansionPreferences }
   }
 
   function walk(node, visit) {
@@ -169,6 +172,34 @@ try {
     assert.equal(findByClass(mounted.root, 'dig-select', 'child-new-identity').length, 1)
   })
 
+  test('manual fold survives a cross-branch search that unmounts and restores the node', async () => {
+    const { buildProcessTree, filterProcessTree } = await import(treeURL)
+    const full = buildProcessTree([
+      process('root-a', 50, 0), process('branch-a', 51, 50), process('match-a', 52, 51),
+      process('root-b', 60, 0), process('branch-b', 61, 60), process('match-b', 62, 61),
+    ])
+    const mounted = mountTree(full)
+    const toggleFor = name => findByClass(mounted.root, 'dig-row')
+      .find(row => contentText(row).includes(name))?.children.find(child => child.props.class === 'dig-toggle')
+    await click(toggleFor('branch-b'))
+    assert.equal(findByClass(mounted.root, 'dig-select', 'match-b').length, 0)
+
+    mounted.groups.value = filterProcessTree(full, row => row.key === 'match-a')
+      .map(group => ({ ...group, expandFilteredNodes: true }))
+    await nextTick()
+    assert.equal(findByClass(mounted.root, 'dig-select', 'branch-b').length, 0)
+
+    mounted.groups.value = filterProcessTree(full, row => row.key === 'match-b')
+      .map(group => ({ ...group, expandFilteredNodes: true }))
+    await nextTick()
+    assert.equal(findByClass(mounted.root, 'dig-select', 'match-b').length, 1)
+
+    mounted.groups.value = full
+    await nextTick()
+    assert.equal(findByClass(mounted.root, 'dig-select', 'match-b').length, 0)
+    assert.equal(mounted.expansionPreferences.value['branch-b'], false)
+  })
+
   test('tree uses labeled navigation, native keyboard buttons, visible focus styling, and reports selection', async () => {
     const { buildProcessTree } = await import(treeURL)
     const mounted = mountTree(buildProcessTree([process('shell', 30, 0), process('agent', 31, 30)]))
@@ -197,6 +228,7 @@ try {
       ],
     })
     await dig.refresh()
+    dig.setExpanded('shell', false)
     assert.equal(dig.filteredGroups.value[0].expandFilteredNodes, false)
     query.value = 'agent'
     await nextTick()
@@ -207,6 +239,14 @@ try {
     dig.kindFilter.value = 'descendant'
     await nextTick()
     assert.equal(dig.filteredGroups.value[0].expandFilteredNodes, true)
+
+    observeModule.setResponse({
+      supported: true,
+      processes: [{ ...process('replacement-shell', 40, 0), source: 'windows' }],
+    })
+    await dig.refresh()
+    assert.equal(dig.expansionPreferences.value.shell, undefined)
+    assert.equal(dig.expansionPreferences.value['replacement-shell'], undefined)
   })
 
   test('useDig keeps a vanished selection stale and does not replace the last good snapshot on failure', async () => {

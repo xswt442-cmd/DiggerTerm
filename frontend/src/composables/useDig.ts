@@ -40,6 +40,7 @@ export function useDig(options: UseDigOptions) {
   const sourceFilter = ref('all')
   const kindFilter = ref('all')
   const distributionFilter = ref('all')
+  const expansionPreferences = ref<Record<string, boolean>>({})
 
   const processes = computed<Process[]>(() => snapshot.value?.processes ?? [])
   const groups = computed(() => buildProcessTree(processes.value))
@@ -66,7 +67,17 @@ export function useDig(options: UseDigOptions) {
     if (loading.value || !options.observeEnabled.value) return
     loading.value = true
     try {
-      snapshot.value = await Observe()
+      const nextSnapshot = await Observe()
+      const currentKeys = new Set<string>()
+      const collectKeys = (node: ProcessNode) => {
+        currentKeys.add(node.key)
+        node.children.forEach(collectKeys)
+      }
+      buildProcessTree(nextSnapshot.processes ?? []).forEach(group => group.roots.forEach(collectKeys))
+      for (const key of Object.keys(expansionPreferences.value)) {
+        if (!currentKeys.has(key)) delete expansionPreferences.value[key]
+      }
+      snapshot.value = nextSnapshot
       error.value = ''
     } catch (err) {
       const message = String(err)
@@ -86,9 +97,14 @@ export function useDig(options: UseDigOptions) {
     options.selectedExternalKey.value = null
   }
 
+  function setExpanded(key: string, expanded: boolean) {
+    expansionPreferences.value[key] = expanded
+  }
+
   return {
     snapshot, error, loading, processes, groups, distributions,
     sourceFilter, kindFilter, distributionFilter, filteredGroups,
+    expansionPreferences, setExpanded,
     activeProcess, activePath, activeNode, classificationLabel,
     refresh, selectProcess, clearSelection,
   }

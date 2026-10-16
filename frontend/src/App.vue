@@ -146,6 +146,7 @@ const {
   processes: observedProcesses, distributions: observedDistributions,
   sourceFilter: observedSourceFilter, kindFilter: observedKindFilter,
   distributionFilter: observedDistroFilter, filteredGroups: filteredObservedGroups,
+  expansionPreferences: observedExpansionPreferences, setExpanded: setObservedExpanded,
   activeProcess: activeObserved, activePath: activeObservedPath, activeNode: activeObservedNode,
   classificationLabel,
 } = dig
@@ -472,7 +473,8 @@ onBeforeUnmount(() => {
           </p>
           <DigTree v-else :groups="filteredObservedGroups" :selected-key="selectedExternalKey"
             :show-pid="preferences.showPid" :locale="locale" :label="`Dig ${t('observed')}`"
-            :kind-label="kindLabel" @select="selectObserved" />
+            :kind-label="kindLabel" :expansion-preferences="observedExpansionPreferences"
+            @select="selectObserved" @toggle="setObservedExpanded" />
           <div v-if="externalSnapshot?.truncated" class="pane-note">{{ t('limited') }}</div>
         </section>
       </div>

@@ -9,9 +9,11 @@ defineProps<{
   locale: string
   label: string
   kindLabel: (kind: string) => string
+  expansionPreferences: Record<string, boolean>
 }>()
 
-const emit = defineEmits<{ select: [process: ProcessNode] }>()
+const emit = defineEmits<{ select: [process: ProcessNode]; toggle: [key: string, expanded: boolean] }>()
+const forwardToggle = (key: string, expanded: boolean) => emit('toggle', key, expanded)
 </script>
 
 <template>
@@ -21,8 +23,9 @@ const emit = defineEmits<{ select: [process: ProcessNode] }>()
       <ul>
         <DigTreeNode v-for="node in group.roots" :key="node.key" :node="node"
           :selected-key="selectedKey" :show-pid="showPid" :locale="locale" :kind-label="kindLabel"
+          :expansion-preferences="expansionPreferences"
           :expand-filtered-nodes="group.expandFilteredNodes ?? false"
-          @select="emit('select', $event)" />
+          @select="emit('select', $event)" @toggle="forwardToggle" />
       </ul>
     </section>
   </nav>

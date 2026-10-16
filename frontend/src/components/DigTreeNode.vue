@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed } from 'vue'
 import type { ProcessNode } from '../dig/processTree'
 import { classificationLabel } from '../dig/processTree'
 
@@ -9,11 +9,13 @@ const props = defineProps<{
   showPid: boolean
   locale: string
   kindLabel: (kind: string) => string
+  expansionPreferences: Record<string, boolean>
   expandFilteredNodes: boolean
 }>()
 
-const emit = defineEmits<{ select: [process: ProcessNode] }>()
-const userExpanded = ref(props.node.children.length > 0)
+const emit = defineEmits<{ select: [process: ProcessNode]; toggle: [key: string, expanded: boolean] }>()
+const forwardToggle = (key: string, value: boolean) => emit('toggle', key, value)
+const userExpanded = computed(() => props.expansionPreferences[props.node.key] ?? props.node.children.length > 0)
 const expanded = computed(() => props.expandFilteredNodes && props.node.children.length > 0
   ? true
   : userExpanded.value)
@@ -29,7 +31,7 @@ const expanded = computed(() => props.expandFilteredNodes && props.node.children
           : expanded
           ? (locale === 'zh' ? '折叠子进程' : 'Collapse child processes')
           : (locale === 'zh' ? '展开子进程' : 'Expand child processes')"
-        :aria-expanded="expanded" @click="userExpanded = !userExpanded">{{ expanded ? '▾' : '▸' }}</button>
+        :aria-expanded="expanded" @click="emit('toggle', node.key, !userExpanded)">{{ expanded ? '▾' : '▸' }}</button>
       <span v-else class="dig-toggle-space" aria-hidden="true" />
       <button type="button" class="dig-select" :aria-pressed="selectedKey === node.key"
         @click="emit('select', node)">
@@ -40,8 +42,9 @@ const expanded = computed(() => props.expandFilteredNodes && props.node.children
     <ul v-if="expanded && node.children.length">
       <DigTreeNode v-for="child in node.children" :key="child.key" :node="child"
         :selected-key="selectedKey" :show-pid="showPid" :locale="locale" :kind-label="kindLabel"
+        :expansion-preferences="expansionPreferences"
         :expand-filtered-nodes="expandFilteredNodes"
-        @select="emit('select', $event)" />
+        @select="emit('select', $event)" @toggle="forwardToggle" />
     </ul>
   </li>
 </template>
