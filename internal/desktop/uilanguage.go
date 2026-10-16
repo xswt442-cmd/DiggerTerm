@@ -1,4 +1,4 @@
-package main
+package desktop
 
 // trayLanguageLabels are native menu strings, separate from daemon/session
 // state. The GUI tells the host its effective UI locale after WebView loads.

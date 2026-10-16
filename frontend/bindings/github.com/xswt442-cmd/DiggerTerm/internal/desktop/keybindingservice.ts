@@ -6,20 +6,20 @@
 import { Call as $Call, CancellablePromise as $CancellablePromise } from "@wailsio/runtime";
 
 export function KeybindingsPath(): $CancellablePromise<string> {
-    return $Call.ByID(3001623045);
+    return $Call.ByID(80369506);
 }
 
 /**
  * OpenKeybindings opens only the fixed GUI configuration file on explicit request.
  */
 export function OpenKeybindings(): $CancellablePromise<void> {
-    return $Call.ByID(2495163194);
+    return $Call.ByID(177544305);
 }
 
 export function ReadKeybindings(): $CancellablePromise<string> {
-    return $Call.ByID(1801036558);
+    return $Call.ByID(2297873341);
 }
 
 export function SaveKeybindings(content: string): $CancellablePromise<void> {
-    return $Call.ByID(172734285, content);
+    return $Call.ByID(3048970074, content);
 }

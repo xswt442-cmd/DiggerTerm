@@ -11,13 +11,15 @@ import packageInfo from '../package.json'
 import { mergeSessions } from './sessionState'
 import TerminalPanel from './components/TerminalPanel.vue'
 import PaneWorkspace from './components/PaneWorkspace.vue'
-import { assignSession, closeLeaf, emptyLayout, focusPane, leaves, resizeSplit, sanitizeLayout, splitLeaf, type SplitDirection } from './workspaceLayout'
+import { resizeSplit } from './workspaceLayout'
+import { useWorkspace } from './composables/useWorkspace'
 import KeybindingsSettings from './components/KeybindingsSettings.vue'
+import SettingsDialog, { type SettingsTab } from './components/SettingsDialog.vue'
 import { defaultBindings, matchBinding, parseBindings } from './keybindings'
-import { KeybindingsPath, ReadKeybindings } from '../bindings/github.com/xswt442-cmd/DiggerTerm/keybindingservice'
+import { KeybindingsPath, ReadKeybindings } from '../bindings/github.com/xswt442-cmd/DiggerTerm/internal/desktop/keybindingservice'
 import { themeRegistry, themeVariables, type ThemeOption } from './userThemes'
-import { ListThemes, OpenThemeDirectory } from '../bindings/github.com/xswt442-cmd/DiggerTerm/themeservice'
-import { Create, CreateLocal, CreateSSH, Forget, List, Observe, Profiles, Reconnect, Rename, SetUILanguage, SSHHosts, Terminate } from '../bindings/github.com/xswt442-cmd/DiggerTerm/sessionservice'
+import { ListThemes, OpenThemeDirectory } from '../bindings/github.com/xswt442-cmd/DiggerTerm/internal/desktop/themeservice'
+import { Create, CreateLocal, CreateSSH, Forget, List, Observe, Profiles, Reconnect, Rename, SetUILanguage, SSHHosts, Terminate } from '../bindings/github.com/xswt442-cmd/DiggerTerm/internal/desktop/sessionservice'
 import type { Info, Profile } from '../bindings/github.com/xswt442-cmd/DiggerTerm/internal/session/models'
 import type { Process as ObservedProcess, Snapshot as ObservedSnapshot } from '../bindings/github.com/xswt442-cmd/DiggerTerm/internal/observe/models'
 
@@ -58,7 +60,12 @@ const locale = computed(() => chosenLocale(preferences.value.language))
 const t = (key: TextKey, replacements?: Record<string, string | number>) => translate(locale.value, key, replacements)
 const kindLabel = (kind: string) => t(kind === 'terminal' ? 'kindTerminal' : kind === 'agent' ? 'kindAgent' : kind === 'descendant' ? 'kindDescendant' : 'kindOther')
 const settingsOpen = ref(false)
-const settingsTab = ref<'appearance' | 'terminal' | 'sessions' | 'observed' | 'keybindings' | 'help'>('appearance')
+const settingsTab = ref<SettingsTab>('appearance')
+const settingsTabLabels = computed<Record<SettingsTab, string>>(() => ({
+  appearance: t('appearanceTab'), terminal: t('terminalTab'), sessions: t('sessionTab'),
+  observed: t('monitorTab'), keybindings: locale.value === 'zh' ? '快捷键' : 'Keys',
+  help: locale.value === 'zh' ? '帮助' : 'Help',
+}))
 const appVersion = packageInfo.version
 const updateStatus = ref('')
 const updateAvailable = ref(false)
@@ -244,6 +251,16 @@ watch(() => preferences.value.defaultProfile, (value) => {
   if (value !== 'auto' && profiles.value.some(p => p.id === value)) profileId.value = value
 })
 const sessions = ref<Info[]>([])
+const selectedExternalKey = ref<string | null>(null)
+const errorMessage = ref('')
+function reportError(err: unknown) {
+  errorMessage.value = err instanceof Error ? err.message : String(err)
+}
+const {
+  layout, paneLeaves, selectedId, restoreWorkspace, isReady: workspaceReady,
+  splitPane, closePane, focusNextPane, focusWorkspacePane, changePaneSession,
+  sanitizeForSessions, selectManagedSession,
+} = useWorkspace(sessions, selectedExternalKey, reportError)
 const daemonConnected = ref(false)
 const reconnecting = ref(false)
 const connectionRevision = ref(0)
@@ -254,8 +271,8 @@ async function reconnectDaemon() {
   try {
     const existing = await Reconnect()
     sessions.value = mergeSessions(sessions.value, existing ?? [], true)
-    if (!layoutReady) restoreWorkspace(sessions.value)
-    else layout.value = sanitizeLayout(layout.value, new Set(sessions.value.filter(session => session.status === 'running').map(session => session.id)))
+    if (!workspaceReady()) restoreWorkspace(sessions.value)
+    else sanitizeForSessions(sessions.value.filter(session => session.status === 'running'))
     connectionRevision.value++
     daemonConnected.value = true
     errorMessage.value = ''
@@ -267,43 +284,6 @@ async function reconnectDaemon() {
   finally { reconnecting.value = false }
 }
 const profiles = ref<Profile[]>([])
-const layout = ref(emptyLayout())
-const paneLeaves = computed(() => leaves(layout.value))
-const selectedId = computed(() => selectedExternalKey.value ? null : paneLeaves.value.find(pane => pane.paneId === layout.value.focusedPaneId)?.sessionId ?? null)
-let layoutReady = false
-const layoutStorageKey = 'diggerterm:workspace:v1'
-watch(layout, value => {
-  if (!layoutReady) return
-  try { localStorage.setItem(layoutStorageKey, JSON.stringify(value)) }
-  catch (error) { reportError(error) }
-}, { deep: true })
-function restoreWorkspace(existing: Info[]) {
-  let saved: unknown
-  try { saved = JSON.parse(localStorage.getItem(layoutStorageKey) || 'null') }
-  catch (error) { reportError(error) }
-  // Numeric IDs from older daemons cannot safely identify persisted sessions.
-  const valid = new Set(existing.filter(session => session.status === 'running' && /^[A-Z2-7]{26,}-[0-9]+$/.test(session.id)).map(session => session.id))
-  layout.value = sanitizeLayout(saved, valid)
-  if (!saved && existing.some(session => session.status === 'running')) {
-    layout.value = assignSession(layout.value, layout.value.focusedPaneId, existing.find(session => session.status === 'running')!.id)
-  }
-  layoutReady = true
-}
-function splitPane(direction: SplitDirection) {
-  if (selectedExternalKey.value) return
-  layout.value = splitLeaf(layout.value, layout.value.focusedPaneId, direction)
-}
-function closePane(paneId: string) { layout.value = closeLeaf(layout.value, paneId) }
-function focusNextPane() {
-  const index = paneLeaves.value.findIndex(pane => pane.paneId === layout.value.focusedPaneId)
-  layout.value = focusPane(layout.value, paneLeaves.value[(index + 1) % paneLeaves.value.length]!.paneId)
-}
-function changePaneSession(paneId: string, event: Event) {
-  const select = event.target as HTMLSelectElement
-  const id = select.value || null
-  if (id === null || sessions.value.some(session => session.id === id)) layout.value = assignSession(layout.value, paneId, id)
-  select.value = paneLeaves.value.find(pane => pane.paneId === paneId)?.sessionId ?? ''
-}
 const sessionById = computed(() => new Map(sessions.value.map(session => [session.id, session])))
 const profileId = ref('')
 const sshTarget = ref('')
@@ -315,11 +295,9 @@ const renameDraft = ref('')
 const renameInput = ref<HTMLInputElement | null>(null)
 const renaming = ref(false)
 const creating = ref(false)
-const errorMessage = ref('')
 const externalSnapshot = ref<ObservedSnapshot | null>(null)
 const externalError = ref('')
 const refreshingExternal = ref(false)
-const selectedExternalKey = ref<string | null>(null)
 const observedProcesses = computed(() => externalSnapshot.value?.processes ?? [])
 const filteredSessions = computed(() => sessions.value.filter((s) => (s.name + ' ' + s.id + ' ' + s.profile + ' ' + s.pid).toLowerCase().includes(query.value.trim().toLowerCase())))
 const filteredObserved = computed(() => observedProcesses.value.filter((p) => (p.name + ' ' + p.kind + ' ' + p.pid + ' ' + p.distribution).toLowerCase().includes(query.value.trim().toLowerCase())))
@@ -338,15 +316,10 @@ let offQuitBlocked: (() => void) | undefined
 let offDaemonDisconnected: (() => void) | undefined
 let offState: (() => void) | undefined
 
-function reportError(err: unknown) {
-  errorMessage.value = err instanceof Error ? err.message : String(err)
-}
-
 // Observed PIDs are display-only. They are never sent to Write/Terminate.
 function selectManaged(id: string) {
   if (!sessions.value.some(session => session.id === id)) return
-  selectedExternalKey.value = null
-  layout.value = assignSession(layout.value, layout.value.focusedPaneId, id)
+  selectManagedSession(id)
 }
 
 function selectObserved(process: ObservedProcess) {
@@ -447,7 +420,7 @@ async function removeExited(info: Info) {
   try {
     await Forget(info.id)
     sessions.value = sessions.value.filter((s) => s.id !== info.id)
-    layout.value = sanitizeLayout(layout.value, new Set(sessions.value.map(session => session.id)))
+    sanitizeForSessions(sessions.value)
   } catch (err) {
     reportError(err)
   }
@@ -671,22 +644,8 @@ onBeforeUnmount(() => {
         </button>
       </footer>
 
-      <div v-if="settingsOpen" class="settings-scrim" @click="settingsOpen = false"></div>
-      <section v-if="settingsOpen" class="settings-sheet" role="dialog" aria-modal="true"
-        :aria-label="t('settingsTitle')">
-        <header class="settings-head">
-          <strong>{{ t('settingsTitle') }}</strong>
-          <button type="button" :title="t('close')" :aria-label="t('close')" @click="settingsOpen = false">×</button>
-        </header>
-        <div class="settings-tabs" role="tablist" :aria-label="t('settingsTitle')">
-          <button v-for="tab in (['appearance', 'terminal', 'sessions', 'observed', 'keybindings', 'help'] as const)"
-            :key="tab" type="button" role="tab" :aria-selected="settingsTab === tab"
-            :class="{ chosen: settingsTab === tab }"
-            @click="settingsTab = tab">
-            {{ tab === 'keybindings' ? (locale === 'zh' ? '快捷键' : 'Keys') : tab === 'help' ? (locale === 'zh' ? '帮助' : 'Help') : t(tab === 'appearance' ? 'appearanceTab' : tab === 'terminal' ? 'terminalTab' : tab === 'sessions' ? 'sessionTab' : 'monitorTab') }}
-          </button>
-        </div>
-        <div class="settings-scroll" role="tabpanel">
+      <SettingsDialog v-model:open="settingsOpen" v-model:tab="settingsTab"
+        :title="t('settingsTitle')" :close-label="t('close')" :tab-labels="settingsTabLabels">
           <template v-if="settingsTab === 'appearance'">
             <div class="setting-block">
               <label class="setting-label">{{ t('colors') }}</label>
@@ -859,8 +818,7 @@ onBeforeUnmount(() => {
           <button v-if="!['keybindings', 'help'].includes(settingsTab)" type="button" class="reset-layout compact-reset" @click="resetSection">
             {{ t(settingsTab === 'appearance' ? 'resetAppearance' : settingsTab === 'terminal' ? 'resetTerminal' : settingsTab === 'sessions' ? 'resetSessions' : 'resetObserved') }}
           </button>
-        </div>
-      </section>
+      </SettingsDialog>
     </aside>
 
     <div class="sidebar-resizer"
@@ -893,7 +851,7 @@ onBeforeUnmount(() => {
       </div>
       <div class="terminal-area">
         <PaneWorkspace v-show="!selectedExternalKey" :layout="layout"
-          @focus="layout = focusPane(layout, $event)" @resize="(id, ratio) => layout = resizeSplit(layout, id, ratio)">
+          @focus="focusWorkspacePane" @resize="(id, ratio) => layout = resizeSplit(layout, id, ratio)">
           <template #default="{ pane, focused }">
             <header class="workspace-pane-head">
               <select :value="pane.sessionId ?? ''" :aria-label="locale === 'zh' ? '选择托管会话' : 'Choose managed session'"
