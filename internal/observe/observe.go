@@ -12,14 +12,15 @@ import (
 const maxObserved = 160
 
 type Process struct {
-	Key          string `json:"key"` // PID + start time; not an authorization token
-	PID          int    `json:"pid"`
-	ParentPID    int    `json:"parentPid"`
-	Name         string `json:"name"`
-	Kind         string `json:"kind"`         // terminal, agent, or descendant
-	Source       string `json:"source"`       // windows or wsl
-	Distribution string `json:"distribution"` // only populated for WSL
-	StartedAt    string `json:"startedAt"`    // UTC RFC3339, known process start time
+	Key                 string `json:"key"` // Namespace + PID + start time; not an authorization token
+	PID                 int    `json:"pid"`
+	ParentPID           int    `json:"parentPid"`
+	Name                string `json:"name"`
+	Kind                string `json:"kind"`                          // terminal, agent, or descendant
+	ClassificationBasis string `json:"classificationBasis,omitempty"` // name or ancestor
+	Source              string `json:"source"`                        // windows or wsl
+	Distribution        string `json:"distribution"`                  // only populated for WSL
+	StartedAt           string `json:"startedAt"`                     // UTC RFC3339, known process start time
 }
 
 type Snapshot struct {
@@ -156,13 +157,18 @@ func selectRelatedWithKind(rows []processRow, managed []int, limit int, classify
 		if kind == "" {
 			continue
 		}
+		basis := "name"
+		if kind == "descendant" {
+			basis = "ancestor"
+		}
 		processes = append(processes, Process{
-			Key:       fmt.Sprintf("%d-%d", row.pid, row.started.UnixNano()),
-			PID:       row.pid,
-			ParentPID: row.parentPID,
-			Name:      row.name,
-			Kind:      kind,
-			StartedAt: row.started.UTC().Format(time.RFC3339Nano),
+			Key:                 fmt.Sprintf("windows:%d:%d", row.pid, row.started.UnixNano()),
+			PID:                 row.pid,
+			ParentPID:           row.parentPID,
+			Name:                row.name,
+			Kind:                kind,
+			ClassificationBasis: basis,
+			StartedAt:           row.started.UTC().Format(time.RFC3339Nano),
 		})
 	}
 	// Prioritize explicitly recognized terminals/agents before descendants;

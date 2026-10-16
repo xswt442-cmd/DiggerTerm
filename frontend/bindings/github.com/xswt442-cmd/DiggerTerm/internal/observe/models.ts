@@ -3,7 +3,7 @@
 
 export interface Process {
     /**
-     * PID + start time; not an authorization token
+     * Namespace + PID + start time; not an authorization token
      */
     "key": string;
     "pid": number;
@@ -14,6 +14,11 @@ export interface Process {
      * terminal, agent, or descendant
      */
     "kind": string;
+
+    /**
+     * name or ancestor
+     */
+    "classificationBasis"?: string;
 
     /**
      * windows or wsl

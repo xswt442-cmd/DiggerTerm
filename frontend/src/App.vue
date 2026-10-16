@@ -15,13 +15,14 @@ import { resizeSplit } from './workspaceLayout'
 import { useWorkspace } from './composables/useWorkspace'
 import KeybindingsSettings from './components/KeybindingsSettings.vue'
 import SettingsDialog, { type SettingsTab } from './components/SettingsDialog.vue'
+import DigTree from './components/DigTree.vue'
+import { useDig } from './composables/useDig'
 import { defaultBindings, matchBinding, parseBindings } from './keybindings'
 import { KeybindingsPath, ReadKeybindings } from '../bindings/github.com/xswt442-cmd/DiggerTerm/internal/desktop/keybindingservice'
 import { themeRegistry, themeVariables, type ThemeOption } from './userThemes'
 import { ListThemes, OpenThemeDirectory } from '../bindings/github.com/xswt442-cmd/DiggerTerm/internal/desktop/themeservice'
-import { Create, CreateLocal, CreateSSH, Forget, List, Observe, Profiles, Reconnect, Rename, SetUILanguage, SSHHosts, Terminate } from '../bindings/github.com/xswt442-cmd/DiggerTerm/internal/desktop/sessionservice'
+import { Create, CreateLocal, CreateSSH, Forget, List, Profiles, Reconnect, Rename, SetUILanguage, SSHHosts, Terminate } from '../bindings/github.com/xswt442-cmd/DiggerTerm/internal/desktop/sessionservice'
 import type { Info, Profile } from '../bindings/github.com/xswt442-cmd/DiggerTerm/internal/session/models'
-import type { Process as ObservedProcess, Snapshot as ObservedSnapshot } from '../bindings/github.com/xswt442-cmd/DiggerTerm/internal/observe/models'
 
 const preferences = ref(readPreferences())
 const themeOptions = ref<ThemeOption[]>(themeRegistry([]))
@@ -295,13 +296,21 @@ const renameDraft = ref('')
 const renameInput = ref<HTMLInputElement | null>(null)
 const renaming = ref(false)
 const creating = ref(false)
-const externalSnapshot = ref<ObservedSnapshot | null>(null)
-const externalError = ref('')
-const refreshingExternal = ref(false)
-const observedProcesses = computed(() => externalSnapshot.value?.processes ?? [])
+const dig = useDig({
+  observeEnabled: computed(() => preferences.value.observeEnabled),
+  query,
+  selectedExternalKey,
+  observeFailedLabel: () => t('observeFailed'),
+})
+const {
+  snapshot: externalSnapshot, error: externalError, loading: refreshingExternal,
+  processes: observedProcesses, distributions: observedDistributions,
+  sourceFilter: observedSourceFilter, kindFilter: observedKindFilter,
+  distributionFilter: observedDistroFilter, filteredGroups: filteredObservedGroups,
+  activeProcess: activeObserved, activePath: activeObservedPath, activeNode: activeObservedNode,
+  classificationLabel,
+} = dig
 const filteredSessions = computed(() => sessions.value.filter((s) => (s.name + ' ' + s.id + ' ' + s.profile + ' ' + s.pid).toLowerCase().includes(query.value.trim().toLowerCase())))
-const filteredObserved = computed(() => observedProcesses.value.filter((p) => (p.name + ' ' + p.kind + ' ' + p.pid + ' ' + p.distribution).toLowerCase().includes(query.value.trim().toLowerCase())))
-const activeObserved = computed(() => observedProcesses.value.find((p) => p.key === selectedExternalKey.value))
 const activeSession = computed(() => sessions.value.find((s) => s.id === selectedId.value))
 function sessionStatus(session: Info): string {
   if (!daemonConnected.value) return locale.value === 'zh' ? 'Daemon 失联' : 'Daemon disconnected'
@@ -322,25 +331,8 @@ function selectManaged(id: string) {
   selectManagedSession(id)
 }
 
-function selectObserved(process: ObservedProcess) {
-  selectedExternalKey.value = process.key
-}
-
-async function refreshObserved() {
-  if (refreshingExternal.value || !preferences.value.observeEnabled) return
-  refreshingExternal.value = true
-  try {
-    externalSnapshot.value = await Observe()
-    externalError.value = ''
-  } catch (err) {
-    const message = String(err)
-    externalError.value = message.includes('unsupported daemon method')
-      ? 'Daemon needs updating. Finish your sessions, stop it, then reopen the app.'
-      : t('observeFailed') + ': ' + message
-  } finally {
-    refreshingExternal.value = false
-  }
-}
+const selectObserved = dig.selectProcess
+const refreshObserved = dig.refresh
 
 async function createSession() {
   if (!daemonConnected.value || !profileId.value || creating.value) return
@@ -607,30 +599,46 @@ onBeforeUnmount(() => {
 
         <section v-if="preferences.observeEnabled" class="observed-pane" :style="{ flex: (1 - preferences.managedRatio) + ' 1 0%' }">
           <div class="section-head external">
-            <span>{{ t('observed') }}</span>
+            <span>Dig · {{ t('observed') }}</span>
             <button type="button" class="refresh-action" :disabled="refreshingExternal"
               :title="t('refresh')" :aria-label="t('refresh')" @click="refreshObserved">
               {{ refreshingExternal ? '…' : '↻' }}
             </button>
           </div>
+          <div class="dig-filters">
+            <label>
+              <span class="visually-hidden">{{ locale === 'zh' ? '平台筛选' : 'Platform filter' }}</span>
+              <select v-model="observedSourceFilter">
+                <option value="all">{{ locale === 'zh' ? '全部平台' : 'All platforms' }}</option>
+                <option value="windows">Windows</option><option value="wsl">WSL</option>
+              </select>
+            </label>
+            <label>
+              <span class="visually-hidden">{{ locale === 'zh' ? '类型筛选' : 'Type filter' }}</span>
+              <select v-model="observedKindFilter">
+                <option value="all">{{ locale === 'zh' ? '全部类型' : 'All types' }}</option>
+                <option value="terminal">{{ kindLabel('terminal') }}</option>
+                <option value="agent">{{ kindLabel('agent') }}</option>
+                <option value="descendant">{{ kindLabel('descendant') }}</option>
+              </select>
+            </label>
+            <label v-if="observedDistributions.length">
+              <span class="visually-hidden">{{ locale === 'zh' ? 'WSL 发行版筛选' : 'WSL distribution filter' }}</span>
+              <select v-model="observedDistroFilter">
+                <option value="all">{{ locale === 'zh' ? '全部发行版' : 'All distributions' }}</option>
+                <option v-for="distro in observedDistributions" :key="distro" :value="distro">{{ distro }}</option>
+              </select>
+            </label>
+          </div>
           <p v-if="externalError" class="sidebar-empty observed-message" role="status">{{ externalError }}</p>
           <p v-else-if="externalSnapshot && !externalSnapshot.supported" class="sidebar-empty observed-message">{{ t('windowsOnly') }}</p>
           <p v-else-if="!externalSnapshot" class="sidebar-empty observed-message">{{ t('scanning') }}</p>
-          <p v-else-if="filteredObserved.length === 0" class="sidebar-empty observed-message">
+          <p v-else-if="filteredObservedGroups.length === 0" class="sidebar-empty observed-message">
             {{ t(query ? 'observedSearchNone' : 'noObserved') }}
           </p>
-          <nav class="observed-list" :aria-label="t('observed')">
-            <button v-for="process in filteredObserved" :key="process.key" type="button"
-              class="observed-row" :class="{ selected: selectedExternalKey === process.key }"
-              :aria-current="selectedExternalKey === process.key ? 'page' : undefined"
-              @click="selectObserved(process)">
-              <span class="session-name">
-                {{ process.name }}
-                <span class="observed-source">{{ process.source === 'wsl' ? process.distribution : 'WIN' }}</span>
-              </span>
-              <span class="session-meta">{{ kindLabel(process.kind) }}<span v-if="preferences.showPid"> · PID {{ process.pid }}</span></span>
-            </button>
-          </nav>
+          <DigTree v-else :groups="filteredObservedGroups" :selected-key="selectedExternalKey"
+            :show-pid="preferences.showPid" :locale="locale" :label="`Dig ${t('observed')}`"
+            :kind-label="kindLabel" @select="selectObserved" />
           <div v-if="externalSnapshot?.truncated" class="pane-note">{{ t('limited') }}</div>
         </section>
       </div>
@@ -880,18 +888,28 @@ onBeforeUnmount(() => {
           <template v-if="activeObserved">
             <div class="observed-kicker">{{ t('readOnly') }}</div>
             <h1>{{ activeObserved.name }}</h1>
+            <p v-if="externalError" class="observed-warning" role="status">{{ locale === 'zh' ? '最近一次扫描失败，以下信息来自上次成功扫描。' : 'The latest scan failed. Details below are from the last successful scan.' }}</p>
             <dl>
               <div><dt>{{ t('source') }}</dt><dd>{{ activeObserved.source === 'wsl' ? 'WSL · ' + activeObserved.distribution : 'Windows' }}</dd></div>
               <div><dt>{{ t('pid') }}</dt><dd>{{ activeObserved.pid }}{{ activeObserved.source === 'wsl' ? ' (Linux)' : '' }}</dd></div>
-              <div><dt>{{ t('parent') }}</dt><dd>{{ activeObserved.parentPid || t('unknown') }}</dd></div>
-              <div><dt>{{ t('kind') }}</dt><dd>{{ kindLabel(activeObserved.kind) }} ({{ t('inferred') }})</dd></div>
+              <div><dt>{{ t('parent') }}</dt><dd>{{ activeObserved.parentPid > 0 ? activeObserved.parentPid : (locale === 'zh' ? '无' : 'None') }}</dd></div>
+              <div><dt>{{ t('kind') }}</dt><dd>{{ kindLabel(activeObserved.kind) }} · {{ classificationLabel(activeObserved) === 'identified' ? (locale === 'zh' ? '按名称识别' : 'Identified by name') : classificationLabel(activeObserved) === 'inferred' ? (locale === 'zh' ? '根据父进程推断' : 'Inferred from parent process') : t('unknown') }}</dd></div>
               <div><dt>{{ t('started') }}</dt><dd>{{ new Date(activeObserved.startedAt).toLocaleString() }}</dd></div>
+              <div><dt>{{ locale === 'zh' ? '父进程链' : 'Parent chain' }}</dt><dd>
+                <span v-if="activeObservedPath.length > 1">{{ activeObservedPath.slice(0, -1).map(node => `${node.name} (PID ${node.pid})`).join(' › ') }}</span>
+                <span v-else-if="activeObservedNode?.parentMissing">{{ locale === 'zh' ? '父进程未显示' : 'Parent not shown' }}</span>
+                <span v-else-if="activeObserved.parentPid === 0">{{ locale === 'zh' ? '无' : 'None' }}</span>
+                <span v-else>{{ t('unknown') }}</span>
+              </dd></div>
+              <div v-if="externalSnapshot?.scannedAt"><dt>{{ locale === 'zh' ? '最近扫描' : 'Last scan' }}</dt><dd>{{ new Date(externalSnapshot.scannedAt).toLocaleString() }}</dd></div>
             </dl>
             <p>{{ t('readOnlyText') }}</p>
           </template>
           <template v-else>
-            <h1>{{ t('processGone') }}</h1>
+            <div class="observed-kicker">{{ t('readOnly') }}</div>
+            <h1>{{ locale === 'zh' ? '未在最新扫描中发现' : 'Not found in the latest scan' }}</h1>
             <p>{{ t('processGoneDetail') }}</p>
+            <button type="button" @click="selectedExternalKey = null">{{ locale === 'zh' ? '清除选择' : 'Clear selection' }}</button>
           </template>
         </div>
         <div v-if="sessions.length === 0 && !selectedExternalKey && paneLeaves.length === 1" class="empty-state">
@@ -951,9 +969,9 @@ button:focus-visible, input:focus-visible, select:focus-visible, [role="separato
 .ssh-connect small { color: var(--faint); font-size: calc(10px * var(--ui-font-scale)); line-height: 1.25; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .pane-stack { display: flex; flex-direction: column; flex: 1 1 0; min-height: 0; }
 .managed-pane, .observed-pane { display: flex; flex-direction: column; min-height: 70px; min-width: 0; overflow: hidden; }
-.sessions, .observed-list { min-height: 0; flex: 1 1 0; overflow-x: hidden; overflow-y: auto; scrollbar-width: thin; scrollbar-color: var(--border) transparent; }
-.sessions::-webkit-scrollbar, .observed-list::-webkit-scrollbar, .settings-scroll::-webkit-scrollbar { width: 6px; }
-.sessions::-webkit-scrollbar-thumb, .observed-list::-webkit-scrollbar-thumb, .settings-scroll::-webkit-scrollbar-thumb { background: var(--border); border-radius: 6px; }
+.sessions { min-height: 0; flex: 1 1 0; overflow-x: hidden; overflow-y: auto; scrollbar-width: thin; scrollbar-color: var(--border) transparent; }
+.sessions::-webkit-scrollbar { width: 6px; }
+.sessions::-webkit-scrollbar-thumb { background: var(--border); border-radius: 6px; }
 .session-row { display: flex; align-items: center; gap: 1px; width: 100%; min-height: 40px; padding: 0 2px; border-radius: 5px; }
 .session-row:hover, .observed-row:hover { background: var(--surface-hover); }
 .session-row.selected, .observed-row.selected { background: var(--surface-active); }
@@ -975,9 +993,12 @@ button:focus-visible, input:focus-visible, select:focus-visible, [role="separato
 .external > span { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
 .refresh-action { display: grid; place-items: center; border: 0; padding: 0; height: 20px; width: 22px; background: transparent; color: var(--muted); font-size: calc(16px * var(--ui-font-scale)); }
 .refresh-action:hover { color: var(--text); }
-.observed-list { display: flex; flex-direction: column; gap: 1px; }
 .observed-row { display: flex; flex-direction: column; justify-content: center; flex: 0 0 auto; width: 100%; min-height: 37px; padding: 5px 7px; text-align: left; border: 0; border-radius: 5px; background: transparent; color: var(--text); }
 .observed-source { display: inline; margin-left: 4px; padding: 1px 3px; border: 1px solid var(--border); border-radius: 3px; color: var(--muted); font-size: calc(9px * var(--ui-font-scale)); font-weight: 400; }
+.dig-filters { display: flex; flex-wrap: wrap; gap: 4px; padding: 0 3px 5px; }
+.dig-filters select { max-width: 100%; height: 23px; padding: 0 4px; border: 1px solid var(--border); border-radius: 4px; background: var(--surface); color: var(--muted); font-size: calc(9px * var(--ui-font-scale)); }
+.observed-warning { color: var(--accent); font-size: calc(11px * var(--ui-font-scale)); }
+.visually-hidden { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
 .observed-message { padding-top: 3px; padding-bottom: 3px; }
 .pane-note { font-size: calc(10px * var(--ui-font-scale)); color: var(--faint); padding: 4px 6px 2px; flex: 0 0 auto; }
 .sidebar-footer { position: relative; flex: 0 0 auto; border-top: 1px solid var(--border-faint); padding: 5px 0 6px; background: var(--sidebar); }
@@ -985,16 +1006,6 @@ button:focus-visible, input:focus-visible, select:focus-visible, [role="separato
 .settings-trigger:hover, .settings-trigger[aria-expanded="true"] { color: var(--text); background: var(--surface-hover); }
 .gear { font-size: calc(17px * var(--ui-font-scale)); line-height: 1; }
 .settings-arrow { margin-left: auto; font-size: calc(17px * var(--ui-font-scale)); }
-.settings-scrim { position: fixed; inset: 0; z-index: 10; }
-.settings-sheet { display: flex; flex-direction: column; position: absolute; z-index: 11; left: 6px; bottom: 45px; width: min(304px, calc(100vw - 20px)); max-height: min(495px, calc(100vh - 86px)); overflow: hidden; border: 1px solid var(--border); background: var(--sidebar); box-shadow: 0 12px 36px #0009; border-radius: 8px; }
-.settings-head { display: flex; justify-content: space-between; align-items: center; flex-shrink: 0; gap: 8px; padding: 6px 10px; min-height: 34px; border-bottom: 1px solid var(--border-faint); }
-.settings-head strong { display: block; font-size: calc(12px * var(--ui-font-scale)); font-weight: 650; }
-.settings-head button { flex: 0 0 23px; height: 23px; border: 0; background: var(--surface); color: var(--text); font-size: calc(16px * var(--ui-font-scale)); border-radius: 4px; }
-.settings-tabs { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 2px; flex-shrink: 0; padding: 5px 7px 3px; border-bottom: 1px solid var(--border-faint); }
-.settings-tabs button { min-width: 0; height: 26px; padding: 0 3px; border: 0; border-radius: 4px; color: var(--muted); background: transparent; font-size: calc(10px * var(--ui-font-scale)); }
-.settings-tabs button:hover { color: var(--text); background: var(--surface); }
-.settings-tabs button.chosen { color: var(--accent-text); background: var(--accent-bg); }
-.settings-scroll { display: flex; flex-direction: column; min-height: 0; overflow-x: hidden; overflow-y: auto; padding: 9px 10px 10px; gap: 9px; scrollbar-width: thin; scrollbar-color: var(--border) transparent; }
 .setting-block { display: flex; flex-direction: column; gap: 5px; }
 .setting-label { color: var(--text); font-size: calc(10px * var(--ui-font-scale)); font-weight: 600; }
 .setting-split { display: flex; align-items: center; justify-content: space-between; }
@@ -1021,7 +1032,6 @@ button:focus-visible, input:focus-visible, select:focus-visible, [role="separato
 .toggle-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 7px; }
 .setting-toggle { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 28px; padding: 0 6px; font-size: calc(10px * var(--ui-font-scale)); border-radius: 4px; color: var(--text); background: var(--surface); }
 .setting-toggle input { width: 14px; height: 14px; flex: 0 0 auto; margin: 0; accent-color: var(--accent); }
-.settings-scroll select:disabled { opacity: .4; }
 .directory-input { font-family: Consolas, monospace; }
 .reset-layout { align-self: flex-start; padding: 5px 8px; border-radius: 4px; background: transparent; border: 1px solid var(--border); color: var(--muted); font-size: calc(10px * var(--ui-font-scale)); }
 .reset-layout:hover { color: var(--text); }
@@ -1051,5 +1061,5 @@ button:focus-visible, input:focus-visible, select:focus-visible, [role="separato
 .empty-state p + p { margin-top: 2px; }
 .statusbar { flex: 0 0 26px; height: 26px; display: flex; align-items: center; justify-content: space-between; gap: 14px; padding: 0 12px; border-top: 1px solid var(--border-faint); color: var(--faint); font-size: calc(10px * var(--ui-font-scale)); }
 @media (max-width: 820px) { .statusbar span:last-child { display: none; } }
-@media (max-height: 480px) { .brand { height: 34px; } .sidebar-search { margin: 3px 0 6px; } .settings-scroll { gap: 9px; } }
+@media (max-height: 480px) { .brand { height: 34px; } .sidebar-search { margin: 3px 0 6px; } }
 </style>
