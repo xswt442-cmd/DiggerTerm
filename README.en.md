@@ -42,6 +42,10 @@ Copy [example JSON/CSS files](examples/themes/) into `DiggerTerm/` under your OS
 
 Windows requires WebView2; binaries are unsigned. Linux builds target Ubuntu 24.04 and may not run on every distribution. Sessions are not guaranteed to survive daemon crashes or system reboots.
 
-Settings provide manual reconnection and session exit diagnostics. New controls require the matching daemon version; finish old sessions and explicitly update the daemon before using them. Recovery replays the latest 256 KiB of raw output, so full-screen content may be incomplete. The reported SSH idle disconnect still needs reproduction in the affected environment.
+Settings provide manual reconnection and session exit details. New features require a matching daemon version; finish existing sessions before stopping the old daemon and opening the updated app. Reconnection restores recent terminal output; long-running full-screen applications may not be fully restored.
 
 [简体中文](README.md) · [CHANGELOG](CHANGELOG.md) · [Release guide](RELEASE.md) · [MIT License](LICENSE)
+
+## License
+
+This project is licensed under the [MIT License](LICENSE).

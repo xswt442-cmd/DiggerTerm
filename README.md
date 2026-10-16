@@ -42,6 +42,10 @@
 
 Windows 需要 WebView2，安装包尚未签名。Linux 主要针对 Ubuntu 24.04 构建，其他发行版兼容性待验证。会话不保证在 Daemon 崩溃或系统重启后存活。
 
-会话设置提供手动重连与退出诊断。新配置需使用配套版本的 Daemon；已有会话可继续使用原 GUI，完成后显式更新 Daemon。画面恢复仍为最近 256 KiB 原始输出回放，全屏内容可能不完整；现场 SSH 闲置断联问题仍待复现。
+会话设置提供手动重连与退出诊断。新功能需要配套版本的 Daemon；更新时，先完成已有会话，再停止旧 Daemon 并打开新版应用。重新连接时会恢复最近的终端输出，长时间运行的全屏界面可能不完整。
 
 [English](README.en.md) · [CHANGELOG](CHANGELOG.md) · [发布流程](RELEASE.md) · [MIT License](LICENSE)
+
+## 许可证
+
+本项目采用 [MIT 许可证](LICENSE)。
