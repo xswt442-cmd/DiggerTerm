@@ -39,3 +39,15 @@ func TestSetUILanguageValidation(t *testing.T) {
 		t.Fatalf("English tray callback got %q, error %v", got, err)
 	}
 }
+
+func TestStopAllConfirmationButtonsMatchPlatformDialogResponses(t *testing.T) {
+	if confirm, cancel := stopAllConfirmationButtonLabels("zh", "windows"); confirm != "Yes" || cancel != "No" {
+		t.Fatalf("Windows question button IDs = %q/%q, want Yes/No", confirm, cancel)
+	}
+	if confirm, cancel := stopAllConfirmationButtonLabels("zh", "linux"); confirm != "终止会话并退出" || cancel != "取消" {
+		t.Fatalf("localized Linux question buttons = %q/%q", confirm, cancel)
+	}
+	if confirm, cancel := stopAllConfirmationButtonLabels("en", "darwin"); confirm != "Terminate sessions and quit" || cancel != "Cancel" {
+		t.Fatalf("localized macOS question buttons = %q/%q", confirm, cancel)
+	}
+}

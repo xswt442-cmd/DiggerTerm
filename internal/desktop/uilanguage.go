@@ -43,3 +43,13 @@ func trayLabelsFor(locale string) trayLanguageLabels {
 		stopAllBusy:    "A stop-all operation is already in progress.",
 	}
 }
+
+// Windows' native Question dialog uses the standard Yes/No button IDs and
+// reports those labels to Wails callbacks, regardless of custom label text.
+func stopAllConfirmationButtonLabels(locale, platform string) (confirm, cancel string) {
+	if platform == "windows" {
+		return "Yes", "No"
+	}
+	labels := trayLabelsFor(locale)
+	return labels.stopAllConfirm, labels.stopAllCancel
+}

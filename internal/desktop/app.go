@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io/fs"
 	"log"
+	"runtime"
 
 	"github.com/wailsapp/wails/v3/pkg/application"
 	"github.com/wailsapp/wails/v3/pkg/events"
@@ -85,16 +86,17 @@ func runGUI(assets fs.FS, trayIcon []byte) {
 	var showStopAllConfirmation func(sessionIDs []string)
 	showStopAllConfirmation = func(sessionIDs []string) {
 		labels := trayLabelsFor(currentLocale)
+		confirmLabel, cancelLabel := stopAllConfirmationButtonLabels(currentLocale, runtime.GOOS)
 		question := app.Dialog.Question().
 			AttachToWindow(window).
 			SetTitle(labels.stopAllTitle).
 			SetMessage(fmt.Sprintf(labels.stopAllMessage, len(sessionIDs)))
-		cancel := question.AddButton(labels.stopAllCancel)
+		cancel := question.AddButton(cancelLabel)
 		question.SetDefaultButton(cancel).SetCancelButton(cancel)
 		cancel.OnClick(func() {
 			_ = runStopAllAfterConfirmation(false, sessionIDs, sessions.stopAllSessionsAndDaemon)
 		})
-		confirm := question.AddButton(labels.stopAllConfirm)
+		confirm := question.AddButton(confirmLabel)
 		confirm.OnClick(func() {
 			if !sessions.tryBeginBulkStop() {
 				window.Show()
