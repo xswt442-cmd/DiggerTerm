@@ -1,85 +1,36 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
-import {
-  chosenLocale, defaults, fonts, lineHeightOptions, paddingOptions,
-  readPreferences, refreshOptions, scrollbackOptions, scrollSpeedOptions,
-  translate, writePreferences,
-  type TextKey, type ThemeId, type LanguageId,
-} from './uiPreferences'
-import { Browser, Events } from '@wailsio/runtime'
-import packageInfo from '../package.json'
+import { Events } from '@wailsio/runtime'
 import { mergeSessions } from './sessionState'
 import TerminalPanel from './components/TerminalPanel.vue'
 import PaneWorkspace from './components/PaneWorkspace.vue'
 import { resizeSplit } from './workspaceLayout'
 import { useWorkspace } from './composables/useWorkspace'
-import KeybindingsSettings from './components/KeybindingsSettings.vue'
-import SettingsDialog, { type SettingsTab } from './components/SettingsDialog.vue'
+import SettingsDialog from './components/SettingsDialog.vue'
+import SettingsContent from './components/SettingsContent.vue'
 import DigTree from './components/DigTree.vue'
 import { useDig } from './composables/useDig'
-import { defaultBindings, matchBinding, parseBindings } from './keybindings'
-import { KeybindingsPath, ReadKeybindings } from '../bindings/github.com/xswt442-cmd/DiggerTerm/internal/desktop/keybindingservice'
-import { themeRegistry, themeVariables, type ThemeOption } from './userThemes'
-import { ListThemes, OpenThemeDirectory } from '../bindings/github.com/xswt442-cmd/DiggerTerm/internal/desktop/themeservice'
-import { Create, CreateLocal, CreateSSH, Forget, List, Profiles, Reconnect, Rename, SetUILanguage, SSHHosts, Terminate } from '../bindings/github.com/xswt442-cmd/DiggerTerm/internal/desktop/sessionservice'
+import { matchBinding } from './keybindings'
+import { Create, CreateLocal, CreateSSH, Forget, List, Profiles, Reconnect, Rename, SSHHosts, Terminate } from '../bindings/github.com/xswt442-cmd/DiggerTerm/internal/desktop/sessionservice'
 import type { Info, Profile } from '../bindings/github.com/xswt442-cmd/DiggerTerm/internal/session/models'
+import { useSettings } from './composables/useSettings'
 
-const preferences = ref(readPreferences())
-const themeOptions = ref<ThemeOption[]>(themeRegistry([]))
-const chosenTheme = computed(() => themeOptions.value.find(theme => theme.id === preferences.value.theme) ?? themeOptions.value[0]!)
-const palette = computed(() => chosenTheme.value.palette)
-const themeDirectory = ref('')
-const keybindingsPath = ref('')
-const themeErrors = ref<{ file: string; message: string }[]>([])
-const globalCSS = ref('')
-const themeRevision = ref(0)
-let themeStyle: HTMLStyleElement | undefined
-async function applyTheme() {
-  themeStyle ??= document.createElement('style')
-  const variables = Object.entries(themeVariables(palette.value)).map(([key, value]) => `${key}:${value}`).join(';')
-  themeStyle.textContent = `.layout[data-dt-theme]{${variables}}\n` +
-    (preferences.value.customCSS ? chosenTheme.value.css + '\n' + globalCSS.value : '')
-  document.head.append(themeStyle)
-  await nextTick()
-  themeRevision.value++
+const errorMessage = ref('')
+function reportError(err: unknown) {
+  errorMessage.value = err instanceof Error ? err.message : String(err)
 }
-watch([chosenTheme, globalCSS, () => preferences.value.customCSS], () => { void applyTheme() })
-async function refreshThemes() {
-  try {
-    const catalog = await ListThemes()
-    themeDirectory.value = catalog.directory
-    themeErrors.value = catalog.errors ?? []
-    themeOptions.value = themeRegistry(catalog.themes ?? [])
-    globalCSS.value = catalog.customCSS
-    if (!themeOptions.value.some(theme => theme.id === preferences.value.theme)) {
-      preferences.value.theme = defaults.theme
-      themeErrors.value.push({ file: '', message: locale.value === 'zh' ? '所选主题已不可用，已恢复默认配色。' : 'Selected theme unavailable; restored default.' })
-    }
-  } catch (error) { reportError(error) }
-}
-const locale = computed(() => chosenLocale(preferences.value.language))
-const t = (key: TextKey, replacements?: Record<string, string | number>) => translate(locale.value, key, replacements)
+const settings = useSettings({ onError: reportError })
+const {
+  preferences, locale, t, refreshOptions, scrollbackOptions, lineHeightOptions,
+  paddingOptions, scrollSpeedOptions, themeOptions, themeDirectory, themeErrors, palette,
+  themeRevision, settingsOpen, settingsTab, settingsTabLabels, appVersion, updateStatus,
+  updateAvailable, checkingUpdate, isMac, bindings, helpConfigPaths, fontChoices,
+  initialize: initializeSettings, refreshThemes, resetLayout,
+  resetSection, updateTheme, updateLanguage, checkForUpdates, openReleasePage,
+  openThemeDirectory,
+} = settings
+
 const kindLabel = (kind: string) => t(kind === 'terminal' ? 'kindTerminal' : kind === 'agent' ? 'kindAgent' : kind === 'descendant' ? 'kindDescendant' : 'kindOther')
-const settingsOpen = ref(false)
-const settingsTab = ref<SettingsTab>('appearance')
-const settingsTabLabels = computed<Record<SettingsTab, string>>(() => ({
-  appearance: t('appearanceTab'), terminal: t('terminalTab'), sessions: t('sessionTab'),
-  observed: t('monitorTab'), keybindings: locale.value === 'zh' ? '快捷键' : 'Keys',
-  help: locale.value === 'zh' ? '帮助' : 'Help',
-}))
-const appVersion = packageInfo.version
-const updateStatus = ref('')
-const updateAvailable = ref(false)
-const checkingUpdate = ref(false)
-const isMac = /Mac/i.test(navigator.userAgent)
-const bindings = ref(defaultBindings(isMac))
-async function reloadBindings() {
-  try {
-    const source = await ReadKeybindings()
-    const overrides = source ? parseBindings(source, isMac) : []
-    bindings.value = defaultBindings(isMac).map(binding => overrides.find(item => item.action === binding.action) ?? binding)
-  } catch (error) { reportError(error) }
-}
 function workspaceKey(event: KeyboardEvent) {
   if (settingsOpen.value || event.defaultPrevented) return
   const target = event.target as HTMLElement
@@ -98,15 +49,6 @@ function workspaceKey(event: KeyboardEvent) {
 const paneStack = ref<HTMLElement | null>(null)
 const dragging = ref<'width' | 'height' | null>(null)
 let dragOrigin = { x: 0, y: 0, width: 0, ratio: 0, height: 1 }
-watch(preferences, (next) => writePreferences(next), { deep: true })
-// The native system tray is outside Vue: keep its labels in sync with the
-// effective language, including when the preference is "follow system".
-function syncNativeLanguage(value: 'zh' | 'en') {
-  void SetUILanguage(value).catch(() => {
-    // The GUI remains functional if the platform does not expose a tray.
-  })
-}
-watch(locale, syncNativeLanguage)
 
 function clamp(value: number, low: number, high: number): number {
   return Math.max(low, Math.min(high, value))
@@ -148,115 +90,12 @@ function dividerKeys(event: KeyboardEvent, axis: 'width' | 'height') {
       (event.key === 'ArrowDown' ? step : -step) / Math.max(1, paneStack.value?.clientHeight ?? 1), 0.2, 0.8)
   }
 }
-function resetLayout() {
-  preferences.value.sidebarWidth = defaults.sidebarWidth
-  preferences.value.managedRatio = defaults.managedRatio
-}
-function updateTheme(value: ThemeId) { preferences.value.theme = value }
-function updateLanguage(event: Event) { preferences.value.language = (event.target as HTMLSelectElement).value as LanguageId }
-function resetSection() {
-  switch (settingsTab.value) {
-    case 'appearance':
-      preferences.value.theme = defaults.theme
-      preferences.value.customCSS = false
-      preferences.value.language = defaults.language
-      preferences.value.uiFontSize = defaults.uiFontSize
-      resetLayout()
-      break
-    case 'terminal':
-      for (const key of ['fontSize', 'fontFamily', 'scrollback', 'lineHeight', 'scrollSensitivity', 'keyboardMode',
-        'terminalPadding', 'cursorStyle', 'cursorBlink', 'rightClickSelectsWord'] as const) {
-        // The saved preferences remain typed and bounded by each input.
-        Object.assign(preferences.value, { [key]: defaults[key] })
-      }
-      break
-    case 'sessions':
-      for (const key of ['defaultProfile', 'defaultDirectory', 'activateNewSession'] as const) {
-        Object.assign(preferences.value, { [key]: defaults[key] })
-      }
-      break
-    case 'observed':
-      for (const key of ['observeEnabled', 'observeRefreshSeconds', 'showPid', 'showStatusBar'] as const) {
-        Object.assign(preferences.value, { [key]: defaults[key] })
-      }
-      break
-  }
-}
-function compareVersions(left: string, right: string) {
-  const a = left.split('.').map(Number)
-  const b = right.split('.').map(Number)
-  for (let index = 0; index < 3; index++) {
-    if (a[index] !== b[index]) return a[index]! - b[index]!
-  }
-  return 0
-}
-async function checkForUpdates() {
-  checkingUpdate.value = true
-  updateStatus.value = ''
-  try {
-    const response = await fetch('https://api.github.com/repos/xswt442-cmd/DiggerTerm/releases/latest', {
-      headers: { Accept: 'application/vnd.github+json' },
-    })
-    if (!response.ok) throw new Error(`HTTP ${response.status}`)
-    const release: unknown = await response.json()
-    if (!release || typeof release !== 'object' || !('tag_name' in release) ||
-      typeof release.tag_name !== 'string' || !/^v?\d+\.\d+\.\d+$/.test(release.tag_name)) {
-      throw new Error('Invalid latest release version')
-    }
-    const latestVersion = release.tag_name.replace(/^v/, '')
-    updateAvailable.value = compareVersions(latestVersion, appVersion) > 0
-    updateStatus.value = updateAvailable.value
-      ? (locale.value === 'zh' ? `发现新版本 ${release.tag_name}` : `Version ${release.tag_name} is available`)
-      : (locale.value === 'zh' ? '当前已是最新版本' : 'You are up to date')
-  } catch {
-    updateAvailable.value = false
-    updateStatus.value = locale.value === 'zh' ? '检查更新失败' : 'Could not check for updates'
-  } finally {
-    checkingUpdate.value = false
-  }
-}
-async function openReleasePage() {
-  try { await Browser.OpenURL('https://github.com/xswt442-cmd/DiggerTerm/releases/latest') }
-  catch (error) { reportError(error) }
-}
-async function openThemeDirectory() {
-  try { await OpenThemeDirectory() }
-  catch (error) { reportError(error) }
-}
-function themeConfigPath(fileName: string) {
-  if (!themeDirectory.value) return ''
-  const separator = themeDirectory.value.includes('\\') ? '\\' : '/'
-  return `${themeDirectory.value.replace(/[\\/]+$/, '')}${separator}${fileName}`
-}
-const helpConfigPaths = computed(() => [
-  {
-    label: locale.value === 'zh' ? '主题 JSON 文件' : 'Theme JSON file',
-    path: themeConfigPath(locale.value === 'zh' ? '<主题名>.json' : '<theme-name>.json'),
-  },
-  {
-    label: locale.value === 'zh' ? '主题 CSS 文件' : 'Theme CSS file',
-    path: themeConfigPath(locale.value === 'zh' ? '<主题名>.css' : '<theme-name>.css'),
-  },
-  {
-    label: locale.value === 'zh' ? '全局 CSS 覆盖' : 'Global CSS override',
-    path: themeConfigPath('custom.css'),
-  },
-  {
-    label: locale.value === 'zh' ? '快捷键配置文件' : 'Shortcut config file',
-    path: keybindingsPath.value,
-  },
-])
 const localProfiles = computed(() => profiles.value.filter(p => p.id !== 'ssh'))
-const fontChoices = Object.entries(fonts).map(([id, font]) => ({ id, name: font.name }))
 watch(() => preferences.value.defaultProfile, (value) => {
   if (value !== 'auto' && profiles.value.some(p => p.id === value)) profileId.value = value
 })
 const sessions = ref<Info[]>([])
 const selectedExternalKey = ref<string | null>(null)
-const errorMessage = ref('')
-function reportError(err: unknown) {
-  errorMessage.value = err instanceof Error ? err.message : String(err)
-}
 const {
   layout, paneLeaves, selectedId, restoreWorkspace, isReady: workspaceReady,
   splitPane, closePane, focusNextPane, focusWorkspacePane, changePaneSession,
@@ -439,11 +278,7 @@ watch([() => preferences.value.observeEnabled, () => preferences.value.observeRe
   () => startObservationPolling())
 
 onMounted(async () => {
-  void reloadBindings()
-  void KeybindingsPath().then(value => { keybindingsPath.value = value }).catch(reportError)
-  void applyTheme()
-  void refreshThemes()
-  syncNativeLanguage(locale.value)
+  initializeSettings()
   offDaemonDisconnected = Events.On('daemon:disconnected', (event) => {
     daemonConnected.value = false
     errorMessage.value = String(event.data || 'Session daemon disconnected')
@@ -481,7 +316,6 @@ onMounted(async () => {
 })
 
 onBeforeUnmount(() => {
-  themeStyle?.remove()
   if (observationTimer) clearInterval(observationTimer)
   offExit?.()
   offRename?.()
@@ -654,178 +488,17 @@ onBeforeUnmount(() => {
 
       <SettingsDialog v-model:open="settingsOpen" v-model:tab="settingsTab"
         :title="t('settingsTitle')" :close-label="t('close')" :tab-labels="settingsTabLabels">
-          <template v-if="settingsTab === 'appearance'">
-            <div class="setting-block">
-              <label class="setting-label">{{ t('colors') }}</label>
-              <div class="theme-options">
-                <button v-for="theme in themeOptions" :key="theme.id" type="button" class="theme-option"
-                  :class="{ chosen: preferences.theme === theme.id }"
-                  :aria-pressed="preferences.theme === theme.id"
-                  :title="theme.id"
-                  @click="updateTheme(theme.id)">
-                  <span class="theme-chips" aria-hidden="true">
-                    <span v-for="(color, index) in theme.palette.chips" :key="index" :style="{ background: color }" />
-                  </span>
-                  <span>{{ theme.palette[locale] }}</span>
-                </button>
-              </div>
-              <button type="button" class="reset-layout" @click="refreshThemes">{{ t('refresh') }}</button>
-              <div class="theme-config-row">
-                <small class="theme-config-path" :title="themeDirectory">{{ themeDirectory }}</small>
-              </div>
-              <div class="theme-css-row">
-                <label class="setting-toggle"><span>{{ locale === 'zh' ? '启用主题 CSS 和 custom.css' : 'Enable theme CSS and custom.css' }}</span>
-                  <input v-model="preferences.customCSS" type="checkbox" /></label>
-                <button type="button" class="reset-layout" @click="openThemeDirectory">{{ locale === 'zh' ? '前往配置' : 'Open config' }}</button>
-              </div>
-              <p v-for="(error, index) in themeErrors" :key="index" role="alert" class="setting-error">{{ error.file }}: {{ error.message }}</p>
-            </div>
-            <div class="setting-block">
-              <div class="setting-label setting-split">
-                <label for="ui-font-size-slider">{{ t('uiFontSize') }}</label>
-                <output for="ui-font-size-slider">{{ preferences.uiFontSize }} px</output>
-              </div>
-              <input id="ui-font-size-slider" v-model.number="preferences.uiFontSize"
-                class="font-slider" type="range" min="10" max="16" step="1" />
-            </div>
-            <label class="setting-row">
-              <span>{{ t('language') }}</span>
-              <select :value="preferences.language" @change="updateLanguage">
-                <option value="system">{{ t('system') }}</option>
-                <option value="zh">简体中文</option>
-                <option value="en">English</option>
-              </select>
-            </label>
-            <button type="button" class="reset-layout" @click="resetLayout">{{ t('resetLayout') }}</button>
-          </template>
-
-          <template v-else-if="settingsTab === 'terminal'">
-            <label class="setting-row">
-              <span>{{ t('fontFamily') }}</span>
-              <select v-model="preferences.fontFamily">
-                <option v-for="font in fontChoices" :key="font.id" :value="font.id">{{ font.name }}</option>
-              </select>
-            </label>
-            <div class="setting-block">
-              <div class="setting-label setting-split">
-                <label for="font-size-slider">{{ t('fontSizeShort') }}</label>
-                <output for="font-size-slider">{{ preferences.fontSize }} px</output>
-              </div>
-              <input id="font-size-slider" v-model.number="preferences.fontSize"
-                class="font-slider" type="range" min="11" max="20" step="1" />
-            </div>
-            <div class="setting-grid">
-              <label class="setting-stack">
-                <span>{{ t('scrollback') }}</span>
-                <select v-model.number="preferences.scrollback">
-                  <option v-for="n in scrollbackOptions" :key="n" :value="n">{{ n.toLocaleString() }}</option>
-                </select>
-              </label>
-              <label class="setting-stack">
-                <span>{{ t('lineHeight') }}</span>
-                <select v-model.number="preferences.lineHeight">
-                  <option v-for="n in lineHeightOptions" :key="n" :value="n">{{ n.toFixed(2).replace(/0+$/, '').replace(/\.$/, '') }}×</option>
-                </select>
-              </label>
-              <label class="setting-stack">
-                <span>{{ t('cursorStyle') }}</span>
-                <select v-model="preferences.cursorStyle">
-                  <option value="block">{{ t('cursorBlock') }}</option>
-                  <option value="underline">{{ t('cursorUnderline') }}</option>
-                  <option value="bar">{{ t('cursorBar') }}</option>
-                </select>
-              </label>
-              <label class="setting-stack">
-                <span>{{ t('scrollSensitivity') }}</span>
-                <select v-model.number="preferences.scrollSensitivity">
-                  <option v-for="n in scrollSpeedOptions" :key="n" :value="n">{{ n }}×</option>
-                </select>
-              </label>
-              <label class="setting-stack">
-                <span>{{ t('terminalPadding') }}</span>
-                <select v-model.number="preferences.terminalPadding">
-                  <option v-for="n in paddingOptions" :key="n" :value="n">{{ n }} px</option>
-                </select>
-              </label>
-            </div>
-            <div class="toggle-grid">
-              <label class="setting-toggle"><span>{{ t('cursorBlink') }}</span>
-                <input v-model="preferences.cursorBlink" type="checkbox" /></label>
-              <label class="setting-toggle"><span>{{ t('rightClickWord') }}</span>
-                <input v-model="preferences.rightClickSelectsWord" type="checkbox" /></label>
-            </div>
-          </template>
-
-          <template v-else-if="settingsTab === 'sessions'">
-            <button type="button" class="reset-layout" :disabled="reconnecting" @click="reconnectDaemon">{{ locale === 'zh' ? '重连 Daemon，保留会话' : 'Reconnect daemon, keep sessions' }}</button>
-            <label class="setting-row">
-              <span>{{ t('profileDefault') }}</span>
-              <select v-model="preferences.defaultProfile">
-                <option value="auto">{{ t('automatic') }}</option>
-                <option v-for="profile in localProfiles" :key="profile.id" :value="profile.id">{{ profile.name }}</option>
-              </select>
-            </label>
-            <label class="setting-toggle"><span>{{ t('activateNewSession') }}</span>
-              <input v-model="preferences.activateNewSession" type="checkbox" /></label>
-            <div class="setting-block">
-              <label class="setting-label" for="default-directory">{{ t('defaultDirectory') }}</label>
-              <input id="default-directory" v-model="preferences.defaultDirectory"
-                class="directory-input" type="text" spellcheck="false" autocomplete="off"
-                maxlength="512" :placeholder="t('directoryPlaceholder')" />
-            </div>
-          </template>
-
-          <template v-else-if="settingsTab === 'observed'">
-            <label class="setting-toggle"><span>{{ t('observeEnabled') }}</span>
-              <input v-model="preferences.observeEnabled" type="checkbox" /></label>
-            <label class="setting-row">
-              <span>{{ t('refreshSeconds') }}</span>
-              <select v-model.number="preferences.observeRefreshSeconds" :disabled="!preferences.observeEnabled">
-                <option v-for="n in refreshOptions" :key="n" :value="n">
-                  {{ n === 0 ? t('scanManual') : t('seconds', { count: n }) }}
-                </option>
-              </select>
-            </label>
-            <label class="setting-toggle"><span>{{ t('showPid') }}</span>
-              <input v-model="preferences.showPid" type="checkbox" /></label>
-            <label class="setting-toggle"><span>{{ t('showStatusBar') }}</span>
-              <input v-model="preferences.showStatusBar" type="checkbox" /></label>
-          </template>
-          <template v-else-if="settingsTab === 'keybindings'">
-            <label class="setting-row">
-              <span>{{ t('keyboardMode') }}</span>
-              <select v-model="preferences.keyboardMode">
-                <option value="smart">{{ t('keyboardSmart') }}</option>
-                <option value="desktop">{{ t('keyboardDesktop') }}</option>
-                <option value="native">{{ t('keyboardNative') }}</option>
-              </select>
-            </label>
-            <KeybindingsSettings :locale="locale" :bindings="bindings" :is-mac="isMac" @changed="bindings = $event" />
-          </template>
-          <template v-else-if="settingsTab === 'help'">
-            <div class="setting-block">
-              <label class="setting-label">{{ locale === 'zh' ? '应用版本' : 'App version' }}</label>
-              <span class="help-value">{{ appVersion }}</span>
-            </div>
-            <div class="setting-block">
-              <label class="setting-label">{{ locale === 'zh' ? '主题配置目录' : 'Theme config directory' }}</label>
-              <span class="help-path" :title="themeDirectory">{{ themeDirectory }}</span>
-            </div>
-            <div v-for="item in helpConfigPaths" :key="item.label" class="setting-block">
-              <label class="setting-label">{{ item.label }}</label>
-              <span class="help-path" :title="item.path">{{ item.path }}</span>
-            </div>
-            <button type="button" class="reset-layout" :disabled="checkingUpdate" @click="checkForUpdates">
-              {{ checkingUpdate ? (locale === 'zh' ? '正在检查…' : 'Checking…') : (locale === 'zh' ? '检查更新' : 'Check for updates') }}
-            </button>
-            <p v-if="updateStatus" class="update-status" role="status">{{ updateStatus }}</p>
-            <button v-if="updateAvailable" type="button" class="reset-layout" @click="openReleasePage">
-              {{ locale === 'zh' ? '查看下载' : 'View download' }}
-            </button>
-          </template>
-          <button v-if="!['keybindings', 'help'].includes(settingsTab)" type="button" class="reset-layout compact-reset" @click="resetSection">
-            {{ t(settingsTab === 'appearance' ? 'resetAppearance' : settingsTab === 'terminal' ? 'resetTerminal' : settingsTab === 'sessions' ? 'resetSessions' : 'resetObserved') }}
-          </button>
+        <SettingsContent v-model:preferences="preferences" :tab="settingsTab" :locale="locale" :translate="t"
+          :theme-options="themeOptions" :theme-directory="themeDirectory" :theme-errors="themeErrors"
+          :font-choices="fontChoices" :scrollback-options="scrollbackOptions" :line-height-options="lineHeightOptions"
+          :scroll-speed-options="scrollSpeedOptions" :padding-options="paddingOptions" :refresh-options="refreshOptions"
+          :profiles="localProfiles" :reconnecting="reconnecting" :bindings="bindings" :is-mac="isMac"
+          :app-version="appVersion" :help-config-paths="helpConfigPaths" :checking-update="checkingUpdate"
+          :update-status="updateStatus" :update-available="updateAvailable"
+          @theme-change="updateTheme" @language-change="updateLanguage" @refresh-themes="refreshThemes"
+          @open-theme-directory="openThemeDirectory" @reset-layout="resetLayout" @reset-section="resetSection"
+          @reconnect="reconnectDaemon" @keybindings-change="bindings = $event"
+          @check-updates="checkForUpdates" @open-release-page="openReleasePage" />
       </SettingsDialog>
     </aside>
 
@@ -1006,36 +679,6 @@ button:focus-visible, input:focus-visible, select:focus-visible, [role="separato
 .settings-trigger:hover, .settings-trigger[aria-expanded="true"] { color: var(--text); background: var(--surface-hover); }
 .gear { font-size: calc(17px * var(--ui-font-scale)); line-height: 1; }
 .settings-arrow { margin-left: auto; font-size: calc(17px * var(--ui-font-scale)); }
-.setting-block { display: flex; flex-direction: column; gap: 5px; }
-.setting-label { color: var(--text); font-size: calc(10px * var(--ui-font-scale)); font-weight: 600; }
-.setting-split { display: flex; align-items: center; justify-content: space-between; }
-.setting-split output { font-size: calc(11px * var(--ui-font-scale)); color: var(--accent); font-weight: 500; }
-.theme-options { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 5px; }
-.theme-option { display: flex; align-items: center; gap: 5px; min-width: 0; height: 29px; padding: 3px 5px; color: var(--muted); background: var(--surface); border: 1px solid var(--border); border-radius: 5px; font-size: calc(10px * var(--ui-font-scale)); }
-.theme-option:hover { color: var(--text); }
-.theme-option.chosen { color: var(--text); border-color: var(--accent); }
-.theme-chips { display: flex; flex: 0 0 auto; overflow: hidden; width: 32px; height: 15px; border-radius: 3px; border: 1px solid #ffffff22; }
-.theme-chips span { flex: 1; }
-.theme-config-row { min-width: 0; }
-.theme-config-path { display: block; overflow: hidden; color: var(--faint); font-size: calc(8px * var(--ui-font-scale)); line-height: 1.2; text-overflow: ellipsis; white-space: nowrap; }
-.theme-css-row { display: flex; align-items: center; gap: 5px; }
-.theme-css-row .setting-toggle { min-width: 0; flex: 1 1 auto; font-size: calc(9px * var(--ui-font-scale)); }
-.setting-error { margin: 0; color: var(--negative); font-size: calc(9px * var(--ui-font-scale)); }
-.help-value { font-size: calc(10px * var(--ui-font-scale)); }
-.help-path { overflow-wrap: anywhere; color: var(--text); font-family: Consolas, monospace; font-size: calc(9px * var(--ui-font-scale)); }
-.update-status { margin: 0; color: var(--text); font-size: calc(10px * var(--ui-font-scale)); }
-.font-slider { width: 100%; margin: 2px 0; accent-color: var(--accent); }
-.setting-block select, .directory-input, .setting-row select, .setting-stack select { min-width: 0; width: 100%; height: 28px; padding: 0 5px; color: var(--text); background: var(--surface); border: 1px solid var(--border); border-radius: 5px; font-size: calc(10px * var(--ui-font-scale)); }
-.setting-row { display: grid; grid-template-columns: 90px minmax(0, 1fr); align-items: center; gap: 7px; min-height: 29px; color: var(--text); font-size: calc(10px * var(--ui-font-scale)); font-weight: 600; }
-.setting-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 7px; }
-.setting-stack { display: flex; flex-direction: column; gap: 4px; min-width: 0; font-size: calc(10px * var(--ui-font-scale)); color: var(--text); }
-.toggle-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 7px; }
-.setting-toggle { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 28px; padding: 0 6px; font-size: calc(10px * var(--ui-font-scale)); border-radius: 4px; color: var(--text); background: var(--surface); }
-.setting-toggle input { width: 14px; height: 14px; flex: 0 0 auto; margin: 0; accent-color: var(--accent); }
-.directory-input { font-family: Consolas, monospace; }
-.reset-layout { align-self: flex-start; padding: 5px 8px; border-radius: 4px; background: transparent; border: 1px solid var(--border); color: var(--muted); font-size: calc(10px * var(--ui-font-scale)); }
-.reset-layout:hover { color: var(--text); }
-.compact-reset { margin-top: 2px; }
 .sidebar-resizer { position: relative; display: flex; justify-content: center; align-items: center; flex: 0 0 7px; width: 7px; background: var(--border-faint); touch-action: none; cursor: col-resize; user-select: none; z-index: 1; }
 .sidebar-resizer span { display: block; width: 3px; height: 30px; background: var(--border); border-radius: 4px; opacity: .25; }
 .sidebar-resizer:hover span, .sidebar-resizer.dragging span, .sidebar-resizer:focus-visible span { background: var(--accent); opacity: 1; }
