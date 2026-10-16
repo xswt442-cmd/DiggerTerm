@@ -208,6 +208,37 @@ try {
     await nextTick()
     assert.equal(dig.filteredGroups.value[0].expandFilteredNodes, true)
   })
+
+  test('useDig keeps a vanished selection stale and does not replace the last good snapshot on failure', async () => {
+    const { useDig } = await import(useDigURL)
+    const observeModule = await import(observeStubURL)
+    const selectedExternalKey = ref(null)
+    const dig = useDig({
+      observeEnabled: ref(true), query: ref(''), selectedExternalKey,
+      observeFailedLabel: () => 'Observe failed',
+    })
+    observeModule.setResponse({ supported: true, processes: [{
+      key: 'external-55', pid: 55, parentPid: 1, name: 'powershell.exe', kind: 'terminal',
+      source: 'windows', distribution: '', startedAt: '2026-01-01T00:00:00Z',
+      classificationBasis: 'name',
+    }] })
+    await dig.refresh()
+    selectedExternalKey.value = 'external-55'
+    assert.equal(dig.activeProcess.value?.pid, 55)
+
+    observeModule.setResponse({ supported: true, processes: [] })
+    await dig.refresh()
+    assert.equal(dig.activeProcess.value, undefined)
+    assert.equal(selectedExternalKey.value, 'external-55')
+    assert.equal(dig.snapshot.value?.processes.length, 0)
+
+    observeModule.setResponse(Promise.reject(new Error('scan denied')))
+    await dig.refresh()
+    assert.match(dig.error.value, /Observe failed: Error: scan denied/)
+    assert.equal(dig.snapshot.value?.processes.length, 0)
+    dig.clearSelection()
+    assert.equal(selectedExternalKey.value, null)
+  })
 } finally {
   await rm(tempRoot, { recursive: true, force: true })
 }
