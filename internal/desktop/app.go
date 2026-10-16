@@ -1,6 +1,8 @@
 package desktop
 
 import (
+	"errors"
+	"fmt"
 	"io/fs"
 	"log"
 
@@ -79,14 +81,73 @@ func runGUI(assets fs.FS, trayIcon []byte) {
 		app.Quit()
 	})
 	stopAllItem := menu.Add(trayLabelsFor("en").stopAll)
+	currentLocale := "en"
+	var showStopAllConfirmation func(sessionIDs []string)
+	showStopAllConfirmation = func(sessionIDs []string) {
+		labels := trayLabelsFor(currentLocale)
+		question := app.Dialog.Question().
+			AttachToWindow(window).
+			SetTitle(labels.stopAllTitle).
+			SetMessage(fmt.Sprintf(labels.stopAllMessage, len(sessionIDs)))
+		cancel := question.AddButton(labels.stopAllCancel)
+		question.SetDefaultButton(cancel).SetCancelButton(cancel)
+		cancel.OnClick(func() {
+			_ = runStopAllAfterConfirmation(false, sessionIDs, sessions.stopAllSessionsAndDaemon)
+		})
+		confirm := question.AddButton(labels.stopAllConfirm)
+		confirm.OnClick(func() {
+			if !sessions.tryBeginBulkStop() {
+				window.Show()
+				window.Focus()
+				app.Event.Emit("terminal:quit-blocked", trayLabelsFor(currentLocale).stopAllBusy)
+				return
+			}
+			window.SetEnabled(false)
+			quitItem.SetEnabled(false)
+			stopItem.SetEnabled(false)
+			stopAllItem.SetEnabled(false)
+			go func() {
+				err := runStopAllAfterConfirmation(true, sessionIDs, sessions.stopAllSessionsAndDaemon)
+				sessions.finishBulkStop()
+				if err == nil {
+					application.InvokeSync(app.Quit)
+					return
+				}
+				var changed *managedSessionStateChangedError
+				if errors.As(err, &changed) {
+					application.InvokeSync(func() {
+						window.SetEnabled(true)
+						quitItem.SetEnabled(true)
+						stopItem.SetEnabled(true)
+						stopAllItem.SetEnabled(true)
+						showStopAllConfirmation(changed.currentIDs)
+					})
+					return
+				}
+				application.InvokeSync(func() {
+					window.SetEnabled(true)
+					quitItem.SetEnabled(true)
+					stopItem.SetEnabled(true)
+					stopAllItem.SetEnabled(true)
+					window.Show()
+					window.Focus()
+					app.Event.Emit("terminal:quit-blocked", err.Error())
+				})
+			}()
+		})
+		question.Show()
+	}
 	stopAllItem.OnClick(func(_ *application.Context) {
-		if err := sessions.stopAllSessionsAndDaemon(); err != nil {
+		sessionIDs, err := sessions.runningManagedSessionIDs()
+		if err != nil {
 			window.Show()
 			window.Focus()
 			app.Event.Emit("terminal:quit-blocked", err.Error())
 			return
 		}
-		app.Quit()
+		window.Show()
+		window.Focus()
+		showStopAllConfirmation(sessionIDs)
 	})
 	tray.SetMenu(menu)
 	// MenuItem.SetLabel updates the native Windows/Linux/macOS menu in place.
@@ -94,6 +155,7 @@ func runGUI(assets fs.FS, trayIcon []byte) {
 	sessions.setUILanguage = func(locale string) {
 		labels := trayLabelsFor(locale)
 		application.InvokeSync(func() {
+			currentLocale = locale
 			showItem.SetLabel(labels.show)
 			quitItem.SetLabel(labels.quit)
 			stopItem.SetLabel(labels.stop)

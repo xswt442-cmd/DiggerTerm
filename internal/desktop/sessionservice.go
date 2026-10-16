@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"sort"
 	"sync"
 	"time"
 
@@ -18,6 +19,8 @@ import (
 type SessionService struct {
 	mu            sync.RWMutex
 	reconnectMu   sync.Mutex
+	bulkStopMu    sync.Mutex
+	bulkStopBusy  bool
 	app           *application.App
 	client        *daemon.Client
 	initErr       error
@@ -153,32 +156,49 @@ func (s *SessionService) stopDaemon() error {
 	return client.Stop()
 }
 
-// stopAllSessionsAndDaemon ends only sessions returned by the daemon's
-// managed-session list. The daemon still enforces its running-session stop
-// guard, so sessions created concurrently cannot be orphaned by this action.
-func (s *SessionService) stopAllSessionsAndDaemon() error {
-	client, err := s.backend()
-	if err != nil {
-		return err
-	}
+type managedSessionStopper interface {
+	List() ([]session.Info, error)
+	Terminate(string) error
+	Stop() error
+}
 
+type managedSessionStateChangedError struct {
+	currentIDs []string
+}
+
+func (e *managedSessionStateChangedError) Error() string {
+	return fmt.Sprintf("the managed session list changed; confirm again for %d running session(s)", len(e.currentIDs))
+}
+
+const stopAllSessionsTimeout = 15 * time.Second
+
+// stopManagedSessionsAndDaemon operates only on IDs returned by List. It
+// revalidates the count after user confirmation and refuses to stop the daemon
+// if new running sessions appear while the confirmed set is being terminated.
+func stopManagedSessionsAndDaemon(client managedSessionStopper, confirmedIDs []string) error {
+	confirmedIDs = append([]string(nil), confirmedIDs...)
+	sort.Strings(confirmedIDs)
 	managed, err := client.List()
 	if err != nil {
 		return fmt.Errorf("list managed sessions: %w", err)
 	}
-	targets := make(map[string]struct{}, len(managed))
-	var terminationErrors []error
-	for _, info := range managed {
-		if info.Status != "running" {
-			continue
-		}
-		targets[info.ID] = struct{}{}
-		if err := client.Terminate(info.ID); err != nil {
-			terminationErrors = append(terminationErrors, fmt.Errorf("terminate managed session %s: %w", info.ID, err))
+	currentIDs := runningManagedSessionIDs(managed)
+	if !equalSessionIDs(currentIDs, confirmedIDs) {
+		return &managedSessionStateChangedError{currentIDs: currentIDs}
+	}
+	targets := make(map[string]struct{}, len(currentIDs))
+	for _, id := range currentIDs {
+		targets[id] = struct{}{}
+	}
+
+	terminationErrors := make(map[string]error)
+	for id := range targets {
+		if err := client.Terminate(id); err != nil {
+			terminationErrors[id] = fmt.Errorf("terminate managed session %s: %w", id, err)
 		}
 	}
 
-	deadline := time.NewTimer(15 * time.Second)
+	deadline := time.NewTimer(stopAllSessionsTimeout)
 	defer deadline.Stop()
 	ticker := time.NewTicker(50 * time.Millisecond)
 	defer ticker.Stop()
@@ -187,14 +207,25 @@ func (s *SessionService) stopAllSessionsAndDaemon() error {
 		if err != nil {
 			return fmt.Errorf("wait for managed sessions to exit: %w", err)
 		}
-		active := false
+		activeTargets := 0
+		var unresolvedTerminationErrors []error
+		currentIDs := runningManagedSessionIDs(current)
 		for _, info := range current {
-			if _, target := targets[info.ID]; target && info.Status == "running" {
-				active = true
-				break
+			if info.Status != "running" {
+				continue
+			}
+			if _, confirmed := targets[info.ID]; !confirmed {
+				return &managedSessionStateChangedError{currentIDs: currentIDs}
+			}
+			activeTargets++
+			if err := terminationErrors[info.ID]; err != nil {
+				unresolvedTerminationErrors = append(unresolvedTerminationErrors, err)
 			}
 		}
-		if !active {
+		if len(unresolvedTerminationErrors) > 0 {
+			return errors.Join(unresolvedTerminationErrors...)
+		}
+		if activeTargets == 0 {
 			if err := client.Stop(); err != nil {
 				return fmt.Errorf("stop daemon after managed sessions exited: %w", err)
 			}
@@ -204,11 +235,75 @@ func (s *SessionService) stopAllSessionsAndDaemon() error {
 		select {
 		case <-ticker.C:
 		case <-deadline.C:
-			return errors.Join(append([]error{
-				errors.New("timed out waiting for managed DiggerTerm sessions to exit"),
-			}, terminationErrors...)...)
+			return errors.New("timed out waiting for managed DiggerTerm sessions to exit")
 		}
 	}
+}
+
+func runningManagedSessionIDs(items []session.Info) []string {
+	ids := make([]string, 0)
+	for _, item := range items {
+		if item.Status == "running" {
+			ids = append(ids, item.ID)
+		}
+	}
+	sort.Strings(ids)
+	return ids
+}
+
+func equalSessionIDs(left, right []string) bool {
+	if len(left) != len(right) {
+		return false
+	}
+	for index := range left {
+		if left[index] != right[index] {
+			return false
+		}
+	}
+	return true
+}
+
+func runStopAllAfterConfirmation(confirmed bool, ids []string, stop func([]string) error) error {
+	if !confirmed {
+		return nil
+	}
+	return stop(ids)
+}
+
+func (s *SessionService) runningManagedSessionIDs() ([]string, error) {
+	client, err := s.backend()
+	if err != nil {
+		return nil, err
+	}
+	managed, err := client.List()
+	if err != nil {
+		return nil, fmt.Errorf("list managed sessions: %w", err)
+	}
+	return runningManagedSessionIDs(managed), nil
+}
+
+func (s *SessionService) tryBeginBulkStop() bool {
+	s.bulkStopMu.Lock()
+	defer s.bulkStopMu.Unlock()
+	if s.bulkStopBusy {
+		return false
+	}
+	s.bulkStopBusy = true
+	return true
+}
+
+func (s *SessionService) finishBulkStop() {
+	s.bulkStopMu.Lock()
+	s.bulkStopBusy = false
+	s.bulkStopMu.Unlock()
+}
+
+func (s *SessionService) stopAllSessionsAndDaemon(confirmedIDs []string) error {
+	client, err := s.backend()
+	if err != nil {
+		return err
+	}
+	return stopManagedSessionsAndDaemon(client, confirmedIDs)
 }
 
 func (s *SessionService) Profiles() ([]session.Profile, error) {

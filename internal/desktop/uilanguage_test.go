@@ -11,11 +11,14 @@ func TestTrayLabelsForLocale(t *testing.T) {
 		if lang == "zh" && labels.show == trayLabelsFor("en").show {
 			t.Fatal("Chinese tray menu has not been translated")
 		}
-		if lang == "zh" && (labels.quit != "仅退出 DiggerTerm" || labels.stop != "停止空闲后台服务并退出" || labels.stopAll != "停止所有会话并退出") {
+		if lang == "zh" && (labels.quit != "仅退出 DiggerTerm" || labels.stop != "停止空闲后台服务并退出" || labels.stopAll != "停止所有会话并退出" || labels.stopAllCancel != "取消" || labels.stopAllConfirm != "终止会话并退出") {
 			t.Fatalf("unexpected Chinese tray menu labels: %+v", labels)
 		}
-		if lang == "en" && (labels.stop != "Stop idle background service and quit" || labels.stopAll != "Stop all sessions and quit") {
+		if lang == "en" && (labels.stop != "Stop idle background service and quit" || labels.stopAll != "Stop all sessions and quit" || labels.stopAllCancel != "Cancel" || labels.stopAllConfirm != "Terminate sessions and quit") {
 			t.Fatalf("unexpected English tray menu labels: %+v", labels)
+		}
+		if labels.stopAllTitle == "" || labels.stopAllMessage == "" || labels.stopAllBusy == "" {
+			t.Fatalf("missing %s bulk-stop confirmation text: %+v", lang, labels)
 		}
 	}
 }
