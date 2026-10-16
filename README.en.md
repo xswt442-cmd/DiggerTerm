@@ -44,8 +44,6 @@ Windows requires WebView2; binaries are unsigned. Linux builds target Ubuntu 24.
 
 Settings provide manual reconnection and session exit details. New features require a matching daemon version; finish existing sessions before stopping the old daemon and opening the updated app. Reconnection restores recent terminal output; long-running full-screen applications may not be fully restored.
 
-[简体中文](README.md) · [CHANGELOG](CHANGELOG.md) · [Release guide](RELEASE.md) · [MIT License](LICENSE)
-
 ## License
 
-This project is licensed under the [MIT License](LICENSE).
+MIT

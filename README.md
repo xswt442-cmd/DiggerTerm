@@ -44,8 +44,6 @@ Windows 需要 WebView2，安装包尚未签名。Linux 主要针对 Ubuntu 24.0
 
 会话设置提供手动重连与退出诊断。新功能需要配套版本的 Daemon；更新时，先完成已有会话，再停止旧 Daemon 并打开新版应用。重新连接时会恢复最近的终端输出，长时间运行的全屏界面可能不完整。
 
-[English](README.en.md) · [CHANGELOG](CHANGELOG.md) · [发布流程](RELEASE.md) · [MIT License](LICENSE)
-
 ## 许可证
 
-本项目采用 [MIT 许可证](LICENSE)。
+MIT
