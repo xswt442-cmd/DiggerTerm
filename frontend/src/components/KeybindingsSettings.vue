@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, watch } from 'vue'
 import { actionDefinitions, defaultBindings, eventChord, parseBindings, type ActionId, type Binding } from '../keybindings'
-import { OpenKeybindings, ReadKeybindings, SaveKeybindings } from '../../bindings/github.com/xswt442-cmd/DiggerTerm/keybindingservice'
+import { OpenKeybindings, ReadKeybindings, SaveKeybindings } from '../../bindings/github.com/xswt442-cmd/DiggerTerm/internal/desktop/keybindingservice'
 import type { Locale } from '../uiPreferences'
 
 const props = defineProps<{ locale: Locale; bindings: Binding[]; isMac: boolean }>()

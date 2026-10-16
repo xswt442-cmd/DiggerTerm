@@ -1,4 +1,4 @@
-import { Attach, Detach } from '../bindings/github.com/xswt442-cmd/DiggerTerm/sessionservice'
+import { Attach, Detach } from '../bindings/github.com/xswt442-cmd/DiggerTerm/internal/desktop/sessionservice'
 
 // A pane may remount before its asynchronous attach finishes. Keep its detach
 // ahead of a replacement pane's attach on the same GUI connection.

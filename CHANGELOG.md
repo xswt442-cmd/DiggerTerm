@@ -3,7 +3,18 @@
 本项目的版本变更记录以 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 为参考，按语义化版本标识。
 Changes are recorded in a format inspired by [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
-## [Unreleased] / 未发布
+## [0.0.5] - 2026-10-16
+
+- Dig 新增 Windows/WSL 只读进程树，按名称标注终端和 Agent、展示父链推断，并支持搜索、筛选和元数据详情。
+- Dig adds a read-only Windows/WSL process tree with name-based terminal/agent labels, parent-chain inference, search, filters, and metadata details.
+- Dig 搜索会临时展开命中节点的祖先，清除筛选后恢复手动折叠状态。
+- Dig search temporarily expands matching ancestors and restores manual folds when filters clear.
+- Dig 跨分枝搜索后保留手动折叠偏好，并在进程身份变化或消失后清理旧状态。
+- Dig preserves manual folds when searches move across branches and clears stale state when process identities change or disappear.
+- 托盘菜单区分“停止空闲后台服务并退出”和“停止所有会话并退出”；批量终止会先确认会话数量，执行前重新核对列表，只终止 Daemon 管理的会话，并等待退出后再停止 Daemon。
+- Tray actions distinguish stopping an idle daemon from explicitly terminating managed sessions. Bulk termination confirms the session count, revalidates the list, and stops the daemon only after the confirmed managed sessions exit.
+- 慢速只读进程扫描不再阻塞同一 GUI 连接的会话请求；并发扫描受限，并会在客户端断开时取消。
+- Slow read-only process scans no longer block session requests on the same GUI connection; scans are concurrency-limited and canceled when the client disconnects.
 
 ## [0.0.4] - 2026-10-16
 
@@ -39,9 +50,9 @@ Changes are recorded in a format inspired by [Keep a Changelog](https://keepacha
 - Added manual daemon reconnection, session exit/PTY stream diagnostics, output gap detection, and bounded replay warnings.
 - Added Windows Git Bash without falling back to WSL when it is unavailable, plus native Bash on Unix.
 
-画面恢复仍受限于最近 256 KiB 原始输出，不能保证还原完整的全屏终端状态。用户报告的 SSH 闲置断联尚未在现场复现。Windows 原生 WebView2 跨应用剪贴板和部分平台 GUI 矩阵仍未完成验收。
+终端重连使用最近 256 KiB 原始输出恢复画面，不等同于完整的屏幕快照，部分全屏界面可能无法精确还原。SSH 连接受远端主机和网络策略影响；空闲连接可能被关闭。
 
-Recovery still uses the latest 256 KiB of raw output and cannot reproduce every full-screen terminal state. The reported idle SSH disconnect still needs field reproduction. Some native WebView2 clipboard and platform GUI checks remain unverified.
+Terminal reconnection replays the latest 256 KiB of raw output rather than a complete screen snapshot, so some full-screen interfaces may not be restored exactly. SSH connections depend on remote host and network policies, which may close idle connections.
 
 **下载 / Downloads**（Windows 未签名；Linux 主要针对 Ubuntu 24.04）:
 
@@ -81,7 +92,7 @@ Recovery still uses the latest 256 KiB of raw output and cannot reproduce every 
 **已知限制**
 - 尚未实现 SSH、外部进程观察与任意已运行终端接管。
 - Daemon 本身或操作系统结束进程后不保证恢复；历史输出重放不等于完整屏幕状态。
-- Linux/macOS 未经过完整 GUI 实机测试，没有正式发布包。
+- 该版本未提供 Linux/macOS 安装包。
 
 ### English
 
@@ -96,9 +107,10 @@ First public preview, released as a Windows x64 portable archive.
 **Known limitations**
 - SSH, external process observation, and arbitrary running-terminal takeover are not implemented.
 - Sessions are not guaranteed to recover from daemon termination or an OS shutdown; raw-output replay is not a full screen-state snapshot.
-- No fully tested Linux/macOS desktop builds or release packages.
+- No Linux/macOS installation packages were provided for this version.
 
-[Unreleased]: https://github.com/xswt442-cmd/DiggerTerm/compare/v0.0.4...dev
+[Unreleased]: https://github.com/xswt442-cmd/DiggerTerm/compare/v0.0.5...dev
+[0.0.5]: https://github.com/xswt442-cmd/DiggerTerm/compare/v0.0.4...v0.0.5
 [0.0.4]: https://github.com/xswt442-cmd/DiggerTerm/compare/v0.0.3...v0.0.4
 [0.0.3]: https://github.com/xswt442-cmd/DiggerTerm/compare/v0.0.2...v0.0.3
 [0.0.2]: https://github.com/xswt442-cmd/DiggerTerm/compare/v0.0.1...v0.0.2

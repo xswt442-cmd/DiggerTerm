@@ -3,6 +3,7 @@
 package observe
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"time"
@@ -11,7 +12,10 @@ import (
 	"golang.org/x/sys/windows"
 )
 
-func platformSnapshot() ([]processRow, bool, error) {
+func platformSnapshot(ctx context.Context) ([]processRow, bool, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, false, err
+	}
 	current, err := windows.GetCurrentProcessToken().GetTokenUser()
 	if err != nil {
 		return nil, true, fmt.Errorf("identify current user: %w", err)
@@ -35,6 +39,9 @@ func platformSnapshot() ([]processRow, bool, error) {
 
 	var result []processRow
 	for {
+		if err := ctx.Err(); err != nil {
+			return nil, true, err
+		}
 		if entry.ProcessID != 0 {
 			if row, ok := processMetadata(int(entry.ProcessID), int(entry.ParentProcessID), windows.UTF16ToString(entry.ExeFile[:]), userSID); ok {
 				result = append(result, row)

@@ -12,9 +12,9 @@
 import { Call as $Call, CancellablePromise as $CancellablePromise } from "@wailsio/runtime";
 
 export function ReadText(): $CancellablePromise<string> {
-    return $Call.ByID(3491271856);
+    return $Call.ByID(1109507047);
 }
 
 export function WriteText(text: string): $CancellablePromise<void> {
-    return $Call.ByID(1860945509, text);
+    return $Call.ByID(3483618780, text);
 }

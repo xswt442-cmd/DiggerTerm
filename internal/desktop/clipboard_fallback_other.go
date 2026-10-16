@@ -1,6 +1,6 @@
 //go:build !windows || server
 
-package main
+package desktop
 
 import "errors"
 

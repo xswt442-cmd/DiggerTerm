@@ -1,6 +1,6 @@
 //go:build server
 
-package main
+package desktop
 
 import (
 	"net"

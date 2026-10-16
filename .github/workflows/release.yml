@@ -45,9 +45,7 @@ jobs:
       - name: Install frontend
         run: npm --prefix frontend ci
       - name: Run frontend tests
-        run: |
-          npm --prefix frontend run test:preferences
-          npm --prefix frontend run test:shortcuts
+        run: npm --prefix frontend test
       - name: Build frontend (Go embeds dist)
         run: npm --prefix frontend run build
       - name: Go tests and vet
@@ -107,8 +105,7 @@ jobs:
         run: npm --prefix frontend ci
       - name: Frontend tests and build
         run: |
-          npm --prefix frontend run test:preferences
-          npm --prefix frontend run test:shortcuts
+          npm --prefix frontend test
           npm --prefix frontend run build
       - name: Linux Go tests and vet (includes GNU nano PTY)
         run: |
@@ -145,9 +142,39 @@ jobs:
           retention-days: 7
           compression-level: 0
 
-  publish:
-    name: Verify SHA-256 and publish
+  verify_artifacts:
+    name: Verify packages and SHA-256
     needs: [windows, linux]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    env:
+      RELEASE_VERSION: ${{ inputs.version || github.ref_name }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/download-artifact@v4
+        with:
+          name: windows-release
+          path: dist
+      - uses: actions/download-artifact@v4
+        with:
+          name: linux-release
+          path: dist
+
+      - name: Verify all assets, generate SHA256SUMS
+        run: |
+          node scripts/verify-release.mjs "$RELEASE_VERSION"
+          bash scripts/verify-release-assets.sh "$RELEASE_VERSION" dist
+      - name: Upload verified checksums
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-checksums
+          path: dist/SHA256SUMS
+          if-no-files-found: error
+          retention-days: 7
+
+  publish:
+    name: Publish verified GitHub release
+    needs: [windows, linux, verify_artifacts]
     # No tag means no release; manual workflow_dispatch is always build-only.
     if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-24.04
@@ -167,11 +194,10 @@ jobs:
         with:
           name: linux-release
           path: dist
-
-      - name: Verify all assets, generate SHA256SUMS
-        run: |
-          node scripts/verify-release.mjs "$RELEASE_VERSION"
-          bash scripts/verify-release-assets.sh "$RELEASE_VERSION" dist
+      - uses: actions/download-artifact@v4
+        with:
+          name: release-checksums
+          path: dist
 
       - name: Publish verified GitHub release
         run: |

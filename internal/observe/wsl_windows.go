@@ -97,7 +97,11 @@ func runWSLCommand(ctx context.Context, exe string, args ...string) ([]byte, err
 }
 
 func runningWSLDistros(exe string) ([]string, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	return runningWSLDistrosContext(context.Background(), exe)
+}
+
+func runningWSLDistrosContext(parent context.Context, exe string) ([]string, error) {
+	ctx, cancel := context.WithTimeout(parent, 3*time.Second)
 	defer cancel()
 	data, err := runWSLCommand(ctx, exe, "--list", "--running", "--quiet")
 	if err != nil {
@@ -118,11 +122,18 @@ func containsDistro(distros []string, target string) bool {
 // WSL does not expose an atomic running-state check and exec operation. Check
 // immediately before each bounded invocation to narrow the exit race.
 func platformWSLSnapshot() ([]Process, bool, string) {
+	return platformWSLSnapshotContext(context.Background())
+}
+
+func platformWSLSnapshotContext(parent context.Context) ([]Process, bool, string) {
+	if err := parent.Err(); err != nil {
+		return nil, false, err.Error()
+	}
 	exe, err := wslExecutable()
 	if err != nil {
 		return nil, false, "WSL discovery unavailable"
 	}
-	distros, err := runningWSLDistros(exe)
+	distros, err := runningWSLDistrosContext(parent, exe)
 	if err != nil {
 		return nil, false, "Unable to list running WSL distributions"
 	}
@@ -139,7 +150,10 @@ func platformWSLSnapshot() ([]Process, bool, string) {
 	skippedStopped := 0
 	scanned := 0
 	for _, distro := range distros {
-		latest, err := runningWSLDistros(exe)
+		if err := parent.Err(); err != nil {
+			return nil, truncated, err.Error()
+		}
+		latest, err := runningWSLDistrosContext(parent, exe)
 		if err != nil {
 			failures++
 			continue
@@ -148,7 +162,7 @@ func platformWSLSnapshot() ([]Process, bool, string) {
 			skippedStopped++
 			continue
 		}
-		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		ctx, cancel := context.WithTimeout(parent, 5*time.Second)
 		raw, err := runWSLCommand(ctx, exe, "-d", distro, "--exec", "/bin/sh", "-c", linuxProcessScript)
 		cancel()
 		if err != nil {

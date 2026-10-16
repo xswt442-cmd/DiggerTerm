@@ -1,6 +1,7 @@
 package observe
 
 import (
+	"strings"
 	"testing"
 	"time"
 )
@@ -35,10 +36,33 @@ func TestRelatedProcessesAndOwnership(t *testing.T) {
 			t.Errorf("pid=%d kind=%q, want %q", pid, seen[pid], want)
 		}
 	}
+	for _, item := range got {
+		if item.Kind == "descendant" && item.ClassificationBasis != "ancestor" {
+			t.Errorf("descendant classification basis=%q, want ancestor", item.ClassificationBasis)
+		}
+		if item.Kind != "descendant" && item.ClassificationBasis != "name" {
+			t.Errorf("recognized classification basis=%q, want name", item.ClassificationBasis)
+		}
+		if !strings.HasPrefix(item.Key, "windows:") {
+			t.Errorf("Windows key lacks namespace: %q", item.Key)
+		}
+	}
 	for _, pid := range []int{20, 21, 30, 31, 41} {
 		if _, exists := seen[pid]; exists {
 			t.Errorf("unexpected observed PID %d", pid)
 		}
+	}
+}
+
+func TestWindowsObservedKeyChangesWhenPIDIsReused(t *testing.T) {
+	start := time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC)
+	first, _ := selectRelated([]processRow{{pid: 50, name: "powershell.exe", started: start}}, nil, 10)
+	second, _ := selectRelated([]processRow{{pid: 50, name: "powershell.exe", started: start.Add(time.Second)}}, nil, 10)
+	if len(first) != 1 || len(second) != 1 {
+		t.Fatalf("expected one process per scan, got %d and %d", len(first), len(second))
+	}
+	if first[0].Key == second[0].Key {
+		t.Fatalf("PID reuse retained identity key %q", first[0].Key)
 	}
 }
 

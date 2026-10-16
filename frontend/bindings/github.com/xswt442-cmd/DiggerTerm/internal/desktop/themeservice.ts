@@ -16,13 +16,13 @@ import { Call as $Call, CancellablePromise as $CancellablePromise } from "@wails
 import * as $models from "./models.js";
 
 export function ListThemes(): $CancellablePromise<$models.ThemeCatalog> {
-    return $Call.ByID(2467410722);
+    return $Call.ByID(889310793);
 }
 
 export function OpenThemeDirectory(): $CancellablePromise<void> {
-    return $Call.ByID(87965800);
+    return $Call.ByID(4133576863);
 }
 
 export function ThemeDirectory(): $CancellablePromise<string> {
-    return $Call.ByID(3090814736);
+    return $Call.ByID(226368651);
 }

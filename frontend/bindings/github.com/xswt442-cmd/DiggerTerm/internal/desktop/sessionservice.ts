@@ -13,17 +13,17 @@ import { Call as $Call, CancellablePromise as $CancellablePromise } from "@wails
 
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore: Unused imports
-import * as observe$0 from "./internal/observe/models.js";
+import * as observe$0 from "../observe/models.js";
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore: Unused imports
-import * as session$0 from "./internal/session/models.js";
+import * as session$0 from "../session/models.js";
 
 export function Attach(id: string): $CancellablePromise<void> {
-    return $Call.ByID(294244360, id);
+    return $Call.ByID(3570698667, id);
 }
 
 export function Create(profile: string, cols: number, rows: number): $CancellablePromise<session$0.Info> {
-    return $Call.ByID(727494345, profile, cols, rows);
+    return $Call.ByID(2216079782, profile, cols, rows);
 }
 
 /**
@@ -31,23 +31,23 @@ export function Create(profile: string, cols: number, rows: number): $Cancellabl
  * cannot masquerade as local session profiles.
  */
 export function CreateLocal(profile: string, directory: string, cols: number, rows: number): $CancellablePromise<session$0.Info> {
-    return $Call.ByID(3301322044, profile, directory, cols, rows);
+    return $Call.ByID(240471501, profile, directory, cols, rows);
 }
 
 export function CreateSSH(target: string, port: number, cols: number, rows: number): $CancellablePromise<session$0.Info> {
-    return $Call.ByID(2921322589, target, port, cols, rows);
+    return $Call.ByID(2146546868, target, port, cols, rows);
 }
 
 export function Detach(id: string): $CancellablePromise<void> {
-    return $Call.ByID(3975562206, id);
+    return $Call.ByID(99951125, id);
 }
 
 export function Forget(id: string): $CancellablePromise<void> {
-    return $Call.ByID(783522984, id);
+    return $Call.ByID(1064876787, id);
 }
 
 export function List(): $CancellablePromise<session$0.Info[] | null> {
-    return $Call.ByID(406057093);
+    return $Call.ByID(2476480814);
 }
 
 /**
@@ -55,11 +55,11 @@ export function List(): $CancellablePromise<session$0.Info[] | null> {
  * cannot send these PID identifiers to any managed-session control method.
  */
 export function Observe(): $CancellablePromise<observe$0.Snapshot> {
-    return $Call.ByID(2644345531);
+    return $Call.ByID(2868046510);
 }
 
 export function Profiles(): $CancellablePromise<session$0.Profile[] | null> {
-    return $Call.ByID(531259195);
+    return $Call.ByID(1013514452);
 }
 
 /**
@@ -67,22 +67,22 @@ export function Profiles(): $CancellablePromise<session$0.Profile[] | null> {
  * daemon, and it returns the sessions currently managed by that process.
  */
 export function Reconnect(): $CancellablePromise<session$0.Info[] | null> {
-    return $Call.ByID(2781747506);
+    return $Call.ByID(1025429827);
 }
 
 export function Rename(id: string, name: string): $CancellablePromise<session$0.Info> {
-    return $Call.ByID(628772759, id, name);
+    return $Call.ByID(1209212540, id, name);
 }
 
 export function Resize(id: string, cols: number, rows: number): $CancellablePromise<void> {
-    return $Call.ByID(1024318965, id, cols, rows);
+    return $Call.ByID(2928347606, id, cols, rows);
 }
 
 /**
  * SSHHosts exposes only simple, explicit Host aliases; never SSH credentials.
  */
 export function SSHHosts(): $CancellablePromise<string[] | null> {
-    return $Call.ByID(342202540);
+    return $Call.ByID(3640402331);
 }
 
 /**
@@ -91,17 +91,17 @@ export function SSHHosts(): $CancellablePromise<string[] | null> {
  * after resolving the UI's "follow system" preference in the WebView.
  */
 export function SetUILanguage(locale: string): $CancellablePromise<void> {
-    return $Call.ByID(3443472923, locale);
+    return $Call.ByID(3337431774, locale);
 }
 
 export function Snapshot(id: string): $CancellablePromise<session$0.Replay> {
-    return $Call.ByID(2306353609, id);
+    return $Call.ByID(2706972894, id);
 }
 
 export function Terminate(id: string): $CancellablePromise<void> {
-    return $Call.ByID(471331968, id);
+    return $Call.ByID(3009456997, id);
 }
 
 export function Write(id: string, data: string): $CancellablePromise<void> {
-    return $Call.ByID(779625600, id, data);
+    return $Call.ByID(270708317, id, data);
 }

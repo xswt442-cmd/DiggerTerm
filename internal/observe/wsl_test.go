@@ -59,6 +59,16 @@ func TestWSLProcessSnapshotIdentityAndOwnership(t *testing.T) {
 			t.Fatal("WSL distro collision in stable key")
 		}
 	}
+	newBoot := strings.Replace(string(sampleWSLProcessLines()), testBootID, "11111111-2222-4333-8444-555555555555", 1)
+	c, _, err := parseWSLProcessList([]byte(newBoot), "Ubuntu")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, p := range c {
+		if p.PID == 50 && keys[p.PID] == p.Key {
+			t.Fatal("WSL restart retained the prior boot identity")
+		}
+	}
 }
 
 func TestWSLRejectBadBootMetadata(t *testing.T) {
