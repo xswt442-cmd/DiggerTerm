@@ -7,8 +7,12 @@ Changes are recorded in a format inspired by [Keep a Changelog](https://keepacha
 
 - Dig 新增 Windows/WSL 只读进程树，按名称标注终端和 Agent、展示父链推断，并支持搜索、筛选和元数据详情。
 - Dig adds a read-only Windows/WSL process tree with name-based terminal/agent labels, parent-chain inference, search, filters, and metadata details.
+- Dig 搜索会临时展开命中节点的祖先，清除筛选后恢复手动折叠状态。
+- Dig search temporarily expands matching ancestors and restores manual folds when filters clear.
 - 托盘菜单区分“停止空闲后台服务并退出”和“停止所有会话并退出”；批量终止会先确认会话数量，执行前重新核对列表，只终止 Daemon 管理的会话，并等待退出后再停止 Daemon。
 - Tray actions distinguish stopping an idle daemon from explicitly terminating managed sessions. Bulk termination confirms the session count, revalidates the list, and stops the daemon only after the confirmed managed sessions exit.
+- 慢速只读进程扫描不再阻塞同一 GUI 连接的会话请求；并发扫描受限，并会在客户端断开时取消。
+- Slow read-only process scans no longer block session requests on the same GUI connection; scans are concurrency-limited and canceled when the client disconnects.
 
 ## [0.0.4] - 2026-10-16
 
