@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, watch } from 'vue'
+import { computed, ref } from 'vue'
 import type { ProcessNode } from '../dig/processTree'
 import { classificationLabel } from '../dig/processTree'
 
@@ -9,34 +9,38 @@ const props = defineProps<{
   showPid: boolean
   locale: string
   kindLabel: (kind: string) => string
+  expandFilteredNodes: boolean
 }>()
 
 const emit = defineEmits<{ select: [process: ProcessNode] }>()
-const expanded = ref(props.node.children.length > 0)
-watch(() => props.node.children.length, (count, previous) => {
-  if (count === 0) expanded.value = false
-  else if (previous === 0) expanded.value = true
-})
+const userExpanded = ref(props.node.children.length > 0)
+const expanded = computed(() => props.expandFilteredNodes && props.node.children.length > 0
+  ? true
+  : userExpanded.value)
 </script>
 
 <template>
-  <li role="treeitem" :aria-expanded="node.children.length ? expanded : undefined">
+  <li>
     <div class="dig-row" :class="{ selected: selectedKey === node.key }">
       <button v-if="node.children.length" type="button" class="dig-toggle"
-        :aria-label="expanded
+        :disabled="expandFilteredNodes"
+        :aria-label="expandFilteredNodes
+          ? (locale === 'zh' ? '搜索结果已展开' : 'Expanded to show filtered results')
+          : expanded
           ? (locale === 'zh' ? '折叠子进程' : 'Collapse child processes')
           : (locale === 'zh' ? '展开子进程' : 'Expand child processes')"
-        :aria-expanded="expanded" @click="expanded = !expanded">{{ expanded ? '▾' : '▸' }}</button>
+        :aria-expanded="expanded" @click="userExpanded = !userExpanded">{{ expanded ? '▾' : '▸' }}</button>
       <span v-else class="dig-toggle-space" aria-hidden="true" />
-      <button type="button" class="dig-select" :aria-current="selectedKey === node.key ? 'page' : undefined"
+      <button type="button" class="dig-select" :aria-pressed="selectedKey === node.key"
         @click="emit('select', node)">
         <span class="dig-name">{{ node.name }}</span>
         <span class="dig-meta">{{ kindLabel(node.kind) }} · {{ classificationLabel(node) === 'identified' ? (locale === 'zh' ? '名称识别' : 'identified') : classificationLabel(node) === 'inferred' ? (locale === 'zh' ? '父链推断' : 'inferred') : (locale === 'zh' ? '来源未知' : 'unknown source') }}<span v-if="showPid"> · PID {{ node.pid }}</span></span>
       </button>
     </div>
-    <ul v-if="expanded && node.children.length" role="group">
+    <ul v-if="expanded && node.children.length">
       <DigTreeNode v-for="child in node.children" :key="child.key" :node="child"
         :selected-key="selectedKey" :show-pid="showPid" :locale="locale" :kind-label="kindLabel"
+        :expand-filtered-nodes="expandFilteredNodes"
         @select="emit('select', $event)" />
     </ul>
   </li>

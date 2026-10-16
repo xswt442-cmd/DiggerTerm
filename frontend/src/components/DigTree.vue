@@ -15,12 +15,13 @@ const emit = defineEmits<{ select: [process: ProcessNode] }>()
 </script>
 
 <template>
-  <nav class="dig-tree" role="tree" :aria-label="label">
+  <nav class="dig-tree" :aria-label="label">
     <section v-for="group in groups" :key="group.source + ':' + group.distribution" class="dig-group">
       <h3 class="dig-group-label">{{ group.source === 'wsl' ? `WSL · ${group.distribution}` : 'Windows' }}</h3>
-      <ul role="group">
+      <ul>
         <DigTreeNode v-for="node in group.roots" :key="node.key" :node="node"
           :selected-key="selectedKey" :show-pid="showPid" :locale="locale" :kind-label="kindLabel"
+          :expand-filtered-nodes="group.expandFilteredNodes ?? false"
           @select="emit('select', $event)" />
       </ul>
     </section>

@@ -19,6 +19,7 @@ export type ProcessGroup = {
   source: string
   distribution: string
   roots: ProcessNode[]
+  expandFilteredNodes?: boolean
 }
 
 const maxTreeDepth = 32

@@ -46,6 +46,8 @@ export function useDig(options: UseDigOptions) {
   const distributions = computed(() => [...new Set(processes.value
     .filter(process => process.source === 'wsl')
     .map(process => process.distribution))].sort((a, b) => a.localeCompare(b)))
+  const filterActive = computed(() => Boolean(options.query.value.trim()) ||
+    sourceFilter.value !== 'all' || kindFilter.value !== 'all' || distributionFilter.value !== 'all')
   const filteredGroups = computed(() => {
     const term = options.query.value.trim().toLowerCase()
     return filterProcessTree(groups.value, process => {
@@ -54,7 +56,7 @@ export function useDig(options: UseDigOptions) {
       const kindMatches = kindFilter.value === 'all' || process.kind === kindFilter.value
       const distributionMatches = distributionFilter.value === 'all' || (process.source === 'wsl' && process.distribution === distributionFilter.value)
       return textMatches && sourceMatches && kindMatches && distributionMatches
-    })
+    }).map(group => ({ ...group, expandFilteredNodes: filterActive.value }))
   })
   const activeProcess = computed(() => processes.value.find(process => process.key === options.selectedExternalKey.value))
   const activePath = computed(() => findProcessPath(groups.value, options.selectedExternalKey.value))
