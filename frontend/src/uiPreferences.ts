@@ -221,8 +221,8 @@ const text = {
     observeEnabled: '显示外部进程',
     refreshSeconds: '自动扫描', scanManual: '仅手动', seconds: '{count} 秒',
     showPid: '显示 PID', showStatusBar: '显示侧栏计数',
-    focusBorderStyle: '聚焦终端边框样式', focusBorderAccent: '主题强调色边框（当前）',
-    focusBorderMuted: '灰色细边框', focusBorderNone: '不高亮终端边框',
+    focusBorderStyle: '选中终端边框样式', focusBorderAccent: '强调色边框',
+    focusBorderMuted: '中灰色 2px 边框', focusBorderNone: '无提示',
     resetAppearance: '恢复默认外观', resetTerminal: '恢复终端默认值',
     resetSessions: '恢复会话默认值', resetObserved: '恢复观察默认值',
 
@@ -267,8 +267,8 @@ const text = {
     observeEnabled: 'Show observed',
     refreshSeconds: 'Auto refresh', scanManual: 'Manual only', seconds: '{count}s',
     showPid: 'Show PID', showStatusBar: 'Show sidebar counts',
-    focusBorderStyle: 'Focused terminal border', focusBorderAccent: 'Theme accent border (current)',
-    focusBorderMuted: 'Thin gray border', focusBorderNone: 'No focused border highlight',
+    focusBorderStyle: 'Selected terminal border', focusBorderAccent: 'Accent border',
+    focusBorderMuted: 'Medium gray 2px border', focusBorderNone: 'No hint',
     resetAppearance: 'Reset appearance', resetTerminal: 'Reset terminal',
     resetSessions: 'Reset sessions', resetObserved: 'Reset observed',
 

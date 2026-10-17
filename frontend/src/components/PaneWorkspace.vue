@@ -122,8 +122,8 @@ function forwardResize(splitId: string, ratio: number) {
 }
 
 .pane-workspace__leaf--focus-muted {
-  border-color: var(--border, #343a44);
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--muted, #98a1ae) 40%, transparent);
+  border: 2px solid color-mix(in srgb, var(--muted, #98a1ae) 65%, var(--canvas, #101318));
+  box-shadow: none;
 }
 
 .pane-workspace__leaf--focus-none {
