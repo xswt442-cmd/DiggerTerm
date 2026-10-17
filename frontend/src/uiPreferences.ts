@@ -6,7 +6,7 @@ export type Locale = 'zh' | 'en'
 export type FontId = 'cascadia' | 'consolas' | 'jetbrains' | 'fira' | 'monospace'
 export type CursorStyle = 'block' | 'underline' | 'bar'
 export type KeyboardMode = 'smart' | 'desktop' | 'native'
-export type PanePromptStyle = 'current' | 'subtle' | 'none'
+export type FocusBorderStyle = 'accent' | 'muted' | 'none'
 export const fonts: Record<FontId, { name: string, family: string }> = {
   cascadia: { name: 'Cascadia Code', family: '"Cascadia Code", Consolas, monospace' },
   consolas: { name: 'Consolas', family: 'Consolas, monospace' },
@@ -36,7 +36,7 @@ export interface UIPreferences {
   lineHeight: number
   scrollSensitivity: number
   terminalPadding: number
-  panePromptStyle: PanePromptStyle
+  focusBorderStyle: FocusBorderStyle
   cursorStyle: CursorStyle
   keyboardMode: KeyboardMode
   cursorBlink: boolean
@@ -51,7 +51,7 @@ export interface UIPreferences {
 export const defaults: UIPreferences = {
   theme: 'builtin:nightfall', customCSS: true, fontSize: 13, uiFontSize: 12, fontFamily: 'cascadia', language: 'system',
   sidebarWidth: 280, sidebarCollapsed: false, managedRatio: 0.42, defaultDirectory: '', defaultProfile: 'auto',
-  scrollback: 5000, lineHeight: 1.25, scrollSensitivity: 1, terminalPadding: 14, panePromptStyle: 'current',
+  scrollback: 5000, lineHeight: 1.25, scrollSensitivity: 1, terminalPadding: 14, focusBorderStyle: 'accent',
   cursorStyle: 'block', keyboardMode: 'smart', cursorBlink: true, rightClickSelectsWord: false,
   activateNewSession: true, observeEnabled: true,
   observeRefreshSeconds: 15, showPid: true, showStatusBar: true,
@@ -146,7 +146,14 @@ export function readPreferences(): UIPreferences {
     if (typeof saved.fontSize === 'number' && Number.isFinite(saved.fontSize)) result.fontSize = Math.max(11, Math.min(20, Math.round(saved.fontSize)))
     if (typeof saved.uiFontSize === 'number' && Number.isFinite(saved.uiFontSize)) result.uiFontSize = Math.max(10, Math.min(16, Math.round(saved.uiFontSize)))
     if (typeof saved.sidebarWidth === 'number' && Number.isFinite(saved.sidebarWidth)) result.sidebarWidth = Math.max(216, Math.min(500, Math.round(saved.sidebarWidth)))
-    if (saved.panePromptStyle && ['current', 'subtle', 'none'].includes(saved.panePromptStyle)) result.panePromptStyle = saved.panePromptStyle
+    if (saved.focusBorderStyle && ['accent', 'muted', 'none'].includes(saved.focusBorderStyle)) {
+      result.focusBorderStyle = saved.focusBorderStyle
+    } else {
+      const legacy = (saved as Partial<UIPreferences> & { panePromptStyle?: string }).panePromptStyle
+      if (legacy === 'current') result.focusBorderStyle = 'accent'
+      else if (legacy === 'subtle') result.focusBorderStyle = 'muted'
+      else if (legacy === 'none') result.focusBorderStyle = 'none'
+    }
     if (typeof saved.managedRatio === 'number' && Number.isFinite(saved.managedRatio)) result.managedRatio = Math.max(0.2, Math.min(0.8, saved.managedRatio))
     if (typeof saved.defaultDirectory === 'string') result.defaultDirectory = saved.defaultDirectory.slice(0, 512)
     if (saved.fontFamily && Object.hasOwn(fonts, saved.fontFamily)) result.fontFamily = saved.fontFamily
@@ -214,7 +221,8 @@ const text = {
     observeEnabled: '显示外部进程',
     refreshSeconds: '自动扫描', scanManual: '仅手动', seconds: '{count} 秒',
     showPid: '显示 PID', showStatusBar: '显示侧栏计数',
-    panePromptStyle: '选中终端时的提示', panePromptCurrent: '当前样式', panePromptSubtle: '低调显示', panePromptNone: '不显示提示',
+    focusBorderStyle: '聚焦终端边框样式', focusBorderAccent: '主题强调色边框（当前）',
+    focusBorderMuted: '灰色细边框', focusBorderNone: '不高亮终端边框',
     resetAppearance: '恢复默认外观', resetTerminal: '恢复终端默认值',
     resetSessions: '恢复会话默认值', resetObserved: '恢复观察默认值',
 
@@ -259,7 +267,8 @@ const text = {
     observeEnabled: 'Show observed',
     refreshSeconds: 'Auto refresh', scanManual: 'Manual only', seconds: '{count}s',
     showPid: 'Show PID', showStatusBar: 'Show sidebar counts',
-    panePromptStyle: 'Pane selection hint', panePromptCurrent: 'Current style', panePromptSubtle: 'Subtle', panePromptNone: 'No hint',
+    focusBorderStyle: 'Focused terminal border', focusBorderAccent: 'Theme accent border (current)',
+    focusBorderMuted: 'Thin gray border', focusBorderNone: 'No focused border highlight',
     resetAppearance: 'Reset appearance', resetTerminal: 'Reset terminal',
     resetSessions: 'Reset sessions', resetObserved: 'Reset observed',
 

@@ -144,11 +144,11 @@ const t = props.translate
       </label>
     </div>
     <label class="setting-row">
-      <span>{{ t('panePromptStyle') }}</span>
-      <select v-model="preferences.panePromptStyle">
-        <option value="current">{{ t('panePromptCurrent') }}</option>
-        <option value="subtle">{{ t('panePromptSubtle') }}</option>
-        <option value="none">{{ t('panePromptNone') }}</option>
+      <span>{{ t('focusBorderStyle') }}</span>
+      <select v-model="preferences.focusBorderStyle">
+        <option value="accent">{{ t('focusBorderAccent') }}</option>
+        <option value="muted">{{ t('focusBorderMuted') }}</option>
+        <option value="none">{{ t('focusBorderNone') }}</option>
       </select>
     </label>
     <div class="toggle-grid">

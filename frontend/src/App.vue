@@ -559,7 +559,7 @@ onBeforeUnmount(() => {
         <button type="button" aria-label="Dismiss error" @click="errorMessage = ''">×</button>
       </div>
       <div class="terminal-area">
-        <PaneWorkspace v-show="!selectedExternalKey" :layout="layout"
+        <PaneWorkspace v-show="!selectedExternalKey" :layout="layout" :focus-border-style="preferences.focusBorderStyle"
           @focus="focusWorkspacePane" @resize="(id, ratio) => layout = resizeSplit(layout, id, ratio)">
           <template #default="{ pane, focused }">
             <header class="workspace-pane-head">
@@ -581,8 +581,7 @@ onBeforeUnmount(() => {
                 :right-click-selects-word="preferences.rightClickSelectsWord"
                 :padding="preferences.terminalPadding"
                 :colors="palette.terminal" :theme-revision="themeRevision" :locale="locale" :bindings="bindings" @error="reportError" />
-              <p v-else-if="sessions.length > 0 && preferences.panePromptStyle !== 'none'" class="pane-placeholder"
-                :class="{ subtle: preferences.panePromptStyle === 'subtle' }">{{ locale === 'zh' ? '从侧栏或上方选择托管会话。关闭面板仅分离视图。' : 'Choose a managed session here or in the sidebar. Closing a pane only detaches its view.' }}</p>
+              <p v-else-if="sessions.length > 0" class="pane-placeholder">{{ locale === 'zh' ? '从侧栏或上方选择托管会话。关闭面板仅分离视图。' : 'Choose a managed session here or in the sidebar. Closing a pane only detaches its view.' }}</p>
             </div>
           </template>
         </PaneWorkspace>
@@ -643,7 +642,6 @@ button:focus-visible, input:focus-visible, select:focus-visible, [role="separato
 .workspace-pane-head select { min-width: 0; flex: 1; }
 .workspace-pane-body { position: absolute; inset: 30px 0 0; }
 .pane-placeholder { color: var(--muted); font-size: 12px; padding: 10px; }
-.pane-placeholder.subtle { color: var(--faint); font-size: 10px; padding: 7px 10px; opacity: .72; }
 .sidebar { position: relative; display: flex; flex-direction: column; flex: 0 0 auto; min-width: 216px; max-width: 500px; min-height: 0; background: var(--sidebar); padding: 11px 10px 0; z-index: 2; }
 .brand { display: flex; align-items: center; gap: 9px; height: 43px; padding: 0 5px; flex-shrink: 0; }
 .sidebar-collapse { display: grid; place-items: center; flex: 0 0 23px; width: 23px; height: 23px; margin-left: auto; padding: 0; border: 1px solid transparent; background: transparent; color: var(--muted); font-size: 17px; line-height: 1; }

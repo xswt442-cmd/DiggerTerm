@@ -35,7 +35,7 @@ test('all expanded preferences persist across GUI reopen', () => {
     lineHeight: 1.4,
     scrollSensitivity: 5,
     terminalPadding: 6,
-    panePromptStyle: 'subtle',
+    focusBorderStyle: 'muted',
     cursorStyle: 'bar',
     keyboardMode: 'native',
     cursorBlink: false,
@@ -60,6 +60,7 @@ test('bad saved values are clamped or safely ignored', () => {
     theme: 'malicious',
     cursorStyle: 'hidden',
     keyboardMode: 'untrusted',
+    focusBorderStyle: 'obtrusive',
     panePromptStyle: 'obtrusive',
     defaultProfile: '-oBadFlag',
     scrollback: 99_999_999,
@@ -76,7 +77,7 @@ test('bad saved values are clamped or safely ignored', () => {
   assert.equal(read.theme, prefs.defaults.theme)
   assert.equal(read.cursorStyle, prefs.defaults.cursorStyle)
   assert.equal(read.keyboardMode, prefs.defaults.keyboardMode)
-  assert.equal(read.panePromptStyle, prefs.defaults.panePromptStyle)
+  assert.equal(read.focusBorderStyle, prefs.defaults.focusBorderStyle)
   assert.equal(read.defaultProfile, prefs.defaults.defaultProfile)
   assert.equal(read.scrollback, prefs.defaults.scrollback)
   assert.equal(read.terminalPadding, prefs.defaults.terminalPadding)
@@ -99,10 +100,17 @@ test('theme IDs migrate and preserve user theme identity until catalog refresh',
   assert.equal(prefs.readPreferences().customCSS, false)
 })
 
+test('old pane hint preferences migrate to focused terminal border styles', () => {
+  for (const [legacy, expected] of [['current', 'accent'], ['subtle', 'muted'], ['none', 'none']]) {
+    values.set('diggerterm:preferences:v1', JSON.stringify({ panePromptStyle: legacy }))
+    assert.equal(prefs.readPreferences().focusBorderStyle, expected)
+  }
+})
+
 test('new setting labels appear in both UI languages', () => {
   for (const key of ['terminalTab', 'sessionTab', 'monitorTab', 'fontFamily', 'uiFontSize', 'scrollback',
-    'profileDefault', 'observeEnabled', 'refreshSeconds', 'keyboardMode', 'panePromptStyle',
-    'panePromptCurrent', 'panePromptSubtle', 'panePromptNone', 'collapseSidebar', 'expandSidebar',
+    'profileDefault', 'observeEnabled', 'refreshSeconds', 'keyboardMode', 'focusBorderStyle',
+    'focusBorderAccent', 'focusBorderMuted', 'focusBorderNone', 'collapseSidebar', 'expandSidebar',
     'sessionDiagnostics', 'showStatusBar']) {
     assert.notEqual(prefs.translate('zh', key), '')
     assert.notEqual(prefs.translate('en', key), '')

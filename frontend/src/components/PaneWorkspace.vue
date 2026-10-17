@@ -1,12 +1,13 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import type { PaneNode, WorkspaceLayout } from '../workspaceLayout'
+import type { FocusBorderStyle } from '../uiPreferences'
 import PaneNodeView from './PaneNode.vue'
 
 type Leaf = Extract<PaneNode, { type: 'leaf' }>
 type Rect = { x: number; y: number; width: number; height: number }
 
-const props = defineProps<{ layout: WorkspaceLayout }>()
+const props = defineProps<{ layout: WorkspaceLayout; focusBorderStyle: FocusBorderStyle }>()
 const emit = defineEmits<{
   focus: [paneId: string]
   resize: [splitId: string, ratio: number]
@@ -67,7 +68,7 @@ function forwardResize(splitId: string, ratio: number) {
         v-for="entry in paneRects"
         :key="entry.pane.paneId"
         class="pane-workspace__leaf"
-        :class="{ 'pane-workspace__leaf--focused': layout.focusedPaneId === entry.pane.paneId }"
+        :class="layout.focusedPaneId === entry.pane.paneId ? `pane-workspace__leaf--focus-${focusBorderStyle}` : undefined"
         :style="{
           '--pane-x': `${entry.rect.x * 100}%`, '--pane-y': `${entry.rect.y * 100}%`,
           '--pane-width': `${entry.rect.width * 100}%`, '--pane-height': `${entry.rect.height * 100}%`,
@@ -115,8 +116,18 @@ function forwardResize(splitId: string, ratio: number) {
   height: calc(var(--pane-height, 100%) - var(--dt-pane-gap, 6px));
 }
 
-.pane-workspace__leaf--focused {
+.pane-workspace__leaf--focus-accent {
   border-color: var(--accent, #bca58b);
   box-shadow: inset 0 0 0 1px var(--accent, #bca58b);
+}
+
+.pane-workspace__leaf--focus-muted {
+  border-color: var(--border, #343a44);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--muted, #98a1ae) 40%, transparent);
+}
+
+.pane-workspace__leaf--focus-none {
+  border-color: var(--border, #343a44);
+  box-shadow: inset 0 0 0 1px transparent;
 }
 </style>
