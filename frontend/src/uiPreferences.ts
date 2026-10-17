@@ -6,6 +6,7 @@ export type Locale = 'zh' | 'en'
 export type FontId = 'cascadia' | 'consolas' | 'jetbrains' | 'fira' | 'monospace'
 export type CursorStyle = 'block' | 'underline' | 'bar'
 export type KeyboardMode = 'smart' | 'desktop' | 'native'
+export type PanePromptStyle = 'current' | 'subtle' | 'none'
 export const fonts: Record<FontId, { name: string, family: string }> = {
   cascadia: { name: 'Cascadia Code', family: '"Cascadia Code", Consolas, monospace' },
   consolas: { name: 'Consolas', family: 'Consolas, monospace' },
@@ -27,6 +28,7 @@ export interface UIPreferences {
   fontFamily: FontId
   language: LanguageId
   sidebarWidth: number
+  sidebarCollapsed: boolean
   managedRatio: number
   defaultDirectory: string
   defaultProfile: string
@@ -34,6 +36,7 @@ export interface UIPreferences {
   lineHeight: number
   scrollSensitivity: number
   terminalPadding: number
+  panePromptStyle: PanePromptStyle
   cursorStyle: CursorStyle
   keyboardMode: KeyboardMode
   cursorBlink: boolean
@@ -47,8 +50,8 @@ export interface UIPreferences {
 
 export const defaults: UIPreferences = {
   theme: 'builtin:nightfall', customCSS: true, fontSize: 13, uiFontSize: 12, fontFamily: 'cascadia', language: 'system',
-  sidebarWidth: 280, managedRatio: 0.42, defaultDirectory: '', defaultProfile: 'auto',
-  scrollback: 5000, lineHeight: 1.25, scrollSensitivity: 1, terminalPadding: 14,
+  sidebarWidth: 280, sidebarCollapsed: false, managedRatio: 0.42, defaultDirectory: '', defaultProfile: 'auto',
+  scrollback: 5000, lineHeight: 1.25, scrollSensitivity: 1, terminalPadding: 14, panePromptStyle: 'current',
   cursorStyle: 'block', keyboardMode: 'smart', cursorBlink: true, rightClickSelectsWord: false,
   activateNewSession: true, observeEnabled: true,
   observeRefreshSeconds: 15, showPid: true, showStatusBar: true,
@@ -143,6 +146,7 @@ export function readPreferences(): UIPreferences {
     if (typeof saved.fontSize === 'number' && Number.isFinite(saved.fontSize)) result.fontSize = Math.max(11, Math.min(20, Math.round(saved.fontSize)))
     if (typeof saved.uiFontSize === 'number' && Number.isFinite(saved.uiFontSize)) result.uiFontSize = Math.max(10, Math.min(16, Math.round(saved.uiFontSize)))
     if (typeof saved.sidebarWidth === 'number' && Number.isFinite(saved.sidebarWidth)) result.sidebarWidth = Math.max(216, Math.min(500, Math.round(saved.sidebarWidth)))
+    if (saved.panePromptStyle && ['current', 'subtle', 'none'].includes(saved.panePromptStyle)) result.panePromptStyle = saved.panePromptStyle
     if (typeof saved.managedRatio === 'number' && Number.isFinite(saved.managedRatio)) result.managedRatio = Math.max(0.2, Math.min(0.8, saved.managedRatio))
     if (typeof saved.defaultDirectory === 'string') result.defaultDirectory = saved.defaultDirectory.slice(0, 512)
     if (saved.fontFamily && Object.hasOwn(fonts, saved.fontFamily)) result.fontFamily = saved.fontFamily
@@ -155,7 +159,7 @@ export function readPreferences(): UIPreferences {
     if (saved.terminalPadding && paddingOptions.includes(saved.terminalPadding as typeof paddingOptions[number])) result.terminalPadding = saved.terminalPadding
     if (saved.observeRefreshSeconds !== undefined && refreshOptions.includes(saved.observeRefreshSeconds as typeof refreshOptions[number])) result.observeRefreshSeconds = saved.observeRefreshSeconds
     for (const name of ['customCSS', 'cursorBlink', 'rightClickSelectsWord', 'activateNewSession',
-      'observeEnabled', 'showPid', 'showStatusBar'] as const) {
+      'observeEnabled', 'showPid', 'showStatusBar', 'sidebarCollapsed'] as const) {
       if (typeof saved[name] === 'boolean') result[name] = saved[name]
     }
   } catch { /* Storage can be disabled: use defaults. */ }
@@ -182,6 +186,7 @@ const text = {
     defaultDirectory: '新建 Shell 默认路径',
     directoryPlaceholder: '留空使用默认路径', resetLayout: '重置分栏大小', close: '关闭设置',
     widthHandle: '调整左侧栏宽度', heightHandle: '调整上下区域比例',
+    collapseSidebar: '收起侧栏', expandSidebar: '展开侧栏', sessionDiagnostics: '会话诊断',
     errorDaemon: '后台 Daemon 版本较旧。请先完成正在运行的会话，停止旧 Daemon，再重新打开。',
     processGone: '进程已不可用', processGoneDetail: '进程可能已经退出或无法读取。请刷新观察列表。',
     readOnly: '外部进程 · 只读', source: '来源', pid: '进程 ID', parent: '父进程 ID',
@@ -189,7 +194,6 @@ const text = {
     readOnlyText: '只显示进程元信息。此终端不属于 DiggerTerm，不能查看终端画面、发送输入或终止信号。Windows 与 WSL 的 PID 命名空间互不相同。',
     limited: '只显示前 160 项', readonlyFooter: '外部进程仅可观察，不可操作',
     activeCount: '{count} 个运行中', observedCount: '{count} 个观察对象',
-    persisted: '退出界面不会结束后台会话',
     emptyTitle: '一个窗口，管理多个终端。',
     emptyDesc: '从左侧选择 Shell 并打开',
     emptyHint: '退出 DiggerTerm 后会话保留，外部进程仅只读',
@@ -209,7 +213,8 @@ const text = {
     profileDefault: '默认 Shell', automatic: '自动选择', activateNewSession: '新建后切换',
     observeEnabled: '显示外部进程',
     refreshSeconds: '自动扫描', scanManual: '仅手动', seconds: '{count} 秒',
-    showPid: '显示 PID', showStatusBar: '底部状态栏',
+    showPid: '显示 PID', showStatusBar: '显示侧栏计数',
+    panePromptStyle: '选中终端时的提示', panePromptCurrent: '当前样式', panePromptSubtle: '低调显示', panePromptNone: '不显示提示',
     resetAppearance: '恢复默认外观', resetTerminal: '恢复终端默认值',
     resetSessions: '恢复会话默认值', resetObserved: '恢复观察默认值',
 
@@ -226,6 +231,7 @@ const text = {
     defaultDirectory: 'New shell working directory',
     directoryPlaceholder: 'Default when empty', resetLayout: 'Reset splitter sizes', close: 'Close settings',
     widthHandle: 'Resize sidebar', heightHandle: 'Resize managed / observed panes',
+    collapseSidebar: 'Collapse sidebar', expandSidebar: 'Expand sidebar', sessionDiagnostics: 'Session diagnostics',
     errorDaemon: 'An older daemon is running. Finish sessions, stop it, then reopen the app.',
     processGone: 'Process no longer found', processGoneDetail: 'It may have exited or become inaccessible. Refresh to update.',
     readOnly: 'External process · read only', source: 'Source', pid: 'Process ID', parent: 'Parent PID',
@@ -233,7 +239,6 @@ const text = {
     readOnlyText: 'Process metadata only. DiggerTerm does not own this terminal or read its screen, send input, or terminate it. Windows and WSL PIDs use distinct namespaces.',
     limited: 'First 160 results shown', readonlyFooter: 'Observed processes cannot be controlled',
     activeCount: '{count} running', observedCount: '{count} observed',
-    persisted: 'GUI exit keeps background sessions alive',
     emptyTitle: 'Your terminals, one workspace.',
     emptyDesc: 'Select a Shell on the left and open it',
     emptyHint: 'Sessions remain after quitting DiggerTerm; external processes are read-only',
@@ -253,7 +258,8 @@ const text = {
     profileDefault: 'Default shell', automatic: 'Automatic', activateNewSession: 'Select on create',
     observeEnabled: 'Show observed',
     refreshSeconds: 'Auto refresh', scanManual: 'Manual only', seconds: '{count}s',
-    showPid: 'Show PID', showStatusBar: 'Bottom status bar',
+    showPid: 'Show PID', showStatusBar: 'Show sidebar counts',
+    panePromptStyle: 'Pane selection hint', panePromptCurrent: 'Current style', panePromptSubtle: 'Subtle', panePromptNone: 'No hint',
     resetAppearance: 'Reset appearance', resetTerminal: 'Reset terminal',
     resetSessions: 'Reset sessions', resetObserved: 'Reset observed',
 

@@ -107,6 +107,7 @@ export function useSettings(options: UseSettingsOptions = {}) {
 
   function resetLayout() {
     preferences.value.sidebarWidth = defaults.sidebarWidth
+    preferences.value.sidebarCollapsed = defaults.sidebarCollapsed
     preferences.value.managedRatio = defaults.managedRatio
   }
 
@@ -124,7 +125,7 @@ export function useSettings(options: UseSettingsOptions = {}) {
         break
       case 'terminal':
         for (const key of ['fontSize', 'fontFamily', 'scrollback', 'lineHeight', 'scrollSensitivity', 'keyboardMode',
-          'terminalPadding', 'cursorStyle', 'cursorBlink', 'rightClickSelectsWord'] as const) {
+          'terminalPadding', 'panePromptStyle', 'cursorStyle', 'cursorBlink', 'rightClickSelectsWord'] as const) {
           Object.assign(preferences.value, { [key]: defaults[key] })
         }
         break

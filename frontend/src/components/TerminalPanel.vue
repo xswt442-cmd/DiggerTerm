@@ -477,16 +477,6 @@ onBeforeUnmount(() => {
     </div>
     <div v-if="session.status === 'exited'" class="copy-notice" role="status">{{ text('会话已结束', 'Session ended') }} {{ session.message }}</div>
     <div v-else-if="session.streamClosed" class="copy-notice" role="status">{{ text('PTY 输出流已关闭，已暂停输入。', 'PTY output stream closed; input paused.') }}</div>
-    <details class="session-diagnostics">
-      <summary>{{ text('会话诊断', 'Session diagnostics') }}</summary>
-      <dl>
-        <dt>ID / PID</dt><dd>{{ session.id }} / {{ session.pid }}</dd>
-        <dt>{{ text('开始时间', 'Started') }}</dt><dd>{{ session.startedAt ? new Date(session.startedAt).toLocaleString() : '—' }}</dd>
-        <dt>{{ text('退出时间', 'Exited') }}</dt><dd>{{ session.exitedAt ? new Date(session.exitedAt).toLocaleString() : '—' }}</dd>
-        <dt>{{ text('退出码 / 类型', 'Exit code / reason') }}</dt><dd>{{ session.exitCode ?? '—' }} / {{ session.exitReason || '—' }}</dd>
-        <dt>{{ text('PTY 输出流', 'PTY stream') }}</dt><dd>{{ !connected ? text('状态未知', 'Unknown') : session.streamClosed ? text('已关闭', 'Closed') : text('未关闭', 'Open') }} {{ session.streamError }}</dd>
-      </dl>
-    </details>
     <div class="terminal-content" @contextmenu.prevent="openCopyMenu">
       <div v-if="copyMode" class="copy-overlay">
         <small>{{ text('当前可见文字的只读副本；选择后复制，Esc 返回终端。', 'Read-only copy of visible text. Select and copy; Escape returns to the terminal.') }}</small>
@@ -516,18 +506,16 @@ onBeforeUnmount(() => {
 }
 .terminal-content { min-height: 0; flex: 1; position: relative; }
 .xterm-host { position: absolute; inset: 0; overflow: hidden; }
-.terminal-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; padding: 4px 8px; border-bottom: 1px solid var(--border-faint); }
-.terminal-actions button { color: var(--text); background: var(--surface); border: 1px solid var(--border); border-radius: var(--dt-radius, 4px); font-size: 11px; padding: 3px 6px; }
-.terminal-actions small, .copy-notice { color: var(--muted); font-size: 10px; }
+.terminal-actions { display: flex; align-items: center; flex-wrap: nowrap; flex: 0 0 28px; min-height: 28px; gap: 4px; padding: 2px 6px; border-bottom: 1px solid var(--border-faint); }
+.terminal-actions button { flex: 0 0 auto; color: var(--text); background: var(--surface); border: 1px solid var(--border); border-radius: var(--dt-radius, 4px); font-size: 10px; line-height: 1.2; padding: 2px 5px; white-space: nowrap; }
+.terminal-actions small { flex: 0 1 auto; min-width: 0; margin-left: auto; overflow: hidden; color: var(--faint); font-size: 9px; text-align: right; text-overflow: ellipsis; white-space: nowrap; }
+.copy-notice { color: var(--muted); font-size: 10px; }
 .copy-notice { padding: 4px 8px; }
 .copy-overlay { position: absolute; z-index: 2; inset: 0; display: flex; flex-direction: column; gap: 8px; padding: 8px; background: var(--canvas); }
 .copy-overlay small { color: var(--muted); }
 .copy-overlay textarea { flex: 1; min-height: 0; resize: none; background: var(--canvas); color: var(--text); border: 1px solid var(--border); font-family: monospace; }
 .terminal-copy-menu { position: fixed; z-index: 100; width: 200px; display: grid; gap: 4px; padding: 6px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--dt-radius, 4px); }
 .terminal-copy-menu button { color: var(--text); background: var(--canvas); border: 1px solid var(--border); padding: 5px; text-align: left; }
-.session-diagnostics { color: var(--muted); padding: 3px 8px; font-size: 10px; }
-.session-diagnostics dl { max-height: 120px; overflow: auto; margin: 4px 0; }
-.session-diagnostics dd { margin: 2px 0 6px; overflow-wrap: anywhere; }
 .terminal-panel.hidden {
   display: none;
 }

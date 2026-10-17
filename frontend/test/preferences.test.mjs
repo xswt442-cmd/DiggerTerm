@@ -27,6 +27,7 @@ test('all expanded preferences persist across GUI reopen', () => {
     fontFamily: 'jetbrains',
     fontSize: 17,
     uiFontSize: 15,
+    sidebarCollapsed: true,
     language: 'zh',
     defaultProfile: 'cmd',
     defaultDirectory: 'C:\\dev\\work',
@@ -34,6 +35,7 @@ test('all expanded preferences persist across GUI reopen', () => {
     lineHeight: 1.4,
     scrollSensitivity: 5,
     terminalPadding: 6,
+    panePromptStyle: 'subtle',
     cursorStyle: 'bar',
     keyboardMode: 'native',
     cursorBlink: false,
@@ -58,6 +60,7 @@ test('bad saved values are clamped or safely ignored', () => {
     theme: 'malicious',
     cursorStyle: 'hidden',
     keyboardMode: 'untrusted',
+    panePromptStyle: 'obtrusive',
     defaultProfile: '-oBadFlag',
     scrollback: 99_999_999,
     terminalPadding: -1,
@@ -73,6 +76,7 @@ test('bad saved values are clamped or safely ignored', () => {
   assert.equal(read.theme, prefs.defaults.theme)
   assert.equal(read.cursorStyle, prefs.defaults.cursorStyle)
   assert.equal(read.keyboardMode, prefs.defaults.keyboardMode)
+  assert.equal(read.panePromptStyle, prefs.defaults.panePromptStyle)
   assert.equal(read.defaultProfile, prefs.defaults.defaultProfile)
   assert.equal(read.scrollback, prefs.defaults.scrollback)
   assert.equal(read.terminalPadding, prefs.defaults.terminalPadding)
@@ -97,7 +101,9 @@ test('theme IDs migrate and preserve user theme identity until catalog refresh',
 
 test('new setting labels appear in both UI languages', () => {
   for (const key of ['terminalTab', 'sessionTab', 'monitorTab', 'fontFamily', 'uiFontSize', 'scrollback',
-    'profileDefault', 'observeEnabled', 'refreshSeconds', 'keyboardMode']) {
+    'profileDefault', 'observeEnabled', 'refreshSeconds', 'keyboardMode', 'panePromptStyle',
+    'panePromptCurrent', 'panePromptSubtle', 'panePromptNone', 'collapseSidebar', 'expandSidebar',
+    'sessionDiagnostics', 'showStatusBar']) {
     assert.notEqual(prefs.translate('zh', key), '')
     assert.notEqual(prefs.translate('en', key), '')
   }

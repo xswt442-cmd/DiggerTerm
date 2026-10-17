@@ -143,6 +143,14 @@ const t = props.translate
         </select>
       </label>
     </div>
+    <label class="setting-row">
+      <span>{{ t('panePromptStyle') }}</span>
+      <select v-model="preferences.panePromptStyle">
+        <option value="current">{{ t('panePromptCurrent') }}</option>
+        <option value="subtle">{{ t('panePromptSubtle') }}</option>
+        <option value="none">{{ t('panePromptNone') }}</option>
+      </select>
+    </label>
     <div class="toggle-grid">
       <label class="setting-toggle"><span>{{ t('cursorBlink') }}</span>
         <input v-model="preferences.cursorBlink" type="checkbox" /></label>

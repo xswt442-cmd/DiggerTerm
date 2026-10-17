@@ -152,6 +152,10 @@ const {
 } = dig
 const filteredSessions = computed(() => sessions.value.filter((s) => (s.name + ' ' + s.id + ' ' + s.profile + ' ' + s.pid).toLowerCase().includes(query.value.trim().toLowerCase())))
 const activeSession = computed(() => sessions.value.find((s) => s.id === selectedId.value))
+const diagnosticsSessionId = ref<string | null>(null)
+function toggleSessionDiagnostics(id: string) {
+  diagnosticsSessionId.value = diagnosticsSessionId.value === id ? null : id
+}
 function sessionStatus(session: Info): string {
   if (!daemonConnected.value) return locale.value === 'zh' ? 'Daemon 失联' : 'Daemon disconnected'
   if (session.status === 'exited') return t('exited')
@@ -327,14 +331,22 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <main class="layout" :data-dt-theme="preferences.theme" :style="{ '--ui-font-scale': preferences.uiFontSize / 12 }" @keydown.capture="workspaceKey" @keydown.esc="settingsOpen = false">
+  <main class="layout" :class="{ 'sidebar-collapsed': preferences.sidebarCollapsed }" :data-dt-theme="preferences.theme" :style="{ '--ui-font-scale': preferences.uiFontSize / 12 }" @keydown.capture="workspaceKey" @keydown.esc="settingsOpen = false">
     <aside class="sidebar" :style="{ width: preferences.sidebarWidth + 'px' }">
       <header class="brand">
-        <img class="brand-logo" src="/favicon.svg" alt="DiggerTerm" width="31" height="31" />
-        <div class="brand-copy">
-          <strong>DiggerTerm</strong>
-          <small>{{ t('workspace') }}</small>
-        </div>
+        <template v-if="!preferences.sidebarCollapsed">
+          <img class="brand-logo" src="/favicon.svg" alt="DiggerTerm" width="31" height="31" />
+          <div class="brand-copy">
+            <strong>DiggerTerm</strong>
+            <small>{{ t('workspace') }}</small>
+          </div>
+        </template>
+        <button type="button" class="sidebar-collapse" :title="t(preferences.sidebarCollapsed ? 'expandSidebar' : 'collapseSidebar')"
+          :aria-label="t(preferences.sidebarCollapsed ? 'expandSidebar' : 'collapseSidebar')"
+          :aria-expanded="!preferences.sidebarCollapsed"
+          @click="preferences.sidebarCollapsed = !preferences.sidebarCollapsed">
+          {{ preferences.sidebarCollapsed ? '›' : '‹' }}
+        </button>
       </header>
       <input
         v-model="query"
@@ -384,38 +396,47 @@ onBeforeUnmount(() => {
             <div v-if="filteredSessions.length === 0" class="sidebar-empty">
               {{ t(query ? 'searchNone' : 'noSessions') }}
             </div>
-            <div
-              v-for="s in filteredSessions"
-              :key="s.id"
-              class="session-row"
-              :class="{ selected: selectedId === s.id }"
-            >
-              <template v-if="editingSessionId === s.id">
-                <input v-model="renameDraft" ref="renameInput" class="rename-input" type="text"
-                  maxlength="64" :aria-label="t('rename')" :disabled="renaming"
-                  @keydown.enter.prevent="saveRename" @keydown.esc.stop.prevent="cancelRename" />
-                <button type="button" class="session-action save-action" :title="t('save')"
-                  :aria-label="t('save')" :disabled="renaming" @click="saveRename">✓</button>
-                <button type="button" class="session-action" :title="t('cancel')"
-                  :aria-label="t('cancel')" :disabled="renaming" @click="cancelRename">×</button>
-              </template>
+            <div v-for="s in filteredSessions" :key="s.id" class="session-entry">
+              <div class="session-row" :class="{ selected: selectedId === s.id }">
+                <template v-if="editingSessionId === s.id">
+                  <input v-model="renameDraft" ref="renameInput" class="rename-input" type="text"
+                    maxlength="64" :aria-label="t('rename')" :disabled="renaming"
+                    @keydown.enter.prevent="saveRename" @keydown.esc.stop.prevent="cancelRename" />
+                  <button type="button" class="session-action save-action" :title="t('save')"
+                    :aria-label="t('save')" :disabled="renaming" @click="saveRename">✓</button>
+                  <button type="button" class="session-action" :title="t('cancel')"
+                    :aria-label="t('cancel')" :disabled="renaming" @click="cancelRename">×</button>
+                </template>
 
-              <template v-else>
-                <button type="button" class="session-select"
-                  :aria-current="selectedId === s.id ? 'page' : undefined"
-                  @click="selectManaged(s.id)">
-                  <span class="session-name">{{ s.name }} <span class="session-id" :title="s.id">#{{ s.id.split('-').at(-1) }}</span></span>
-                  <span class="session-meta"><span class="dot" :class="{ running: daemonConnected && s.status === 'running' && !s.streamClosed }" />
-                    {{ sessionStatus(s) }}<span v-if="preferences.showPid"> · PID {{ s.pid }}</span>
-                  </span>
-                </button>
-                <button type="button" class="session-action" :title="t('rename')"
-                  :aria-label="t('rename') + ' ' + s.name" @click="startRename(s)">✎</button>
-                <button type="button" class="session-action" :title="t(s.status === 'running' ? 'terminate' : 'remove')"
-                  :disabled="!daemonConnected"
-                  :aria-label="t(s.status === 'running' ? 'terminate' : 'remove') + ' ' + s.name"
-                  @click="s.status === 'running' ? terminateSession(s) : removeExited(s)">×</button>
-              </template>
+                <template v-else>
+                  <button type="button" class="session-select"
+                    :aria-current="selectedId === s.id ? 'page' : undefined"
+                    @click="selectManaged(s.id)">
+                    <span class="session-name">{{ s.name }} <span class="session-id" :title="s.id">#{{ s.id.split('-').at(-1) }}</span></span>
+                    <span class="session-meta"><span class="dot" :class="{ running: daemonConnected && s.status === 'running' && !s.streamClosed }" />
+                      {{ sessionStatus(s) }}<span v-if="preferences.showPid"> · PID {{ s.pid }}</span>
+                    </span>
+                  </button>
+                  <button type="button" class="session-action diagnostic-action" :title="t('sessionDiagnostics')"
+                    :aria-label="t('sessionDiagnostics') + ' ' + s.name"
+                    :aria-expanded="diagnosticsSessionId === s.id" @click="toggleSessionDiagnostics(s.id)">ⓘ</button>
+                  <button type="button" class="session-action" :title="t('rename')"
+                    :aria-label="t('rename') + ' ' + s.name" @click="startRename(s)">✎</button>
+                  <button type="button" class="session-action" :title="t(s.status === 'running' ? 'terminate' : 'remove')"
+                    :disabled="!daemonConnected"
+                    :aria-label="t(s.status === 'running' ? 'terminate' : 'remove') + ' ' + s.name"
+                    @click="s.status === 'running' ? terminateSession(s) : removeExited(s)">×</button>
+                </template>
+              </div>
+              <div v-if="diagnosticsSessionId === s.id" class="session-diagnostics" role="region" :aria-label="t('sessionDiagnostics') + ' ' + s.name">
+                <dl>
+                  <div><dt>ID / PID</dt><dd>{{ s.id }} / {{ s.pid }}</dd></div>
+                  <div><dt>{{ locale === 'zh' ? '开始时间' : 'Started' }}</dt><dd>{{ s.startedAt ? new Date(s.startedAt).toLocaleString() : '—' }}</dd></div>
+                  <div><dt>{{ locale === 'zh' ? '退出时间' : 'Exited' }}</dt><dd>{{ s.exitedAt ? new Date(s.exitedAt).toLocaleString() : '—' }}</dd></div>
+                  <div><dt>{{ locale === 'zh' ? '退出码 / 类型' : 'Exit code / reason' }}</dt><dd>{{ s.exitCode ?? '—' }} / {{ s.exitReason || '—' }}</dd></div>
+                  <div><dt>{{ locale === 'zh' ? 'PTY 输出流' : 'PTY stream' }}</dt><dd>{{ !daemonConnected ? (locale === 'zh' ? '状态未知' : 'Unknown') : s.streamClosed ? (locale === 'zh' ? '已关闭' : 'Closed') : (locale === 'zh' ? '未关闭' : 'Open') }} {{ s.streamError }}</dd></div>
+                </dl>
+              </div>
             </div>
           </nav>
         </section>
@@ -480,11 +501,16 @@ onBeforeUnmount(() => {
       </div>
 
       <footer class="sidebar-footer">
+        <div v-if="preferences.showStatusBar && !preferences.sidebarCollapsed" class="sidebar-status">
+          <span>{{ daemonConnected ? t('activeCount', { count: sessions.filter(s => s.status === 'running').length }) : (locale === 'zh' ? '会话状态未知' : 'Session state unknown') }}</span>
+          <span>·</span>
+          <span>{{ t('observedCount', { count: observedProcesses.length }) }}</span>
+        </div>
         <button type="button" class="settings-trigger" :aria-expanded="settingsOpen"
           :aria-label="t('settings')" @click="settingsOpen = !settingsOpen">
           <span class="gear" aria-hidden="true">⚙</span>
-          <span>{{ t('settings') }}</span>
-          <span class="settings-arrow" aria-hidden="true">{{ settingsOpen ? '⌄' : '›' }}</span>
+          <span v-if="!preferences.sidebarCollapsed">{{ t('settings') }}</span>
+          <span v-if="!preferences.sidebarCollapsed" class="settings-arrow" aria-hidden="true">{{ settingsOpen ? '⌄' : '›' }}</span>
         </button>
       </footer>
 
@@ -504,7 +530,7 @@ onBeforeUnmount(() => {
       </SettingsDialog>
     </aside>
 
-    <div class="sidebar-resizer"
+    <div v-if="!preferences.sidebarCollapsed" class="sidebar-resizer"
       role="separator" tabindex="0" aria-orientation="vertical"
       :aria-label="t('widthHandle')"
       :aria-valuenow="preferences.sidebarWidth" aria-valuemin="216" aria-valuemax="500"
@@ -555,7 +581,8 @@ onBeforeUnmount(() => {
                 :right-click-selects-word="preferences.rightClickSelectsWord"
                 :padding="preferences.terminalPadding"
                 :colors="palette.terminal" :theme-revision="themeRevision" :locale="locale" :bindings="bindings" @error="reportError" />
-              <p v-else-if="sessions.length > 0" class="pane-placeholder">{{ locale === 'zh' ? '从侧栏或上方选择托管会话。关闭面板仅分离视图。' : 'Choose a managed session here or in the sidebar. Closing a pane only detaches its view.' }}</p>
+              <p v-else-if="sessions.length > 0 && preferences.panePromptStyle !== 'none'" class="pane-placeholder"
+                :class="{ subtle: preferences.panePromptStyle === 'subtle' }">{{ locale === 'zh' ? '从侧栏或上方选择托管会话。关闭面板仅分离视图。' : 'Choose a managed session here or in the sidebar. Closing a pane only detaches its view.' }}</p>
             </div>
           </template>
         </PaneWorkspace>
@@ -594,10 +621,6 @@ onBeforeUnmount(() => {
           <p>{{ t('emptyHint') }}</p>
         </div>
       </div>
-      <div v-if="preferences.showStatusBar" class="statusbar">
-        <span>{{ daemonConnected ? t('activeCount', { count: sessions.filter(s => s.status === 'running').length }) : (locale === 'zh' ? '会话状态未知' : 'Session state unknown') }} · {{ t('observedCount', { count: observedProcesses.length }) }}</span>
-        <span>{{ t('persisted') }}</span>
-      </div>
     </section>
   </main>
 </template>
@@ -620,8 +643,11 @@ button:focus-visible, input:focus-visible, select:focus-visible, [role="separato
 .workspace-pane-head select { min-width: 0; flex: 1; }
 .workspace-pane-body { position: absolute; inset: 30px 0 0; }
 .pane-placeholder { color: var(--muted); font-size: 12px; padding: 10px; }
+.pane-placeholder.subtle { color: var(--faint); font-size: 10px; padding: 7px 10px; opacity: .72; }
 .sidebar { position: relative; display: flex; flex-direction: column; flex: 0 0 auto; min-width: 216px; max-width: 500px; min-height: 0; background: var(--sidebar); padding: 11px 10px 0; z-index: 2; }
 .brand { display: flex; align-items: center; gap: 9px; height: 43px; padding: 0 5px; flex-shrink: 0; }
+.sidebar-collapse { display: grid; place-items: center; flex: 0 0 23px; width: 23px; height: 23px; margin-left: auto; padding: 0; border: 1px solid transparent; background: transparent; color: var(--muted); font-size: 17px; line-height: 1; }
+.sidebar-collapse:hover { border-color: var(--border); background: var(--surface-hover); color: var(--text); }
 .brand-logo { display: block; object-fit: contain; flex-shrink: 0; }
 .brand-copy { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
 .brand strong { font-size: calc(13px * var(--ui-font-scale)); font-weight: 650; letter-spacing: .005em; white-space: nowrap; }
@@ -647,6 +673,7 @@ button:focus-visible, input:focus-visible, select:focus-visible, [role="separato
 .sessions { min-height: 0; flex: 1 1 0; overflow-x: hidden; overflow-y: auto; scrollbar-width: thin; scrollbar-color: var(--border) transparent; }
 .sessions::-webkit-scrollbar { width: 6px; }
 .sessions::-webkit-scrollbar-thumb { background: var(--border); border-radius: 6px; }
+.session-entry { flex: 0 0 auto; }
 .session-row { display: flex; align-items: center; gap: 1px; width: 100%; min-height: 40px; padding: 0 2px; border-radius: 5px; }
 .session-row:hover, .observed-row:hover { background: var(--surface-hover); }
 .session-row.selected, .observed-row.selected { background: var(--surface-active); }
@@ -658,6 +685,7 @@ button:focus-visible, input:focus-visible, select:focus-visible, [role="separato
 .dot.running { background: var(--positive); }
 .session-action { display: grid; place-items: center; flex: 0 0 22px; height: 30px; padding: 0; border: 0; background: transparent; color: var(--muted); font-size: calc(14px * var(--ui-font-scale)); border-radius: 4px; }
 .session-action:hover { color: var(--negative); background: var(--surface); }
+.session-action.diagnostic-action:hover, .session-action.diagnostic-action[aria-expanded="true"] { color: var(--accent-text); background: var(--surface); }
 .session-action.save-action:hover { color: var(--positive); }
 .rename-input { min-width: 0; flex: 1 1 0; height: 28px; margin-left: 4px; padding: 0 6px; color: var(--text); background: var(--surface); border: 1px solid var(--accent); border-radius: 4px; font-size: calc(11px * var(--ui-font-scale)); }
 .sidebar-empty { font-size: calc(11px * var(--ui-font-scale)); line-height: 1.4; padding: 8px 6px; color: var(--faint); }
@@ -677,10 +705,29 @@ button:focus-visible, input:focus-visible, select:focus-visible, [role="separato
 .observed-message { padding-top: 3px; padding-bottom: 3px; }
 .pane-note { font-size: calc(10px * var(--ui-font-scale)); color: var(--faint); padding: 4px 6px 2px; flex: 0 0 auto; }
 .sidebar-footer { position: relative; flex: 0 0 auto; border-top: 1px solid var(--border-faint); padding: 5px 0 6px; background: var(--sidebar); }
+.sidebar-status { display: flex; gap: 4px; overflow: hidden; margin: 0 4px 4px; padding: 1px 3px; color: var(--faint); font-size: calc(9px * var(--ui-font-scale)); white-space: nowrap; }
+.sidebar-status span { overflow: hidden; text-overflow: ellipsis; }
 .settings-trigger { display: flex; gap: 9px; width: 100%; align-items: center; height: 31px; padding: 0 8px; background: transparent; color: var(--muted); border: 0; border-radius: 5px; text-align: left; font-size: calc(11px * var(--ui-font-scale)); }
 .settings-trigger:hover, .settings-trigger[aria-expanded="true"] { color: var(--text); background: var(--surface-hover); }
 .gear { font-size: calc(17px * var(--ui-font-scale)); line-height: 1; }
 .settings-arrow { margin-left: auto; font-size: calc(17px * var(--ui-font-scale)); }
+.session-diagnostics { margin: 0 3px 5px 7px; padding: 5px 7px; border-left: 2px solid var(--border); border-radius: 0 0 4px 4px; background: var(--surface); color: var(--muted); font-size: calc(9px * var(--ui-font-scale)); }
+.session-diagnostics dl { display: grid; grid-template-columns: 76px minmax(0, 1fr); gap: 3px 6px; max-height: 140px; overflow: auto; margin: 0; }
+.session-diagnostics dt { color: var(--faint); }
+.session-diagnostics dd { min-width: 0; margin: 0; overflow-wrap: anywhere; }
+.layout.sidebar-collapsed .sidebar { width: 48px !important; min-width: 48px; max-width: 48px; padding: 8px 5px 0; }
+.layout.sidebar-collapsed .brand { justify-content: center; height: 36px; padding: 0; }
+.layout.sidebar-collapsed .sidebar-collapse { margin: 0 auto; }
+.layout.sidebar-collapsed .brand-logo,
+.layout.sidebar-collapsed .brand-copy,
+.layout.sidebar-collapsed .sidebar-search,
+.layout.sidebar-collapsed .main-heading,
+.layout.sidebar-collapsed .new-session,
+.layout.sidebar-collapsed .ssh-connect,
+.layout.sidebar-collapsed .pane-stack,
+.layout.sidebar-collapsed .sidebar-status { display: none; }
+.layout.sidebar-collapsed .sidebar-footer { margin-top: auto; border-top: 0; padding: 5px 0 6px; }
+.layout.sidebar-collapsed .settings-trigger { justify-content: center; width: 34px; height: 34px; margin: 0 auto; padding: 0; }
 .sidebar-resizer { position: relative; display: flex; justify-content: center; align-items: center; flex: 0 0 7px; width: 7px; background: var(--border-faint); touch-action: none; cursor: col-resize; user-select: none; z-index: 1; }
 .sidebar-resizer span { display: block; width: 3px; height: 30px; background: var(--border); border-radius: 4px; opacity: .25; }
 .sidebar-resizer:hover span, .sidebar-resizer.dragging span, .sidebar-resizer:focus-visible span { background: var(--accent); opacity: 1; }
@@ -704,7 +751,5 @@ button:focus-visible, input:focus-visible, select:focus-visible, [role="separato
 .empty-state h1 { margin: 14px 0 6px; font-size: calc(17px * var(--ui-font-scale)); }
 .empty-state p { margin: 0; font-size: calc(12px * var(--ui-font-scale)); color: var(--muted); line-height: 1.35; max-width: 380px; }
 .empty-state p + p { margin-top: 2px; }
-.statusbar { flex: 0 0 26px; height: 26px; display: flex; align-items: center; justify-content: space-between; gap: 14px; padding: 0 12px; border-top: 1px solid var(--border-faint); color: var(--faint); font-size: calc(10px * var(--ui-font-scale)); }
-@media (max-width: 820px) { .statusbar span:last-child { display: none; } }
 @media (max-height: 480px) { .brand { height: 34px; } .sidebar-search { margin: 3px 0 6px; } }
 </style>
