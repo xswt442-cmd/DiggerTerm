@@ -222,7 +222,7 @@ const text = {
     refreshSeconds: '自动扫描', scanManual: '仅手动', seconds: '{count} 秒',
     showPid: '显示 PID', showStatusBar: '显示侧栏计数',
     focusBorderStyle: '选中终端边框样式', focusBorderAccent: '强调色边框',
-    focusBorderMuted: '中灰色 2px 边框', focusBorderNone: '无提示',
+    focusBorderMuted: '灰色边框', focusBorderNone: '无提示',
     resetAppearance: '恢复默认外观', resetTerminal: '恢复终端默认值',
     resetSessions: '恢复会话默认值', resetObserved: '恢复观察默认值',
 

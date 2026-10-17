@@ -109,7 +109,7 @@ test('old pane hint preferences migrate to focused terminal border styles', () =
 
 test('focused terminal border options describe their visible styles', () => {
   assert.equal(prefs.translate('zh', 'focusBorderAccent'), '强调色边框')
-  assert.equal(prefs.translate('zh', 'focusBorderMuted'), '中灰色 2px 边框')
+  assert.equal(prefs.translate('zh', 'focusBorderMuted'), '灰色边框')
   assert.equal(prefs.translate('zh', 'focusBorderNone'), '无提示')
 })
 
