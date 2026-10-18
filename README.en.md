@@ -16,15 +16,15 @@
 
 ## Download
 
-[v0.0.5 · GitHub Release](https://github.com/xswt442-cmd/DiggerTerm/releases/tag/v0.0.5)
+[v0.0.6 · GitHub Release](https://github.com/xswt442-cmd/DiggerTerm/releases/tag/v0.0.6)
 
 | Platform | Package |
 | --- | --- |
-| Windows x64 | [`.exe`](https://github.com/xswt442-cmd/DiggerTerm/releases/download/v0.0.5/DiggerTerm-v0.0.5-windows-amd64.exe) |
-| Linux x64 | [`.AppImage`](https://github.com/xswt442-cmd/DiggerTerm/releases/download/v0.0.5/DiggerTerm-v0.0.5-linux-x86_64.AppImage) |
-| Ubuntu / Debian x64 | [`.deb`](https://github.com/xswt442-cmd/DiggerTerm/releases/download/v0.0.5/DiggerTerm-v0.0.5-linux-amd64.deb) |
+| Windows x64 | [`.exe`](https://github.com/xswt442-cmd/DiggerTerm/releases/download/v0.0.6/DiggerTerm-v0.0.6-windows-amd64.exe) |
+| Linux x64 | [`.AppImage`](https://github.com/xswt442-cmd/DiggerTerm/releases/download/v0.0.6/DiggerTerm-v0.0.6-linux-x86_64.AppImage) |
+| Ubuntu / Debian x64 | [`.deb`](https://github.com/xswt442-cmd/DiggerTerm/releases/download/v0.0.6/DiggerTerm-v0.0.6-linux-amd64.deb) |
 
-Checksums: [SHA256SUMS](https://github.com/xswt442-cmd/DiggerTerm/releases/download/v0.0.5/SHA256SUMS).
+Checksums: [SHA256SUMS](https://github.com/xswt442-cmd/DiggerTerm/releases/download/v0.0.6/SHA256SUMS).
 
 ## Features
 
