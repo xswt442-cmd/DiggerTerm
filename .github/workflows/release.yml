@@ -202,6 +202,9 @@ jobs:
       - name: Publish verified GitHub release
         run: |
           set -euo pipefail
+          node scripts/verify-release.mjs "$RELEASE_VERSION"
+          node scripts/release-notes.mjs --changelog CHANGELOG.md --tag "$RELEASE_VERSION" \
+            --manifest frontend/package.json > "$RUNNER_TEMP/release-notes.md"
           if gh release view "$RELEASE_VERSION" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
             echo 'Refusing to replace an existing published release' >&2
             exit 1
@@ -212,5 +215,5 @@ jobs:
             "dist/DiggerTerm-$RELEASE_VERSION-linux-amd64.deb" \
             dist/SHA256SUMS \
             --verify-tag --title "DiggerTerm $RELEASE_VERSION" \
-            --notes-file ".github/release-notes/$RELEASE_VERSION.md" \
+            --notes-file "$RUNNER_TEMP/release-notes.md" \
             --repo "$GITHUB_REPOSITORY"
