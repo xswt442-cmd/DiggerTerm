@@ -127,7 +127,9 @@ func TestWindowsSSHInteractiveConPTY(t *testing.T) {
 		[]string{fmt.Sprintf("[%s]:%d", host, port)}, key)+"\n"), 0600); err != nil {
 		t.Fatal(err)
 	}
-	spec, err := sshCommand(host, port)
+	spec, err := sshCommandWithOptions(host, port, SSHOptions{
+		KeepAlive: true, ServerAliveInterval: 30, ServerAliveCountMax: 3,
+	})
 	if err != nil {
 		t.Fatal(err)
 	}

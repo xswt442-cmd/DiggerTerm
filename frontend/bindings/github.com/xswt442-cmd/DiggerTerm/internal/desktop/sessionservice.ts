@@ -13,6 +13,9 @@ import { Call as $Call, CancellablePromise as $CancellablePromise } from "@wails
 
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore: Unused imports
+import * as daemon$0 from "../daemon/models.js";
+// eslint-disable-next-line @typescript-eslint/ban-ts-comment
+// @ts-ignore: Unused imports
 import * as observe$0 from "../observe/models.js";
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore: Unused imports
@@ -38,6 +41,10 @@ export function CreateSSH(target: string, port: number, cols: number, rows: numb
     return $Call.ByID(2146546868, target, port, cols, rows);
 }
 
+export function CreateSSHWithOptions(target: string, port: number, options: session$0.SSHOptions, cols: number, rows: number): $CancellablePromise<session$0.Info> {
+    return $Call.ByID(1366334386, target, port, options, cols, rows);
+}
+
 export function Detach(id: string): $CancellablePromise<void> {
     return $Call.ByID(99951125, id);
 }
@@ -56,6 +63,10 @@ export function List(): $CancellablePromise<session$0.Info[] | null> {
  */
 export function Observe(): $CancellablePromise<observe$0.Snapshot> {
     return $Call.ByID(2868046510);
+}
+
+export function ObserveCapabilities(): $CancellablePromise<daemon$0.Capabilities> {
+    return $Call.ByID(500982304);
 }
 
 export function Profiles(): $CancellablePromise<session$0.Profile[] | null> {

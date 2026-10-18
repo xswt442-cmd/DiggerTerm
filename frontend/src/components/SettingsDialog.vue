@@ -1,5 +1,5 @@
 <script setup lang="ts">
-export type SettingsTab = 'appearance' | 'terminal' | 'sessions' | 'observed' | 'keybindings' | 'help'
+export type SettingsTab = 'appearance' | 'terminal' | 'sessions' | 'observed' | 'keybindings' | 'quickselect' | 'help'
 
 defineProps<{
   open: boolean
@@ -14,7 +14,7 @@ const emit = defineEmits<{
   'update:tab': [value: SettingsTab]
 }>()
 
-const tabs: SettingsTab[] = ['appearance', 'terminal', 'sessions', 'observed', 'keybindings', 'help']
+const tabs: SettingsTab[] = ['appearance', 'terminal', 'sessions', 'observed', 'keybindings', 'quickselect', 'help']
 </script>
 
 <template>

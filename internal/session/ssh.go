@@ -8,6 +8,12 @@ import (
 	"strings"
 )
 
+type SSHOptions struct {
+	KeepAlive           bool `json:"keepAlive"`
+	ServerAliveInterval int  `json:"serverAliveInterval"`
+	ServerAliveCountMax int  `json:"serverAliveCountMax"`
+}
+
 // sshCommand intentionally delegates user configuration, identities,
 // host-key verification, and interactive authentication to OpenSSH.
 // Never add options disabling StrictHostKeyChecking or using shell commands.
@@ -32,6 +38,29 @@ func sshCommand(target string, port int) (commandSpec, error) {
 	}
 	args = append(args, target)
 	return commandSpec{path: path, args: args}, nil
+}
+
+func sshCommandWithOptions(target string, port int, options SSHOptions) (commandSpec, error) {
+	spec, err := sshCommand(target, port)
+	if err != nil || !options.KeepAlive {
+		return spec, err
+	}
+	if options.ServerAliveInterval < 5 || options.ServerAliveInterval > 300 {
+		return commandSpec{}, fmt.Errorf("SSH keepalive interval must be 5-300 seconds")
+	}
+	if options.ServerAliveCountMax < 1 || options.ServerAliveCountMax > 10 {
+		return commandSpec{}, fmt.Errorf("SSH keepalive count must be 1-10")
+	}
+	targetIndex := len(spec.args) - 1
+	args := make([]string, 0, len(spec.args)+4)
+	args = append(args, spec.args[:targetIndex]...)
+	args = append(args,
+		"-o", "ServerAliveInterval="+strconv.Itoa(options.ServerAliveInterval),
+		"-o", "ServerAliveCountMax="+strconv.Itoa(options.ServerAliveCountMax),
+		spec.args[targetIndex],
+	)
+	spec.args = args
+	return spec, nil
 }
 
 // SSH aliases and user@host destinations are supported. Host aliases in

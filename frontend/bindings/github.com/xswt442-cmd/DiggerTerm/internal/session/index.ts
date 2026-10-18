@@ -4,5 +4,6 @@
 export type {
     Info,
     Profile,
-    Replay
+    Replay,
+    SSHOptions
 } from "./models.js";

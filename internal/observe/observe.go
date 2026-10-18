@@ -25,11 +25,24 @@ type Process struct {
 }
 
 type Snapshot struct {
-	Supported bool      `json:"supported"`
-	ScannedAt string    `json:"scannedAt"`
-	Processes []Process `json:"processes"`
-	Truncated bool      `json:"truncated"`
-	Note      string    `json:"note"`
+	Supported bool           `json:"supported"`
+	ScannedAt string         `json:"scannedAt"`
+	Processes []Process      `json:"processes"`
+	Sources   []SourceStatus `json:"sources"`
+	Truncated bool           `json:"truncated"`
+	Note      string         `json:"note"`
+}
+
+type SourceStatus struct {
+	Source       string `json:"source"`
+	Distribution string `json:"distribution"`
+	Namespace    string `json:"namespace"`
+	ScannedAt    string `json:"scannedAt"`
+	State        string `json:"state"` // success, partial, failed, unsupported, not-running, or skipped
+	Complete     bool   `json:"complete"`
+	Truncated    bool   `json:"truncated"`
+	Policy       string `json:"policy"`
+	Reason       string `json:"reason"`
 }
 
 // Scan never opens PTY handles and never reads process command lines,
@@ -45,31 +58,67 @@ func ScanContext(ctx context.Context, ownedPIDs []int) (Snapshot, error) {
 		return Snapshot{}, err
 	}
 	rows, supported, err := platformSnapshot(ctx)
-	if err != nil {
-		return Snapshot{}, err
+	if err != nil && ctx.Err() != nil {
+		return Snapshot{}, ctx.Err()
 	}
+	if err != nil {
+		rows = nil
+	}
+	scannedAt := time.Now().UTC().Format(time.RFC3339Nano)
 	result := Snapshot{
 		Supported: supported,
-		ScannedAt: time.Now().UTC().Format(time.RFC3339),
+		ScannedAt: scannedAt,
 		Processes: make([]Process, 0),
+		Sources:   make([]SourceStatus, 0),
 		Note:      "Process-name heuristics only. No screen contents or control permissions.",
 	}
 	if !supported {
 		result.Note = "Read-only external process scanning is available on Windows only."
+		result.Sources = append(result.Sources, SourceStatus{
+			Source: "windows", ScannedAt: scannedAt, State: "unsupported", Policy: "windows-same-user-metadata-v1", Reason: "platform-unsupported",
+		})
 		return result, nil
 	}
 	win, windowsClipped := selectRelated(rows, ownedPIDs, maxObserved)
 	for i := range win {
 		win[i].Source = "windows"
 	}
-	wsl, wslClipped, wslNote := platformWSLSnapshotContext(ctx)
+	windowsStatus := SourceStatus{
+		Source: "windows", Namespace: platformNamespace(), ScannedAt: scannedAt,
+		State: "success", Complete: !windowsClipped, Truncated: windowsClipped,
+		Policy: "windows-same-user-query-limited-v1",
+	}
+	if err != nil {
+		windowsStatus.State = "failed"
+		windowsStatus.Complete = false
+		windowsStatus.Reason = "process-enumeration-failed"
+	}
+	if windowsStatus.Namespace == "" && err == nil {
+		windowsStatus.Complete = false
+		windowsStatus.Reason = "namespace-unavailable"
+	}
+	result.Sources = append(result.Sources, windowsStatus)
+	wsl, wslClipped, wslNote, wslStatuses := platformWSLResultsContext(ctx)
 	if err := ctx.Err(); err != nil {
 		return Snapshot{}, err
 	}
+	for i := range wslStatuses {
+		wslStatuses[i].ScannedAt = scannedAt
+	}
+	result.Sources = append(result.Sources, wslStatuses...)
 	// The two OS namespaces can legitimately have the same numeric PID.
 	// Keep Windows and WSL processes in one explicitly scoped read-only list.
 	result.Processes = mergeObserved(win, wsl, maxObserved)
 	result.Truncated = windowsClipped || wslClipped || len(win)+len(wsl) > maxObserved
+	if len(win)+len(wsl) > maxObserved {
+		for i := range result.Sources {
+			if result.Sources[i].State == "success" {
+				result.Sources[i].Complete = false
+				result.Sources[i].Truncated = true
+				result.Sources[i].Reason = "combined-result-limit"
+			}
+		}
+	}
 	if wslNote != "" {
 		result.Note += " " + wslNote + "."
 	}

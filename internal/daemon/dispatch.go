@@ -69,6 +69,8 @@ func (s *Server) dispatch(p *peer, req request) message {
 	switch req.Method {
 	case "ping":
 		return response(req.ID, "diggerterm/v1", nil)
+	case "capabilities":
+		return response(req.ID, currentCapabilities(), nil)
 	case "profiles":
 		return response(req.ID, session.Profiles(), nil)
 	case "list":
@@ -99,6 +101,14 @@ func (s *Server) dispatch(p *peer, req request) message {
 			return response(req.ID, nil, errors.New("daemon is stopping"))
 		}
 		info, err := s.manager.CreateSSH(req.SSHTarget, req.SSHPort, req.Cols, req.Rows)
+		return response(req.ID, info, err)
+	case "createSSHWithOptions":
+		s.lifecycle.Lock()
+		defer s.lifecycle.Unlock()
+		if s.stopping {
+			return response(req.ID, nil, errors.New("daemon is stopping"))
+		}
+		info, err := s.manager.CreateSSHWithOptions(req.SSHTarget, req.SSHPort, req.SSHOptions, req.Cols, req.Rows)
 		return response(req.ID, info, err)
 	case "rename":
 		info, err := s.manager.Rename(req.SessionID, req.Name)

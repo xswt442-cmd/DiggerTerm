@@ -2,6 +2,7 @@ import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue'
 import { Browser } from '@wailsio/runtime'
 import packageInfo from '../../package.json'
 import { KeybindingsPath, ReadKeybindings } from '../../bindings/github.com/xswt442-cmd/DiggerTerm/internal/desktop/keybindingservice'
+import { QuickSelectPath } from '../../bindings/github.com/xswt442-cmd/DiggerTerm/internal/desktop/quickselectservice'
 import { ListThemes, OpenThemeDirectory } from '../../bindings/github.com/xswt442-cmd/DiggerTerm/internal/desktop/themeservice'
 import { SetUILanguage } from '../../bindings/github.com/xswt442-cmd/DiggerTerm/internal/desktop/sessionservice'
 import {
@@ -10,7 +11,7 @@ import {
   translate, writePreferences,
   type LanguageId, type TextKey, type ThemeId,
 } from '../uiPreferences'
-import { defaultBindings, parseBindings, type Binding } from '../keybindings'
+import { defaultBindings, mergeBindings, parseBindings, type Binding } from '../keybindings'
 import { themeRegistry, themeVariables, type ThemeOption } from '../userThemes'
 import type { SettingsTab } from '../components/SettingsDialog.vue'
 
@@ -37,6 +38,7 @@ export function useSettings(options: UseSettingsOptions = {}) {
   const palette = computed(() => chosenTheme.value.palette)
   const themeDirectory = ref('')
   const keybindingsPath = ref('')
+  const quickSelectPath = ref('')
   const themeErrors = ref<{ file: string; message: string }[]>([])
   const globalCSS = ref('')
   const themeRevision = ref(0)
@@ -45,6 +47,7 @@ export function useSettings(options: UseSettingsOptions = {}) {
   const settingsTabLabels = computed<Record<SettingsTab, string>>(() => ({
     appearance: t('appearanceTab'), terminal: t('terminalTab'), sessions: t('sessionTab'),
     observed: t('monitorTab'), keybindings: locale.value === 'zh' ? '快捷键' : 'Keys',
+    quickselect: locale.value === 'zh' ? '快速选择' : 'Quick Select',
     help: locale.value === 'zh' ? '帮助' : 'Help',
   }))
   const appVersion = packageInfo.version
@@ -91,13 +94,14 @@ export function useSettings(options: UseSettingsOptions = {}) {
     try {
       const source = await ReadKeybindings()
       const overrides = source ? parseBindings(source, isMac) : []
-      bindings.value = defaultBindings(isMac).map(binding => overrides.find(item => item.action === binding.action) ?? binding)
+      bindings.value = mergeBindings(overrides, isMac)
     } catch (error) { onError(error) }
   }
 
   function initialize() {
     void reloadBindings()
     void KeybindingsPath().then(value => { keybindingsPath.value = value }).catch(onError)
+    void QuickSelectPath().then(value => { quickSelectPath.value = value }).catch(onError)
     void applyTheme()
     void refreshThemes()
     void SetUILanguage(locale.value).catch(() => {
@@ -107,6 +111,7 @@ export function useSettings(options: UseSettingsOptions = {}) {
 
   function resetLayout() {
     preferences.value.sidebarWidth = defaults.sidebarWidth
+    preferences.value.sidebarCollapsed = defaults.sidebarCollapsed
     preferences.value.managedRatio = defaults.managedRatio
   }
 
@@ -124,12 +129,12 @@ export function useSettings(options: UseSettingsOptions = {}) {
         break
       case 'terminal':
         for (const key of ['fontSize', 'fontFamily', 'scrollback', 'lineHeight', 'scrollSensitivity', 'keyboardMode',
-          'terminalPadding', 'cursorStyle', 'cursorBlink', 'rightClickSelectsWord'] as const) {
+          'terminalPadding', 'focusBorderStyle', 'cursorStyle', 'cursorBlink', 'rightClickSelectsWord'] as const) {
           Object.assign(preferences.value, { [key]: defaults[key] })
         }
         break
       case 'sessions':
-        for (const key of ['defaultProfile', 'defaultDirectory', 'activateNewSession'] as const) {
+        for (const key of ['defaultProfile', 'defaultDirectory', 'activateNewSession', 'sessionActivityEnabled'] as const) {
           Object.assign(preferences.value, { [key]: defaults[key] })
         }
         break
@@ -188,6 +193,7 @@ export function useSettings(options: UseSettingsOptions = {}) {
     { label: locale.value === 'zh' ? '主题 CSS 文件' : 'Theme CSS file', path: themeConfigPath(locale.value === 'zh' ? '<主题名>.css' : '<theme-name>.css') },
     { label: locale.value === 'zh' ? '全局 CSS 覆盖' : 'Global CSS override', path: themeConfigPath('custom.css') },
     { label: locale.value === 'zh' ? '快捷键配置文件' : 'Shortcut config file', path: keybindingsPath.value },
+    { label: locale.value === 'zh' ? '快速选择规则' : 'Quick Select rules', path: quickSelectPath.value },
   ])
   const fontChoices = Object.entries(fonts).map(([id, font]) => ({ id, name: font.name }))
 

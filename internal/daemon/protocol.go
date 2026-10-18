@@ -5,6 +5,8 @@ import (
 	"errors"
 	"fmt"
 	"os"
+
+	"github.com/xswt442-cmd/DiggerTerm/internal/session"
 )
 
 const maxMessageBytes = 1024 * 1024
@@ -31,17 +33,18 @@ func endpointSuffix() (string, error) {
 // Each IPC connection carries newline-delimited JSON requests, replies and events.
 // The daemon is the only owner of PTYs, including when all GUI clients disconnect.
 type request struct {
-	ID        uint64 `json:"id"`
-	Method    string `json:"method"`
-	SessionID string `json:"sessionId,omitempty"`
-	Name      string `json:"name,omitempty"`
-	Profile   string `json:"profile,omitempty"`
-	Directory string `json:"directory,omitempty"`
-	SSHTarget string `json:"sshTarget,omitempty"`
-	SSHPort   int    `json:"sshPort,omitempty"`
-	Data      string `json:"data,omitempty"`
-	Cols      int    `json:"cols,omitempty"`
-	Rows      int    `json:"rows,omitempty"`
+	ID         uint64             `json:"id"`
+	Method     string             `json:"method"`
+	SessionID  string             `json:"sessionId,omitempty"`
+	Name       string             `json:"name,omitempty"`
+	Profile    string             `json:"profile,omitempty"`
+	Directory  string             `json:"directory,omitempty"`
+	SSHTarget  string             `json:"sshTarget,omitempty"`
+	SSHPort    int                `json:"sshPort,omitempty"`
+	SSHOptions session.SSHOptions `json:"sshOptions,omitempty"`
+	Data       string             `json:"data,omitempty"`
+	Cols       int                `json:"cols,omitempty"`
+	Rows       int                `json:"rows,omitempty"`
 }
 
 type message struct {

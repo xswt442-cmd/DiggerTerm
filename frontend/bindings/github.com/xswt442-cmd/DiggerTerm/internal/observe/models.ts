@@ -40,6 +40,23 @@ export interface Snapshot {
     "supported": boolean;
     "scannedAt": string;
     "processes": Process[] | null;
+    "sources": SourceStatus[] | null;
     "truncated": boolean;
     "note": string;
+}
+
+export interface SourceStatus {
+    "source": string;
+    "distribution": string;
+    "namespace": string;
+    "scannedAt": string;
+
+    /**
+     * success, partial, failed, unsupported, not-running, or skipped
+     */
+    "state": string;
+    "complete": boolean;
+    "truncated": boolean;
+    "policy": string;
+    "reason": string;
 }

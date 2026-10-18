@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { join, resolve } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
-import { test } from 'node:test'
+import { after, test } from 'node:test'
 import ts from 'typescript'
 import { compileScript, parse } from '@vue/compiler-sfc'
 import { createRenderer, h, nextTick, ref } from 'vue'
@@ -29,16 +29,20 @@ async function compileVueComponent(filename, outputName, replacements = []) {
   return pathToFileURL(output).href
 }
 
-try {
+{
   const treeModulePath = await readFile(resolve(frontendRoot, 'src/dig/processTree.ts'), 'utf8')
   const treeModule = join(tempRoot, 'processTree.mjs')
   await writeFile(treeModule, transpile(treeModulePath, `${treeModule}.ts`))
   const treeURL = pathToFileURL(treeModule).href
+  const watchStateSource = await readFile(resolve(frontendRoot, 'src/dig/watchState.ts'), 'utf8')
+  const watchStateModule = join(tempRoot, 'watchState.mjs')
+  await writeFile(watchStateModule, transpile(watchStateSource, `${watchStateModule}.ts`))
+  const watchStateURL = pathToFileURL(watchStateModule).href
   const nodeURL = await compileVueComponent('DigTreeNode.vue', 'DigTreeNode.mjs', [
     ["'../dig/processTree'", `'${treeURL}'`],
   ])
   const observeStub = join(tempRoot, 'observeStub.mjs')
-  await writeFile(observeStub, 'let response; export function setResponse(value) { response = value }; export async function Observe() { return response }\n')
+  await writeFile(observeStub, 'let response; let capabilities = { observeSourceResults: false }; export function setResponse(value) { response = value }; export function setCapabilities(value) { capabilities = value }; export async function Observe() { return response }; export async function ObserveCapabilities() { return capabilities }\n')
   const useDigSource = await readFile(resolve(frontendRoot, 'src/composables/useDig.ts'), 'utf8')
   const useDigModule = join(tempRoot, 'useDig.mjs')
   const useDigURL = pathToFileURL(useDigModule).href
@@ -46,6 +50,7 @@ try {
   let useDigJavascript = transpile(useDigSource, `${useDigModule}.ts`)
     .replace("'../../bindings/github.com/xswt442-cmd/DiggerTerm/internal/desktop/sessionservice'", `'${observeStubURL}'`)
     .replace("'../dig/processTree'", `'${treeURL}'`)
+    .replace("'../dig/watchState'", `'${watchStateURL}'`)
   await writeFile(useDigModule, useDigJavascript)
   const digTreeURL = await compileVueComponent('DigTree.vue', 'DigTree.mjs', [
     ["'./DigTreeNode.vue'", `'${nodeURL}'`],
@@ -279,6 +284,51 @@ try {
     dig.clearSelection()
     assert.equal(selectedExternalKey.value, null)
   })
-} finally {
-  await rm(tempRoot, { recursive: true, force: true })
+
+  test('useDig baselines source-aware watch data and retains it through a partial source failure', async () => {
+    const { useDig } = await import(useDigURL)
+    const observeModule = await import(observeStubURL)
+    observeModule.setCapabilities({ observeSourceResults: true })
+    const dig = useDig({
+      observeEnabled: ref(true), connectionRevision: ref(1), query: ref(''),
+      selectedExternalKey: ref(null), observeFailedLabel: () => 'Observe failed',
+    })
+    const status = { source: 'windows', distribution: '', namespace: 'windows:boot', scannedAt: '2026-01-01T00:00:00Z', state: 'success', complete: true, truncated: false, policy: 'policy-v1', reason: '' }
+    const first = { key: 'one', pid: 1, parentPid: 0, name: 'pwsh.exe', kind: 'terminal', source: 'windows', distribution: '', startedAt: '2026-01-01T00:00:00Z' }
+    observeModule.setResponse({ supported: true, processes: [first], sources: [status], truncated: false, scannedAt: status.scannedAt, note: '' })
+    await dig.refresh()
+    assert.equal(dig.watchSupported.value, true)
+    assert.equal(dig.watchChanges.value.length, 0)
+
+    const newer = { ...first, key: 'two', pid: 2, name: 'codex.exe', kind: 'agent' }
+    observeModule.setResponse({ supported: true, processes: [first, newer], sources: [status], truncated: false, scannedAt: status.scannedAt, note: '' })
+    await dig.refresh()
+    assert.deepEqual(dig.watchChanges.value.map(change => change.key), ['two'])
+
+    observeModule.setResponse({ supported: true, processes: [], sources: [{ ...status, state: 'failed', complete: false, reason: 'enumeration-failed' }], truncated: false, scannedAt: status.scannedAt, note: '' })
+    await dig.refresh()
+    assert.deepEqual(dig.processes.value.map(item => item.key).sort(), ['one', 'two'])
+    assert.equal(dig.watchSources.value[0].stale, true)
+    assert.deepEqual(dig.watchChanges.value.map(change => change.key), ['two'])
+  })
+
+  test('useDig ignores a scan result that returns after observation is disabled', async () => {
+    const { useDig } = await import(useDigURL)
+    const observeModule = await import(observeStubURL)
+    const observeEnabled = ref(true)
+    const dig = useDig({ observeEnabled, connectionRevision: ref(1), query: ref(''),
+      selectedExternalKey: ref(null), observeFailedLabel: () => 'Observe failed' })
+    let resolveScan
+    observeModule.setResponse(new Promise(resolve => { resolveScan = resolve }))
+    const pending = dig.refresh()
+    await Promise.resolve()
+    await Promise.resolve()
+    observeEnabled.value = false
+    await nextTick()
+    resolveScan({ supported: true, processes: [], sources: [], truncated: false, scannedAt: '2026-01-01T00:00:00Z', note: '' })
+    await pending
+    assert.equal(dig.snapshot.value, null)
+    assert.equal(dig.loading.value, false)
+  })
 }
+after(async () => { await rm(tempRoot, { recursive: true, force: true }) })

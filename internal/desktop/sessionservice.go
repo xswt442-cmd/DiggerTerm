@@ -357,6 +357,14 @@ func (s *SessionService) CreateSSH(target string, port, cols, rows int) (session
 	return c.CreateSSH(target, port, cols, rows)
 }
 
+func (s *SessionService) CreateSSHWithOptions(target string, port int, options session.SSHOptions, cols, rows int) (session.Info, error) {
+	c, err := s.backend()
+	if err != nil {
+		return session.Info{}, err
+	}
+	return c.CreateSSHWithOptions(target, port, options, cols, rows)
+}
+
 func (s *SessionService) Rename(id, name string) (session.Info, error) {
 	c, err := s.backend()
 	if err != nil {
@@ -413,6 +421,14 @@ func (s *SessionService) Observe() (observe.Snapshot, error) {
 		return observe.Snapshot{}, err
 	}
 	return c.Observe()
+}
+
+func (s *SessionService) ObserveCapabilities() (daemon.Capabilities, error) {
+	client, err := s.backend()
+	if err != nil {
+		return daemon.Capabilities{}, err
+	}
+	return client.Capabilities()
 }
 
 func (s *SessionService) Terminate(id string) error {

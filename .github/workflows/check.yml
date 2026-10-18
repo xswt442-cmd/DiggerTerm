@@ -30,6 +30,8 @@ jobs:
           sudo apt-get update
           sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
             libgtk-4-dev libwebkitgtk-6.0-dev libayatana-appindicator3-dev pkg-config gcc nano
+      - name: Check bilingual release generation
+        run: node --test scripts/release-notes.test.mjs
       - name: Install frontend dependencies
         run: npm --prefix frontend ci
       - name: Run all frontend tests
@@ -56,6 +58,8 @@ jobs:
           node-version: '24'
           cache: npm
           cache-dependency-path: frontend/package-lock.json
+      - name: Check bilingual release generation
+        run: node --test scripts/release-notes.test.mjs
       - name: Install frontend dependencies
         run: npm --prefix frontend ci
       - name: Test frontend preferences, themes, shortcuts and layouts
@@ -69,7 +73,7 @@ jobs:
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           go vet ./...
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          go test -tags server . -run TestUnsupportedNativeClipboardReportsFailure
+          go test -tags server ./internal/desktop -run '^TestUnsupportedNativeClipboardReportsFailure$' -count=1
       - name: Install pinned Wails CLI
         shell: pwsh
         run: |

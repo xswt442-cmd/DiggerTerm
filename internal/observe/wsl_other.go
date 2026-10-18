@@ -9,8 +9,14 @@ func platformWSLSnapshot() ([]Process, bool, string) {
 }
 
 func platformWSLSnapshotContext(ctx context.Context) ([]Process, bool, string) {
+	processes, truncated, note, _ := platformWSLResultsContext(ctx)
+	return processes, truncated, note
+}
+
+func platformWSLResultsContext(ctx context.Context) ([]Process, bool, string, []SourceStatus) {
 	if err := ctx.Err(); err != nil {
-		return nil, false, err.Error()
+		return nil, false, err.Error(), nil
 	}
-	return platformWSLSnapshot()
+	processes, truncated, note := platformWSLSnapshot()
+	return processes, truncated, note, nil
 }

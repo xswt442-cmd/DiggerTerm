@@ -132,6 +132,13 @@ func (c *Client) Profiles() ([]session.Profile, error) {
 	err := c.call(request{Method: "profiles"}, &result)
 	return result, err
 }
+
+func (c *Client) Capabilities() (Capabilities, error) {
+	var result Capabilities
+	err := c.call(request{Method: "capabilities"}, &result)
+	return result, err
+}
+
 func (c *Client) SSHHosts() ([]string, error) {
 	var aliases []string
 	err := c.call(request{Method: "sshHosts"}, &aliases)
@@ -160,6 +167,12 @@ func (c *Client) CreateLocal(profile, directory string, cols, rows int) (session
 func (c *Client) CreateSSH(target string, port, cols, rows int) (session.Info, error) {
 	var result session.Info
 	err := c.call(request{Method: "createSSH", SSHTarget: target, SSHPort: port, Cols: cols, Rows: rows}, &result)
+	return result, err
+}
+
+func (c *Client) CreateSSHWithOptions(target string, port int, options session.SSHOptions, cols, rows int) (session.Info, error) {
+	var result session.Info
+	err := c.call(request{Method: "createSSHWithOptions", SSHTarget: target, SSHPort: port, SSHOptions: options, Cols: cols, Rows: rows}, &result)
 	return result, err
 }
 

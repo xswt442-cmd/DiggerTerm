@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, watch } from 'vue'
-import { actionDefinitions, defaultBindings, eventChord, parseBindings, type ActionId, type Binding } from '../keybindings'
+import { actionDefinitions, eventChord, mergeBindings, parseBindings, type ActionId, type Binding } from '../keybindings'
 import { OpenKeybindings, ReadKeybindings, SaveKeybindings } from '../../bindings/github.com/xswt442-cmd/DiggerTerm/internal/desktop/keybindingservice'
 import type { Locale } from '../uiPreferences'
 
@@ -15,7 +15,7 @@ watch(() => props.bindings, bindings => {
 }, { immediate: true, deep: true })
 const text = (zh: string, en: string) => props.locale === 'zh' ? zh : en
 function effective(overrides: Binding[]) {
-  return defaultBindings(props.isMac).map(binding => overrides.find(item => item.action === binding.action) ?? binding)
+  return mergeBindings(overrides, props.isMac)
 }
 async function reload() {
   error.value = ''; status.value = ''

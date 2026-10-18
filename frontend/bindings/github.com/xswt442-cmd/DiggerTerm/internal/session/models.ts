@@ -14,6 +14,7 @@ export interface Info {
     "exitReason": string;
     "streamClosed": boolean;
     "streamError": string;
+    "outputOffset": number;
     "revision": number;
 }
 
@@ -27,4 +28,10 @@ export interface Replay {
     "data": string;
     "offset": number;
     "truncated": boolean;
+}
+
+export interface SSHOptions {
+    "keepAlive": boolean;
+    "serverAliveInterval": number;
+    "serverAliveCountMax": number;
 }
