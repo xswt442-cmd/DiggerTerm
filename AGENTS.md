@@ -9,6 +9,8 @@
 
 ## Documentation and reviews
 
+- Read the repository-local [.github/engineering/ENGINEERING_STANDARD.md](.github/engineering/ENGINEERING_STANDARD.md) for documentation, categorized changelog, pull request, and release conventions; this project's verified code and specific rules remain authoritative.
+
 - Read current files before editing. Keep changes limited to the requested behavior, and describe final implementation rather than discarded attempts or debugging history.
 - Public tracked files must not contain personal paths, machine-specific settings, private SSH aliases, local network details, temporary deployment records, unfinished plans, or acceptance-status notes.
 - READMEs explain the product, available features, downloads, installation, usage, supported platforms, and actual limitations. Code comments explain currently relevant behavior and constraints; use Mermaid for diagrams when needed.
