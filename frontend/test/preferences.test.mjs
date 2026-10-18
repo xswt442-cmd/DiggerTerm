@@ -41,6 +41,7 @@ test('all expanded preferences persist across GUI reopen', () => {
     cursorBlink: false,
     rightClickSelectsWord: true,
     activateNewSession: false,
+    sessionActivityEnabled: false,
     observeEnabled: false,
     observeRefreshSeconds: 0,
     showPid: false,
@@ -50,6 +51,12 @@ test('all expanded preferences persist across GUI reopen', () => {
   }
   prefs.writePreferences(saved)
   assert.deepEqual(prefs.readPreferences(), saved)
+})
+
+test('new session activity preference defaults on and can be disabled', () => {
+  assert.equal(prefs.defaults.sessionActivityEnabled, true)
+  prefs.writePreferences({ ...prefs.defaults, sessionActivityEnabled: false })
+  assert.equal(prefs.readPreferences().sessionActivityEnabled, false)
 })
 
 test('bad saved values are clamped or safely ignored', () => {
@@ -117,7 +124,7 @@ test('new setting labels appear in both UI languages', () => {
   for (const key of ['terminalTab', 'sessionTab', 'monitorTab', 'fontFamily', 'uiFontSize', 'scrollback',
     'profileDefault', 'observeEnabled', 'refreshSeconds', 'keyboardMode', 'focusBorderStyle',
     'focusBorderAccent', 'focusBorderMuted', 'focusBorderNone', 'collapseSidebar', 'expandSidebar',
-    'sessionDiagnostics', 'showStatusBar']) {
+    'sessionDiagnostics', 'showStatusBar', 'sessionActivityEnabled']) {
     assert.notEqual(prefs.translate('zh', key), '')
     assert.notEqual(prefs.translate('en', key), '')
   }

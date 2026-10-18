@@ -36,6 +36,7 @@ type Info struct {
 	ExitReason   string `json:"exitReason"`
 	StreamClosed bool   `json:"streamClosed"`
 	StreamError  string `json:"streamError"`
+	OutputOffset uint64 `json:"outputOffset"`
 	Revision     uint64 `json:"revision"`
 }
 
@@ -97,7 +98,9 @@ func (m *Manager) List() []Info {
 	for _, id := range m.order {
 		s := m.sessions[id]
 		s.mu.Lock()
-		result = append(result, s.info)
+		info := s.info
+		info.OutputOffset = s.offset
+		result = append(result, info)
 		s.mu.Unlock()
 	}
 	return result

@@ -3,16 +3,20 @@
 
 import * as ClipboardService from "./clipboardservice.js";
 import * as KeybindingService from "./keybindingservice.js";
+import * as QuickSelectService from "./quickselectservice.js";
 import * as SessionService from "./sessionservice.js";
 import * as ThemeService from "./themeservice.js";
 export {
     ClipboardService,
     KeybindingService,
+    QuickSelectService,
     SessionService,
     ThemeService
 };
 
 export type {
+    QuickSelectConfig,
+    QuickSelectRule,
     ThemeCatalog,
     ThemeError,
     ThemeFile

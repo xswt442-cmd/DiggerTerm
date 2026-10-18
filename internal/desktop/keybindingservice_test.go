@@ -93,6 +93,15 @@ func TestValidateKeybindingsAllowsSimultaneousSwap(t *testing.T) {
 	}
 }
 
+func TestValidateKeybindingsKeepsLegacyShortcutWhenNewDefaultConflicts(t *testing.T) {
+	for _, key := range []string{"F", "X", "P"} {
+		config := `{"version":1,"bindings":[{"action":"splitRight","scope":"workspace","keys":["Ctrl+Shift+` + key + `"]}]}`
+		if err := validateKeybindings([]byte(config)); err != nil {
+			t.Fatalf("legacy shortcut Ctrl+Shift+%s was rejected after adding a new default: %v", key, err)
+		}
+	}
+}
+
 func TestKeybindingServiceRejectsRelativeHome(t *testing.T) {
 	service := &KeybindingService{homeDirectory: func() (string, error) { return "relative-home", nil }}
 	if _, err := service.KeybindingsPath(); err == nil {

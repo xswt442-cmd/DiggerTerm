@@ -8,6 +8,8 @@ import (
 	"os"
 	"testing"
 	"time"
+
+	"github.com/xswt442-cmd/DiggerTerm/internal/session"
 )
 
 func TestSSHIPCIsDaemonOwned(t *testing.T) {
@@ -40,6 +42,10 @@ func TestSSHIPCIsDaemonOwned(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	capabilities, err := first.Capabilities()
+	if err != nil || !capabilities.SSHKeepAliveOptions {
+		t.Fatalf("SSH keepalive capability = %+v, err=%v", capabilities, err)
+	}
 	if _, err := first.CreateSSH("-oStrictHostKeyChecking=no", 0, 80, 24); err == nil {
 		t.Fatal("IPC accepted SSH option injection")
 	}
@@ -49,7 +55,12 @@ func TestSSHIPCIsDaemonOwned(t *testing.T) {
 	if _, err := first.Create("ssh", 80, 24); err == nil {
 		t.Fatal("SSH must not be created through the local profile method")
 	}
-	info, err := first.CreateSSH("127.0.0.1", remote.Addr().(*net.TCPAddr).Port, 80, 24)
+	if _, err := first.CreateSSHWithOptions("127.0.0.1", remote.Addr().(*net.TCPAddr).Port,
+		session.SSHOptions{KeepAlive: true, ServerAliveInterval: 4, ServerAliveCountMax: 3}, 80, 24); err == nil {
+		t.Fatal("IPC accepted an invalid SSH keepalive interval")
+	}
+	info, err := first.CreateSSHWithOptions("127.0.0.1", remote.Addr().(*net.TCPAddr).Port,
+		session.SSHOptions{KeepAlive: true, ServerAliveInterval: 30, ServerAliveCountMax: 3}, 80, 24)
 	if err != nil {
 		t.Fatalf("IPC SSH start: %v", err)
 	}

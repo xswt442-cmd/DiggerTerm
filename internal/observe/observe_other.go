@@ -4,6 +4,8 @@ package observe
 
 import "context"
 
+func platformNamespace() string { return "" }
+
 func platformSnapshot(ctx context.Context) ([]processRow, bool, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, false, err

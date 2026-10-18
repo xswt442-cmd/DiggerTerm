@@ -1,10 +1,12 @@
 <script setup lang="ts">
+import { defineAsyncComponent } from 'vue'
 import KeybindingsSettings from './KeybindingsSettings.vue'
 import type { Profile } from '../../bindings/github.com/xswt442-cmd/DiggerTerm/internal/session/models'
 import type { Binding } from '../keybindings'
 import type { TextKey, UIPreferences } from '../uiPreferences'
 import type { ThemeOption } from '../userThemes'
 import type { SettingsTab } from './SettingsDialog.vue'
+const QuickSelectSettings = defineAsyncComponent(() => import('./QuickSelectSettings.vue'))
 
 const preferences = defineModel<UIPreferences>('preferences', { required: true })
 
@@ -170,6 +172,8 @@ const t = props.translate
     </label>
     <label class="setting-toggle"><span>{{ t('activateNewSession') }}</span>
       <input v-model="preferences.activateNewSession" type="checkbox" /></label>
+    <label class="setting-toggle"><span>{{ t('sessionActivityEnabled') }}</span>
+      <input v-model="preferences.sessionActivityEnabled" type="checkbox" /></label>
     <div class="setting-block">
       <label class="setting-label" for="default-directory">{{ t('defaultDirectory') }}</label>
       <input id="default-directory" v-model="preferences.defaultDirectory"
@@ -207,6 +211,8 @@ const t = props.translate
     <KeybindingsSettings :locale="locale" :bindings="bindings" :is-mac="isMac" @changed="emit('keybindings-change', $event)" />
   </template>
 
+  <QuickSelectSettings v-else-if="tab === 'quickselect'" :locale="locale" />
+
   <template v-else-if="tab === 'help'">
     <div class="setting-block">
       <label class="setting-label">{{ locale === 'zh' ? '应用版本' : 'App version' }}</label>
@@ -229,7 +235,7 @@ const t = props.translate
     </button>
   </template>
 
-  <button v-if="!['keybindings', 'help'].includes(tab)" type="button" class="reset-layout compact-reset" @click="emit('reset-section')">
+  <button v-if="!['keybindings', 'quickselect', 'help'].includes(tab)" type="button" class="reset-layout compact-reset" @click="emit('reset-section')">
     {{ t(tab === 'appearance' ? 'resetAppearance' : tab === 'terminal' ? 'resetTerminal' : tab === 'sessions' ? 'resetSessions' : 'resetObserved') }}
   </button>
 </template>

@@ -20,14 +20,17 @@ import (
 const maxKeybindingsFileSize = 32 * 1024
 
 var keybindingScopes = map[string]string{
-	"copySelection":  "terminal",
-	"pasteClipboard": "terminal",
-	"toggleCopyMode": "terminal",
-	"splitRight":     "workspace",
-	"splitDown":      "workspace",
-	"focusNextPane":  "workspace",
-	"closePane":      "workspace",
-	"openSettings":   "workspace",
+	"copySelection":      "terminal",
+	"pasteClipboard":     "terminal",
+	"toggleCopyMode":     "terminal",
+	"splitRight":         "workspace",
+	"splitDown":          "workspace",
+	"focusNextPane":      "workspace",
+	"closePane":          "workspace",
+	"openSettings":       "workspace",
+	"terminalSearch":     "terminal",
+	"quickSelect":        "terminal",
+	"openCommandPalette": "workspace",
 }
 
 type KeybindingService struct {
@@ -403,10 +406,23 @@ func validateKeybindingChord(chord, key string, modifiers map[string]bool) error
 func validateEffectiveKeybindingConflicts(overrides []keybindingRecord) error {
 	isMac := runtime.GOOS == "darwin"
 	effective := map[string]string{}
+	explicitKeys := make(map[string]bool)
+	for _, binding := range overrides {
+		for _, raw := range binding.Keys {
+			chord, err := normalizeKeybindingChord(raw)
+			if err != nil {
+				return err
+			}
+			explicitKeys[chord] = true
+		}
+	}
 	putDefaults := func(action, key string) error {
 		chord, err := normalizeKeybindingChord(key)
 		if err != nil {
 			return err
+		}
+		if (action == "terminalSearch" || action == "quickSelect" || action == "openCommandPalette") && explicitKeys[chord] {
+			return nil
 		}
 		if previous, ok := effective[chord]; ok && previous != action {
 			return fmt.Errorf("effective shortcut %s conflicts between %s and %s", chord, previous, action)
@@ -462,5 +478,8 @@ func actionListForGo() []keybindingDefaults {
 		{id: "focusNextPane", other: []string{"Ctrl+Shift+F6"}, mac: []string{"Ctrl+Shift+F6"}},
 		{id: "closePane", other: []string{"Ctrl+Shift+F4"}, mac: []string{"Ctrl+Shift+F4"}},
 		{id: "openSettings", other: []string{"Ctrl+Shift+Comma"}, mac: []string{"Ctrl+Shift+Comma"}},
+		{id: "terminalSearch", other: []string{"Ctrl+Shift+F"}, mac: []string{"Ctrl+Shift+F"}},
+		{id: "quickSelect", other: []string{"Ctrl+Shift+X"}, mac: []string{"Ctrl+Shift+X"}},
+		{id: "openCommandPalette", other: []string{"Ctrl+Shift+P"}, mac: []string{"Ctrl+Shift+P"}},
 	}
 }

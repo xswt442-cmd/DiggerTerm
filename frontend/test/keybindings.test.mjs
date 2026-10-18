@@ -12,13 +12,16 @@ const keybindings = await import('data:text/javascript;base64,' + Buffer.from(co
 test('publishes the whitelist and safe platform defaults', () => {
   assert.deepEqual(keybindings.actionDefinitions.map(({ id }) => id), [
     'copySelection', 'pasteClipboard', 'toggleCopyMode', 'splitRight', 'splitDown',
-    'focusNextPane', 'closePane', 'openSettings',
+    'focusNextPane', 'closePane', 'openSettings', 'terminalSearch', 'quickSelect', 'openCommandPalette',
   ])
   const windows = keybindings.defaultBindings(false)
   const mac = keybindings.defaultBindings(true)
   assert.deepEqual(windows.find((binding) => binding.action === 'copySelection').keys, ['Ctrl+Shift+C', 'Ctrl+Insert'])
   assert.deepEqual(mac.find((binding) => binding.action === 'copySelection').keys, ['Meta+C'])
   assert.deepEqual(windows.find((binding) => binding.action === 'pasteClipboard').keys, ['Ctrl+Shift+V', 'Shift+Insert'])
+  assert.deepEqual(windows.find((binding) => binding.action === 'terminalSearch').keys, ['Ctrl+Shift+F'])
+  assert.deepEqual(windows.find((binding) => binding.action === 'quickSelect').keys, ['Ctrl+Shift+X'])
+  assert.deepEqual(windows.find((binding) => binding.action === 'openCommandPalette').keys, ['Ctrl+Shift+P'])
 })
 
 test('normalizes aliases and modifier order', () => {
@@ -80,4 +83,18 @@ test('allows simultaneous shortcut swaps with final conflict validation', () => 
     { action: 'splitRight', scope: 'workspace', keys: ['Ctrl+Shift+ArrowDown'] },
     { action: 'splitDown', scope: 'workspace', keys: ['Ctrl+Shift+ArrowRight'] },
   ] }), false).length, 2)
+})
+
+test('keeps an older user shortcut when it conflicts with a new default action', () => {
+  for (const [key, newAction] of [['F', 'terminalSearch'], ['X', 'quickSelect'], ['P', 'openCommandPalette']]) {
+    const oldConfig = JSON.stringify({ version: 1, bindings: [
+      { action: 'splitRight', scope: 'workspace', keys: [`Ctrl+Shift+${key}`] },
+    ] })
+    const overrides = keybindings.parseBindings(oldConfig, false)
+    const merged = keybindings.mergeBindings(overrides, false)
+    assert.deepEqual(merged.find(binding => binding.action === 'splitRight').keys, [`Ctrl+Shift+${key}`])
+    assert.deepEqual(merged.find(binding => binding.action === newAction).keys, [])
+    assert.equal(keybindings.matchBinding(keyEvent(key, { ctrlKey: true, shiftKey: true }), merged, 'workspace'), 'splitRight')
+    assert.equal(keybindings.matchBinding(keyEvent(key, { ctrlKey: true, shiftKey: true }), merged, 'terminal'), null)
+  }
 })

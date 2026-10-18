@@ -48,10 +48,17 @@ func (m *Manager) CreateLocal(profile, directory string, cols, rows int) (Info, 
 // CreateSSH delegates authentication, host-key verification and ~/.ssh/config
 // handling to the platform OpenSSH client. It owns ONLY the client PTY.
 func (m *Manager) CreateSSH(target string, port, cols, rows int) (Info, error) {
+	return m.CreateSSHWithOptions(target, port, SSHOptions{}, cols, rows)
+}
+
+// CreateSSHWithOptions adds only fixed, validated OpenSSH keepalive options.
+// Authentication, host-key verification and user ssh_config remain delegated
+// to OpenSSH, and the default CreateSSH behavior stays unchanged.
+func (m *Manager) CreateSSHWithOptions(target string, port int, options SSHOptions, cols, rows int) (Info, error) {
 	if !validSize(cols, rows) {
 		return Info{}, fmt.Errorf("invalid terminal size %dx%d", cols, rows)
 	}
-	spec, err := sshCommand(target, port)
+	spec, err := sshCommandWithOptions(target, port, options)
 	if err != nil {
 		return Info{}, err
 	}

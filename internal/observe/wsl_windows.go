@@ -126,24 +126,37 @@ func platformWSLSnapshot() ([]Process, bool, string) {
 }
 
 func platformWSLSnapshotContext(parent context.Context) ([]Process, bool, string) {
+	processes, truncated, note, _ := platformWSLResultsContext(parent)
+	return processes, truncated, note
+}
+
+func platformWSLResultsContext(parent context.Context) ([]Process, bool, string, []SourceStatus) {
+	const policy = "wsl-running-user-process-metadata-v1"
+	status := func(distribution, namespace, state, reason string, complete, truncated bool) SourceStatus {
+		return SourceStatus{Source: "wsl", Distribution: distribution, Namespace: namespace,
+			State: state, Complete: complete, Truncated: truncated, Policy: policy, Reason: reason}
+	}
 	if err := parent.Err(); err != nil {
-		return nil, false, err.Error()
+		return nil, false, err.Error(), []SourceStatus{status("", "", "failed", "scan-cancelled", false, false)}
 	}
 	exe, err := wslExecutable()
 	if err != nil {
-		return nil, false, "WSL discovery unavailable"
+		return nil, false, "WSL discovery unavailable", []SourceStatus{status("", "", "failed", "wsl-unavailable", false, false)}
 	}
 	distros, err := runningWSLDistrosContext(parent, exe)
 	if err != nil {
-		return nil, false, "Unable to list running WSL distributions"
+		return nil, false, "Unable to list running WSL distributions", []SourceStatus{status("", "", "failed", "distro-enumeration-failed", false, false)}
 	}
+	statuses := []SourceStatus{status("", "wsl-running-set", "success", "", true, false)}
 	if len(distros) == 0 {
-		return nil, false, "No running WSL user distributions"
+		statuses[0].Reason = "no-running-user-distros"
+		return nil, false, "No running WSL user distributions", statuses
 	}
 	truncated := false
 	if len(distros) > maxWSLDistros {
 		distros = distros[:maxWSLDistros]
 		truncated = true
+		statuses = append(statuses, status("*", "", "skipped", "distro-limit", false, true))
 	}
 	observed := make([]Process, 0)
 	failures := 0
@@ -151,15 +164,18 @@ func platformWSLSnapshotContext(parent context.Context) ([]Process, bool, string
 	scanned := 0
 	for _, distro := range distros {
 		if err := parent.Err(); err != nil {
-			return nil, truncated, err.Error()
+			statuses = append(statuses, status(distro, "", "failed", "scan-cancelled", false, false))
+			return observed, truncated, err.Error(), statuses
 		}
 		latest, err := runningWSLDistrosContext(parent, exe)
 		if err != nil {
 			failures++
+			statuses = append(statuses, status(distro, "", "failed", "distro-recheck-failed", false, false))
 			continue
 		}
 		if !containsDistro(latest, distro) {
 			skippedStopped++
+			statuses = append(statuses, status(distro, "", "not-running", "stopped-before-scan", false, false))
 			continue
 		}
 		ctx, cancel := context.WithTimeout(parent, 5*time.Second)
@@ -167,16 +183,23 @@ func platformWSLSnapshotContext(parent context.Context) ([]Process, bool, string
 		cancel()
 		if err != nil {
 			failures++
+			statuses = append(statuses, status(distro, "", "failed", "process-scan-failed", false, false))
 			continue
 		}
 		processes, clipped, err := parseWSLProcessList(raw, distro)
 		if err != nil {
 			failures++
+			statuses = append(statuses, status(distro, "", "failed", "process-snapshot-invalid", false, false))
 			continue
 		}
 		observed = append(observed, processes...)
 		scanned++
 		truncated = truncated || clipped
+		state, reason := "success", ""
+		if clipped {
+			state, reason = "partial", "process-limit"
+		}
+		statuses = append(statuses, status(distro, wslNamespace(raw, distro), state, reason, !clipped, clipped))
 	}
 	note := fmt.Sprintf("%d running WSL distro(s) scanned", scanned)
 	if failures > 0 {
@@ -185,7 +208,7 @@ func platformWSLSnapshotContext(parent context.Context) ([]Process, bool, string
 	if skippedStopped > 0 {
 		note += fmt.Sprintf("; %d stopped before scan and skipped", skippedStopped)
 	}
-	return observed, truncated, note
+	return observed, truncated, note, statuses
 }
 
 // cappedBuffer returns an error via a flag, not from Write: aborting a pipe

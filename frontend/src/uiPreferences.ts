@@ -32,6 +32,7 @@ export interface UIPreferences {
   managedRatio: number
   defaultDirectory: string
   defaultProfile: string
+  sessionActivityEnabled: boolean
   scrollback: number
   lineHeight: number
   scrollSensitivity: number
@@ -50,7 +51,7 @@ export interface UIPreferences {
 
 export const defaults: UIPreferences = {
   theme: 'builtin:nightfall', customCSS: true, fontSize: 13, uiFontSize: 12, fontFamily: 'cascadia', language: 'system',
-  sidebarWidth: 280, sidebarCollapsed: false, managedRatio: 0.42, defaultDirectory: '', defaultProfile: 'auto',
+  sidebarWidth: 280, sidebarCollapsed: false, managedRatio: 0.42, defaultDirectory: '', defaultProfile: 'auto', sessionActivityEnabled: true,
   scrollback: 5000, lineHeight: 1.25, scrollSensitivity: 1, terminalPadding: 14, focusBorderStyle: 'accent',
   cursorStyle: 'block', keyboardMode: 'smart', cursorBlink: true, rightClickSelectsWord: false,
   activateNewSession: true, observeEnabled: true,
@@ -166,7 +167,7 @@ export function readPreferences(): UIPreferences {
     if (saved.terminalPadding && paddingOptions.includes(saved.terminalPadding as typeof paddingOptions[number])) result.terminalPadding = saved.terminalPadding
     if (saved.observeRefreshSeconds !== undefined && refreshOptions.includes(saved.observeRefreshSeconds as typeof refreshOptions[number])) result.observeRefreshSeconds = saved.observeRefreshSeconds
     for (const name of ['customCSS', 'cursorBlink', 'rightClickSelectsWord', 'activateNewSession',
-      'observeEnabled', 'showPid', 'showStatusBar', 'sidebarCollapsed'] as const) {
+      'observeEnabled', 'showPid', 'showStatusBar', 'sidebarCollapsed', 'sessionActivityEnabled'] as const) {
       if (typeof saved[name] === 'boolean') result[name] = saved[name]
     }
   } catch { /* Storage can be disabled: use defaults. */ }
@@ -218,6 +219,7 @@ const text = {
     cursorBlink: '光标闪烁', scrollSensitivity: '滚轮速度', rightClickWord: '右键选词',
     terminalPadding: '终端留白',
     profileDefault: '默认 Shell', automatic: '自动选择', activateNewSession: '新建后切换',
+    sessionActivityEnabled: '标记未聚焦会话的新输出',
     observeEnabled: '显示外部进程',
     refreshSeconds: '自动扫描', scanManual: '仅手动', seconds: '{count} 秒',
     showPid: '显示 PID', showStatusBar: '显示侧栏计数',
@@ -264,6 +266,7 @@ const text = {
     cursorBlink: 'Blink cursor', scrollSensitivity: 'Wheel speed', rightClickWord: 'Right-click word',
     terminalPadding: 'Terminal padding',
     profileDefault: 'Default shell', automatic: 'Automatic', activateNewSession: 'Select on create',
+    sessionActivityEnabled: 'Mark output in unfocused sessions',
     observeEnabled: 'Show observed',
     refreshSeconds: 'Auto refresh', scanManual: 'Manual only', seconds: '{count}s',
     showPid: 'Show PID', showStatusBar: 'Show sidebar counts',

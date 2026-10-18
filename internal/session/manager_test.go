@@ -49,3 +49,18 @@ func TestProfileAndSizeValidation(t *testing.T) {
 		t.Fatal("unexpected terminal size validation result")
 	}
 }
+
+func TestListIncludesCurrentOutputOffsetWithoutMutatingSessionInfo(t *testing.T) {
+	m := NewManager(nil, nil)
+	session := &managed{info: Info{ID: "session-1", Status: "running"}, offset: 42}
+	m.sessions[session.info.ID] = session
+	m.order = append(m.order, session.info.ID)
+
+	listed := m.List()
+	if len(listed) != 1 || listed[0].OutputOffset != 42 {
+		t.Fatalf("List() = %#v, want current offset 42", listed)
+	}
+	if session.info.OutputOffset != 0 {
+		t.Fatalf("List mutated stored session metadata: %#v", session.info)
+	}
+}

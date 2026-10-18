@@ -15,6 +15,22 @@ import (
 	"github.com/xswt442-cmd/DiggerTerm/internal/session"
 )
 
+func TestCapabilitiesAdvertiseObserveSourceResults(t *testing.T) {
+	server := &Server{manager: session.NewManager(nil, nil)}
+	peer := &peer{done: make(chan struct{})}
+	reply := server.dispatch(peer, request{ID: 1, Method: "capabilities"})
+	if reply.Error != "" {
+		t.Fatalf("capabilities request failed: %s", reply.Error)
+	}
+	var capabilities Capabilities
+	if err := json.Unmarshal(reply.Result, &capabilities); err != nil {
+		t.Fatal(err)
+	}
+	if !capabilities.ObserveSourceResults || !capabilities.SSHKeepAliveOptions {
+		t.Fatalf("source-result capability missing: %+v", capabilities)
+	}
+}
+
 func TestSlowObserveDoesNotBlockPeerRequests(t *testing.T) {
 	started := make(chan struct{})
 	release := make(chan struct{})

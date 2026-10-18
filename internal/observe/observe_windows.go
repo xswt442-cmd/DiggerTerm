@@ -12,6 +12,8 @@ import (
 	"golang.org/x/sys/windows"
 )
 
+var getTickCount64Proc = windows.NewLazySystemDLL("kernel32.dll").NewProc("GetTickCount64")
+
 func platformSnapshot(ctx context.Context) ([]processRow, bool, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, false, err
@@ -55,6 +57,15 @@ func platformSnapshot(ctx context.Context) ([]processRow, bool, error) {
 		}
 	}
 	return result, true, nil
+}
+
+func platformNamespace() string {
+	ticks, _, _ := getTickCount64Proc.Call()
+	if ticks == 0 {
+		return ""
+	}
+	boot := time.Now().Add(-time.Duration(ticks) * time.Millisecond).UTC().Truncate(10 * time.Minute)
+	return "windows:" + boot.Format(time.RFC3339)
 }
 
 func processMetadata(pid, parent int, name, sid string) (processRow, bool) {

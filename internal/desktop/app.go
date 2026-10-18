@@ -34,6 +34,7 @@ func runGUI(assets fs.FS, trayIcon []byte) {
 	app.RegisterService(application.NewService(sessions))
 	app.RegisterService(application.NewService(NewThemeService()))
 	app.RegisterService(application.NewService(NewKeybindingService()))
+	app.RegisterService(application.NewService(NewQuickSelectService()))
 	app.RegisterService(application.NewService(&ClipboardService{app: app}))
 
 	window := app.Window.NewWithOptions(application.WebviewWindowOptions{

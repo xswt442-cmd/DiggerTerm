@@ -78,3 +78,9 @@ func TestWSLRejectBadBootMetadata(t *testing.T) {
 		}
 	}
 }
+
+func TestWSLSourceNamespaceIncludesDistributionAndBootIdentity(t *testing.T) {
+	if got, want := wslNamespace(sampleWSLProcessLines(), "Ubuntu"), "wsl:Ubuntu:"+testBootID; got != want {
+		t.Fatalf("wslNamespace() = %q, want %q", got, want)
+	}
+}

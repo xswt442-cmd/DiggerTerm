@@ -3,5 +3,6 @@
 
 export type {
     Process,
-    Snapshot
+    Snapshot,
+    SourceStatus
 } from "./models.js";

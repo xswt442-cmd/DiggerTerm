@@ -1,10 +1,13 @@
 <script setup lang="ts">
-import { nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { defineAsyncComponent, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { Terminal } from '@xterm/xterm'
 import { FitAddon } from '@xterm/addon-fit'
+import type { ISearchOptions, SearchAddon as SearchAddonInstance } from '@xterm/addon-search'
+import { Browser } from '@wailsio/runtime'
 import { Events } from '@wailsio/runtime'
 import { ReadText, WriteText } from '../../bindings/github.com/xswt442-cmd/DiggerTerm/internal/desktop/clipboardservice'
 import { Resize, Snapshot, Write } from '../../bindings/github.com/xswt442-cmd/DiggerTerm/internal/desktop/sessionservice'
+import { QuickSelectConfig } from '../../bindings/github.com/xswt442-cmd/DiggerTerm/internal/desktop/quickselectservice'
 import type { Info } from '../../bindings/github.com/xswt442-cmd/DiggerTerm/internal/session/models'
 import { fonts, type Palette, type FontId, type CursorStyle, type KeyboardMode, type Locale } from '../uiPreferences'
 import { decideTerminalShortcut } from '../terminalShortcuts'
@@ -12,6 +15,11 @@ import { terminalColors } from '../userThemes'
 import { matchBinding, type Binding } from '../keybindings'
 import { queueSessionOperation, updateAttachment } from '../terminalAttachment'
 import { sliceOutput } from '../terminalReplay'
+import { validateExternalWebURL } from '../externalLinks'
+import { withTerminalSearchSupport } from '../terminalSearch'
+import type { PositionedQuickSelectCandidate } from '../quickSelect'
+import TerminalSearch from './TerminalSearch.vue'
+const QuickSelectOverlay = defineAsyncComponent(() => import('./QuickSelectOverlay.vue'))
 import '@xterm/xterm/css/xterm.css'
 
 const props = defineProps<{
@@ -33,6 +41,8 @@ const props = defineProps<{
   themeRevision: number
   locale: Locale
   bindings: Binding[]
+  toolsEnabled: boolean
+  toolRequest: { sequence: number; action: 'search' | 'quickSelect' } | null
 }>()
 const emit = defineEmits<{ error: [message: string] }>()
 const container = ref<HTMLElement | null>(null)
@@ -47,10 +57,26 @@ const replayTruncated = ref(false)
 const recovering = ref(true)
 const copyMenu = ref<{ x: number; y: number } | null>(null)
 const copyMenuElement = ref<HTMLElement | null>(null)
+const copyMenuURL = ref('')
+const selectedWebURL = ref('')
+const searchOpen = ref(false)
+const searchQuery = ref('')
+const searchCaseSensitive = ref(false)
+const searchResultIndex = ref(-1)
+const searchResultCount = ref(0)
+const quickSelectOpen = ref(false)
+const quickSelectLoading = ref(false)
+const quickSelectRange = ref<'visible' | 'buffer'>('visible')
+const quickSelectTruncated = ref(false)
+const quickSelectCandidates = ref<Array<PositionedQuickSelectCandidate & { left: number; top: number; visible: boolean }>>([])
 const text = (zh: string, en: string) => props.locale === 'zh' ? zh : en
 
 function openCopyMenu(event: MouseEvent) {
   if (!controlled.value || recovering.value) return
+  copyMenuURL.value = ''
+  const selection = terminal?.getSelection().trim() ?? ''
+  try { copyMenuURL.value = validateExternalWebURL(selection).href }
+  catch { /* Only a selected absolute HTTP/HTTPS URL adds the open action. */ }
   copyMenu.value = {
     x: Math.max(0, Math.min(event.clientX, window.innerWidth - 210)),
     y: Math.max(0, Math.min(event.clientY, window.innerHeight - 120)),
@@ -61,11 +87,14 @@ function dismissCopyMenu(event: PointerEvent) {
   if (!copyMenuElement.value?.contains(event.target as Node)) copyMenu.value = null
 }
 
-function runCopyMenu(action: 'copy' | 'paste' | 'mode') {
+function runCopyMenu(action: 'copy' | 'paste' | 'mode' | 'openLink') {
+  const selectedURL = copyMenuURL.value
   copyMenu.value = null
+  copyMenuURL.value = ''
   if (action === 'copy') void copySelection()
   else if (action === 'paste') void pasteClipboard()
-  else void toggleCopyMode()
+  else if (action === 'mode') void toggleCopyMode()
+  else void confirmAndOpenWebLink(selectedURL)
 }
 
 interface OutputEvent {
@@ -76,9 +105,15 @@ interface OutputEvent {
 
 let terminal: Terminal | undefined
 let fitAddon: FitAddon | undefined
+let searchAddon: SearchAddonInstance | undefined
+let offSearchResults: { dispose(): void } | undefined
+let offQuickSelectScroll: { dispose(): void } | undefined
+let quickSelectAbort: AbortController | undefined
+let quickSelectRequest = 0
 let observer: ResizeObserver | undefined
 let offOutput: (() => void) | undefined
 let offInput: { dispose(): void } | undefined
+let offSelection: { dispose(): void } | undefined
 let pending: OutputEvent[] = []
 let replaying = true
 let lastOffset = 0
@@ -97,6 +132,7 @@ function writeEvent(event: OutputEvent) {
   try {
     const bytes = sliceOutput(lastOffset, event.offset, decodeBase64(event.data))
     if (!bytes.length) return
+    if (quickSelectOpen.value) void closeQuickSelect()
     terminal.write(bytes)
     lastOffset = event.offset
   } catch (error) { replayError.value = String(error) }
@@ -111,6 +147,7 @@ function fit() {
     const rows = Math.min(500, size.rows)
     if (terminal.cols !== cols || terminal.rows !== rows) terminal.resize(cols, rows)
     const key = `${cols}:${rows}`
+    if (quickSelectOpen.value && key !== lastSize) void closeQuickSelect()
     if (key !== lastSize && props.session.status === 'running') {
       lastSize = key
       const term = terminal
@@ -129,6 +166,218 @@ function fit() {
 function focus() {
   if (props.active && props.focused && !copyMode.value) terminal?.focus()
 }
+
+function optionsForSearch(incremental: boolean): ISearchOptions {
+  return {
+    caseSensitive: searchCaseSensitive.value,
+    incremental,
+    decorations: {
+      matchBackground: props.colors.selectionBackground,
+      matchBorder: props.colors.foreground,
+      matchOverviewRuler: props.colors.foreground,
+      activeMatchBackground: props.colors.cursor,
+      activeMatchBorder: props.colors.cursor,
+      activeMatchColorOverviewRuler: props.colors.cursor,
+    },
+  }
+}
+
+function searchNext() {
+  if (searchQuery.value && searchAddon) searchAddon.findNext(searchQuery.value, optionsForSearch(false))
+}
+
+async function scanQuickSelect() {
+  const term = terminal
+  if (!term || !quickSelectOpen.value) return
+  quickSelectAbort?.abort()
+  const abort = new AbortController()
+  quickSelectAbort = abort
+  const request = ++quickSelectRequest
+  quickSelectLoading.value = true
+  quickSelectCandidates.value = []
+  quickSelectTruncated.value = false
+  notice.value = ''
+  try {
+    const config = await QuickSelectConfig()
+    if (request !== quickSelectRequest || terminal !== term || abort.signal.aborted) return
+    const { collectQuickSelectText, positionQuickSelectCandidates } = await import('../quickSelect')
+    const snapshot = await collectQuickSelectText(term, quickSelectRange.value, abort.signal)
+    const { scanQuickSelectInWorker } = await import('../quickSelectWorkerClient')
+    const scan = await scanQuickSelectInWorker(snapshot.text, config, abort.signal)
+    if (request !== quickSelectRequest || terminal !== term || abort.signal.aborted) return
+    quickSelectTruncated.value = snapshot.truncated || scan.truncated
+    if (scan.errors.length) notice.value = text('部分自定义规则无效：', 'Some custom rules are invalid: ') + scan.errors[0]
+    await nextTick()
+    const screen = container.value?.querySelector('.xterm-screen') as HTMLElement | null
+    const surface = container.value?.parentElement
+    const screenRect = screen?.getBoundingClientRect()
+    const surfaceRect = surface?.getBoundingClientRect()
+    if (!screenRect || !surfaceRect || term.cols < 1 || term.rows < 1) {
+      quickSelectCandidates.value = []
+      return
+    }
+    const cellWidth = screenRect.width / term.cols
+    const cellHeight = screenRect.height / term.rows
+    quickSelectCandidates.value = positionQuickSelectCandidates(scan, snapshot).map(candidate => {
+      const row = candidate.bufferRow - snapshot.viewportY
+      const visible = row >= 0 && row < term.rows
+      return {
+        ...candidate,
+        left: screenRect.left - surfaceRect.left + candidate.column * cellWidth,
+        top: screenRect.top - surfaceRect.top + row * cellHeight,
+        visible,
+      }
+    })
+    offQuickSelectScroll?.dispose()
+    offQuickSelectScroll = term.onScroll(() => { if (quickSelectOpen.value) void closeQuickSelect() })
+    if (!quickSelectCandidates.value.length && !scan.errors.length) notice.value = text('当前范围没有可选文字。', 'No selectable text in this range.')
+  } catch (error) {
+    if (request !== quickSelectRequest || abort.signal.aborted) return
+    notice.value = String(error).includes('exceeded')
+      ? text('扫描超时；缩小范围或停用较慢的规则。', 'Scan timed out; reduce the range or disable a slow rule.')
+      : text('快速选择失败：', 'Quick Select failed: ') + String(error)
+  } finally {
+    if (request === quickSelectRequest) quickSelectLoading.value = false
+  }
+}
+
+async function openQuickSelect() {
+  if (quickSelectOpen.value || !props.focused || !controlled.value || recovering.value || !terminal) return
+  if (searchOpen.value) await closeSearch()
+  if (copyMode.value) await toggleCopyMode()
+  quickSelectOpen.value = true
+  void scanQuickSelect()
+}
+
+function toggleQuickSelect() {
+  if (quickSelectOpen.value) void closeQuickSelect()
+  else void openQuickSelect()
+}
+
+async function closeQuickSelect() {
+  quickSelectRequest++
+  quickSelectAbort?.abort()
+  quickSelectAbort = undefined
+  offQuickSelectScroll?.dispose()
+  offQuickSelectScroll = undefined
+  quickSelectOpen.value = false
+  quickSelectLoading.value = false
+  quickSelectCandidates.value = []
+  await nextTick()
+  focus()
+}
+
+async function selectQuickCandidate(candidate: PositionedQuickSelectCandidate) {
+  try {
+    await writeClipboard(candidate.text)
+    notice.value = text('已复制：', 'Copied: ') + candidate.text
+    await closeQuickSelect()
+  } catch (error) {
+    notice.value = text('复制失败，请重试：', 'Copy failed; retry: ') + String(error)
+  }
+}
+
+function searchPrevious() {
+  if (searchQuery.value && searchAddon) searchAddon.findPrevious(searchQuery.value, optionsForSearch(false))
+}
+
+async function confirmAndOpenWebLink(value: string) {
+  let url: URL
+  try { url = validateExternalWebURL(value) }
+  catch (error) {
+    notice.value = text('链接未打开：', 'Link not opened: ') + String(error)
+    return
+  }
+  const destination = `${text('主机', 'Host')}: ${url.hostname}\n\n${url.href}`
+  if (!window.confirm(text(`将用系统浏览器打开此地址？\n\n${destination}`, `Open this address in the system browser?\n\n${destination}`))) return
+  try {
+    await Browser.OpenURL(url.href)
+    notice.value = text('已交给系统浏览器。', 'Opened in the system browser.')
+  } catch (error) {
+    notice.value = text('无法打开链接：', 'Could not open link: ') + String(error)
+  }
+}
+
+async function openTerminalLink(event: MouseEvent, value: string) {
+  if (isMac ? !event.metaKey : !event.ctrlKey) return
+  event.preventDefault()
+  await confirmAndOpenWebLink(value)
+}
+
+function updateSelectedWebURL() {
+  selectedWebURL.value = ''
+  const selected = terminal?.getSelection().trim() ?? ''
+  try { selectedWebURL.value = validateExternalWebURL(selected).href }
+  catch { /* Only a selected absolute HTTP/HTTPS URL enables the action. */ }
+}
+
+function openSelectedWebLink() {
+  const value = selectedWebURL.value
+  if (value) void confirmAndOpenWebLink(value)
+}
+
+function onPanelPaste(event: ClipboardEvent) {
+  if ((event.target as HTMLElement).closest('.terminal-search, .quick-select-layer')) return
+  if (!props.focused || !props.connected || props.session.streamClosed || props.session.status !== 'running' || copyMode.value || recovering.value || replayError.value) {
+    event.preventDefault()
+    event.stopPropagation()
+  }
+}
+
+async function openSearch() {
+  if (searchOpen.value) return
+  if (quickSelectOpen.value) await closeQuickSelect()
+  if (copyMode.value) void toggleCopyMode()
+  searchOpen.value = true
+  const term = terminal
+  if (!term || searchAddon) return
+  try {
+    const { SearchAddon } = await import('@xterm/addon-search')
+    if (terminal !== term || !searchOpen.value) return
+    const addon = new SearchAddon({ highlightLimit: 1000 })
+    term.loadAddon(addon)
+    searchAddon = addon
+    offSearchResults = addon.onDidChangeResults(({ resultIndex, resultCount }) => {
+      searchResultIndex.value = resultIndex
+      searchResultCount.value = resultCount
+    })
+    if (searchQuery.value) addon.findNext(searchQuery.value, optionsForSearch(true))
+  } catch (error) {
+    if (terminal !== term) return
+    searchOpen.value = false
+    notice.value = text('无法加载搜索：', 'Could not load search: ') + String(error)
+    await nextTick()
+    focus()
+  }
+}
+
+function toggleSearch() {
+  if (searchOpen.value) void closeSearch()
+  else void openSearch()
+}
+
+async function closeSearch() {
+  searchOpen.value = false
+  searchQuery.value = ''
+  searchResultIndex.value = -1
+  searchResultCount.value = 0
+  searchAddon?.clearDecorations()
+  await nextTick()
+  focus()
+}
+
+watch(quickSelectRange, () => { if (quickSelectOpen.value) void scanQuickSelect() })
+
+watch([searchQuery, searchCaseSensitive], ([query]) => {
+  if (!searchOpen.value || !searchAddon) return
+  if (!query) {
+    searchAddon.clearDecorations()
+    searchResultIndex.value = -1
+    searchResultCount.value = 0
+    return
+  }
+  searchAddon.findNext(query, optionsForSearch(true))
+})
 
 async function acquireControl() {
   const term = terminal
@@ -224,6 +473,8 @@ async function pasteClipboard() {
 }
 
 async function toggleCopyMode() {
+  if (!copyMode.value && searchOpen.value) await closeSearch()
+  if (!copyMode.value && quickSelectOpen.value) await closeQuickSelect()
   copyMode.value = !copyMode.value
   notice.value = ''
   if (copyMode.value && terminal) {
@@ -292,6 +543,8 @@ function onTerminalKeydown(event: KeyboardEvent) {
     if (binding === 'copySelection') void copySelection()
     else if (binding === 'pasteClipboard') void pasteClipboard()
     else if (binding === 'toggleCopyMode') void toggleCopyMode()
+    else if (binding === 'terminalSearch') toggleSearch()
+    else if (binding === 'quickSelect') toggleQuickSelect()
     return
   }
   if (copyMode.value) return
@@ -330,6 +583,9 @@ watch(() => props.fontSize, async (size) => {
 })
 function updateColors() {
   if (terminal && container.value) terminal.options.theme = terminalColors(container.value, props.colors)
+  if (searchOpen.value && searchQuery.value && searchAddon) {
+    searchAddon.findNext(searchQuery.value, optionsForSearch(true))
+  }
 }
 watch([() => props.colors, () => props.themeRevision], updateColors, { deep: true })
 
@@ -365,6 +621,18 @@ watch(() => props.padding, async () => {
   fit()
 })
 
+watch(() => props.toolsEnabled, enabled => {
+  if (enabled) return
+  if (searchOpen.value) void closeSearch()
+  if (quickSelectOpen.value) void closeQuickSelect()
+  if (copyMode.value) void toggleCopyMode()
+})
+watch(() => props.toolRequest, request => {
+  if (!request || !props.focused || !props.toolsEnabled) return
+  if (request.action === 'search') void openSearch()
+  else void openQuickSelect()
+})
+
 watch(() => props.active, async (active) => {
   if (active) {
     await nextTick()
@@ -385,7 +653,7 @@ watch(() => props.focused, async (focused) => {
 onMounted(async () => {
   document.addEventListener('pointerdown', dismissCopyMenu)
   if (!container.value) return
-  const term = new Terminal({
+  const term = new Terminal(withTerminalSearchSupport({
     cursorBlink: props.cursorBlink,
     cursorStyle: props.cursorStyle,
     fontFamily: fonts[props.fontFamily].family,
@@ -397,13 +665,21 @@ onMounted(async () => {
     macOptionClickForcesSelection: true,
     convertEol: false,
     theme: props.colors,
-  })
+  }))
   const fitPlugin = new FitAddon()
   term.loadAddon(fitPlugin)
   term.open(container.value)
   terminal = term
   updateColors()
   fitAddon = fitPlugin
+  offSelection = term.onSelectionChange(updateSelectedWebURL)
+  void import('@xterm/addon-web-links').then(({ WebLinksAddon }) => {
+    if (terminal === term) term.loadAddon(new WebLinksAddon(openTerminalLink, {
+      urlRegex: /https?:\/\/[^\s"'!*(){}|\\^<>`]+[^\s"':,.!?{}|\\^~\[\]`()<>]/giu,
+    }))
+  }).catch(error => {
+    if (terminal === term) notice.value = text('链接识别不可用：', 'Link detection unavailable: ') + String(error)
+  })
   term.attachCustomKeyEventHandler((event) => {
     const writable = props.active && props.focused && props.connected && !props.session.streamClosed && props.session.status === 'running' && controlled.value &&
       !copyMode.value && !recovering.value && !replayError.value
@@ -448,6 +724,13 @@ onBeforeUnmount(() => {
   void updateAttachment(props.session.id, false).catch((error: unknown) => emit('error', String(error)))
   observer?.disconnect()
   offOutput?.()
+  offSelection?.dispose()
+  quickSelectRequest++
+  quickSelectAbort?.abort()
+  offQuickSelectScroll?.dispose()
+  offSearchResults?.dispose()
+  searchAddon?.clearDecorations()
+  searchAddon = undefined
   offInput?.dispose()
   terminal?.dispose()
   terminal = undefined
@@ -459,15 +742,23 @@ onBeforeUnmount(() => {
     class="terminal-panel"
     :class="{ hidden: !active }"
     @keydown.capture="onTerminalKeydown"
-    @paste.capture="(event) => { if (!focused || !connected || session.streamClosed || session.status !== 'running' || copyMode || recovering || replayError) { event.preventDefault(); event.stopPropagation() } }"
+    @paste.capture="onPanelPaste"
   >
     <div class="terminal-actions">
       <button type="button" :disabled="!controlled || recovering" @click="copySelection">{{ text('复制选区', 'Copy') }}</button>
       <button type="button" :disabled="!connected || session.streamClosed || recovering || !!replayError || !controlled || copyMode || session.status !== 'running'" @click="pasteClipboard">{{ text('粘贴', 'Paste') }}</button>
       <button type="button" :disabled="!controlled || recovering" :aria-pressed="copyMode" @click="toggleCopyMode">{{ copyMode ? text('退出复制模式', 'Exit copy mode') : text('复制模式', 'Copy mode') }}</button>
       <button type="button" :disabled="!connected || recovering" @click="reconnectView">{{ text('重新回放', 'Replay') }}</button>
+      <button type="button" :disabled="!focused" :aria-pressed="searchOpen" @click="toggleSearch">{{ text('搜索', 'Search') }}</button>
+      <button type="button" :disabled="!focused || !controlled || recovering" :aria-pressed="quickSelectOpen" @click="toggleQuickSelect">{{ text('快速选择', 'Quick Select') }}</button>
+      <button v-if="selectedWebURL" type="button" @click="openSelectedWebLink">{{ text('打开所选链接…', 'Open selected link…') }}</button>
       <small>{{ text('可尝试 Shift 拖选（macOS Option）；无效时使用复制模式。', 'Try Shift-drag (Option on macOS); use Copy mode if unavailable.') }}</small>
     </div>
+    <TerminalSearch v-if="searchOpen" :locale="locale" :query="searchQuery" :case-sensitive="searchCaseSensitive"
+      :result-index="searchResultIndex" :result-count="searchResultCount"
+      @update:query="searchQuery = $event" @update:case-sensitive="searchCaseSensitive = $event"
+      @next="searchNext" @previous="searchPrevious" @close="closeSearch" />
+    <div v-if="quickSelectLoading" class="copy-notice" role="status">{{ text('正在扫描当前缓冲…', 'Scanning terminal text…') }}</div>
     <div v-if="notice" class="copy-notice" role="status">{{ notice }}</div>
     <div v-if="replayError" class="copy-notice" role="alert">{{ text('画面输出不完整，已暂停输入；请重新回放：', 'Output incomplete; input paused. Replay to recover: ') }}{{ replayError }}</div>
     <div v-else-if="replayTruncated" class="copy-notice" role="status">{{ text('仅回放最近 256 KiB 输出，全屏画面可能不完整。', 'Only the last 256 KiB of output was replayed; full-screen content may be incomplete.') }}</div>
@@ -483,12 +774,16 @@ onBeforeUnmount(() => {
         <textarea ref="copyEditor" :value="copyText" readonly spellcheck="false" :aria-label="text('复制模式文字', 'Copy mode text')" @mousedown.right.prevent @keydown="onCopyEditorKey" />
       </div>
       <div ref="container" class="xterm-host" :style="{ padding: props.padding + 'px', visibility: controlled ? 'visible' : 'hidden' }" @click="focus" />
+      <QuickSelectOverlay v-if="quickSelectOpen" :locale="locale" :candidates="quickSelectCandidates"
+        :truncated="quickSelectTruncated" :range="quickSelectRange"
+        @update:range="quickSelectRange = $event" @selected="selectQuickCandidate" @close="closeQuickSelect" />
     </div>
     <Teleport to=".layout">
       <div v-if="copyMenu" ref="copyMenuElement" class="terminal-copy-menu" role="group" :aria-label="text('终端复制操作', 'Terminal copy actions')"
         :style="{ left: copyMenu.x + 'px', top: copyMenu.y + 'px' }" @pointerdown.prevent @keydown.esc.prevent.stop="copyMenu = null">
         <button type="button" @click="runCopyMenu('copy')">{{ text('复制选区', 'Copy selection') }}</button>
         <button type="button" :disabled="!connected || session.streamClosed || !!replayError || copyMode || session.status !== 'running'" @click="runCopyMenu('paste')">{{ text('粘贴', 'Paste') }}</button>
+        <button v-if="copyMenuURL" type="button" @click="runCopyMenu('openLink')">{{ text('打开所选链接…', 'Open selected link…') }}</button>
         <button type="button" @click="runCopyMenu('mode')">{{ copyMode ? text('退出复制模式', 'Exit copy mode') : text('进入复制模式', 'Enter copy mode') }}</button>
       </div>
     </Teleport>

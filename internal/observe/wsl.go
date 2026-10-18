@@ -71,6 +71,15 @@ func parseWSLProcessList(data []byte, distro string) ([]Process, bool, error) {
 	return result, truncated, nil
 }
 
+func wslNamespace(data []byte, distro string) string {
+	line, _, _ := bytes.Cut(data, []byte("\n"))
+	fields := strings.Split(strings.TrimSuffix(string(line), "\r"), "\t")
+	if len(fields) != 5 || fields[0] != "H" || !validBootID(strings.ToLower(fields[3])) {
+		return ""
+	}
+	return "wsl:" + distro + ":" + strings.ToLower(fields[3])
+}
+
 func validBootID(s string) bool {
 	if len(s) != 36 {
 		return false

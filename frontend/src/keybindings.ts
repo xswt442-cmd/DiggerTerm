@@ -7,6 +7,9 @@ export type ActionId =
   | 'focusNextPane'
   | 'closePane'
   | 'openSettings'
+  | 'terminalSearch'
+  | 'quickSelect'
+  | 'openCommandPalette'
 
 export type KeybindingScope = 'terminal' | 'workspace'
 
@@ -33,6 +36,9 @@ const actionList: ActionDefinition[] = [
   { id: 'focusNextPane', labelZh: '聚焦下一个 Pane', labelEn: 'Focus next pane', scope: 'workspace', defaultKeys: { other: ['Ctrl+Shift+F6'], mac: ['Ctrl+Shift+F6'] } },
   { id: 'closePane', labelZh: '关闭 Pane', labelEn: 'Close pane', scope: 'workspace', defaultKeys: { other: ['Ctrl+Shift+F4'], mac: ['Ctrl+Shift+F4'] } },
   { id: 'openSettings', labelZh: '打开设置', labelEn: 'Open settings', scope: 'workspace', defaultKeys: { other: ['Ctrl+Shift+Comma'], mac: ['Ctrl+Shift+Comma'] } },
+  { id: 'terminalSearch', labelZh: '搜索当前终端', labelEn: 'Search terminal', scope: 'terminal', defaultKeys: { other: ['Ctrl+Shift+F'], mac: ['Ctrl+Shift+F'] } },
+  { id: 'quickSelect', labelZh: '快速选择文字', labelEn: 'Quick select text', scope: 'terminal', defaultKeys: { other: ['Ctrl+Shift+X'], mac: ['Ctrl+Shift+X'] } },
+  { id: 'openCommandPalette', labelZh: '打开命令面板', labelEn: 'Open command palette', scope: 'workspace', defaultKeys: { other: ['Ctrl+Shift+P'], mac: ['Ctrl+Shift+P'] } },
 ]
 
 export const actionDefinitions: ReadonlyArray<ActionDefinition> = actionList
@@ -111,6 +117,20 @@ export function defaultBindings(isMac: boolean): Binding[] {
   }))
 }
 
+export function mergeBindings(overrides: Binding[], isMac: boolean): Binding[] {
+  const effective = defaultBindings(isMac)
+  for (const binding of overrides) {
+    const index = effective.findIndex(item => item.action === binding.action)
+    if (index >= 0) effective[index] = binding
+  }
+  const explicitChords = new Set(overrides.flatMap(binding => binding.keys))
+  for (const binding of effective) {
+    if (['terminalSearch', 'quickSelect', 'openCommandPalette'].includes(binding.action) && !overrides.some(item => item.action === binding.action) &&
+        binding.keys.some(key => explicitChords.has(key))) binding.keys = []
+  }
+  return effective
+}
+
 export function parseBindings(text: string, isMac: boolean): Binding[] {
   let document: unknown
   try { document = JSON.parse(text) } catch (error) {
@@ -145,10 +165,9 @@ export function parseBindings(text: string, isMac: boolean): Binding[] {
     parsed.push({ action, scope: definition.scope, keys })
   }
 
-  const effective = new Map(defaultBindings(isMac).map((binding) => [binding.action, binding]))
-  for (const binding of parsed) effective.set(binding.action, binding)
+  const effective = mergeBindings(parsed, isMac)
   const effectiveChords = new Set<string>()
-  for (const binding of effective.values()) for (const key of binding.keys) {
+  for (const binding of effective) for (const key of binding.keys) {
     if (effectiveChords.has(key)) throw new Error(`effective shortcut ${key} conflicts across actions`)
     effectiveChords.add(key)
   }

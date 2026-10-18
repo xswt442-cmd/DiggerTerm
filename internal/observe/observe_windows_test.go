@@ -36,6 +36,16 @@ func TestWindowsExternalProcessReadOnly(t *testing.T) {
 		if snapshot.ScannedAt == "" {
 			t.Fatal("missing scan time")
 		}
+		var windowsSource *SourceStatus
+		for index := range snapshot.Sources {
+			if snapshot.Sources[index].Source == "windows" {
+				windowsSource = &snapshot.Sources[index]
+				break
+			}
+		}
+		if windowsSource == nil || windowsSource.State != "success" || windowsSource.Namespace == "" || windowsSource.Policy == "" {
+			t.Fatalf("missing Windows scan contract: %+v", snapshot.Sources)
+		}
 		var found bool
 		for _, row := range snapshot.Processes {
 			if row.PID != cmd.Process.Pid {
