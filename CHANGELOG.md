@@ -106,6 +106,7 @@ This file records shipped desktop features, fixes, platform support, and compati
 - 支持 Windows PowerShell、CMD 和默认 WSL 的 PTY/ConPTY 交互、切换、调整大小与显式终止。
 - 独立 Session Daemon、当前用户专属本地 IPC、GUI 退出后重新连接，以及托盘隐藏功能。
 - Daemon 有活跃会话时拒绝停止；Daemon 或操作系统终止后不保证恢复会话，原始输出回放无法完整恢复屏幕状态。
+- Windows 启动需 Microsoft Edge WebView2 Runtime；WSL 会话需要已安装并初始化的 WSL 发行版。
 
 ### English
 
@@ -115,6 +116,7 @@ Initial public preview with a Windows x64 portable build.
 - Supported PowerShell, CMD, and default WSL PTY/ConPTY interaction, switching, resizing, and explicit termination.
 - Added a separate Session Daemon, user-private local IPC, GUI reconnection, and system tray hiding.
 - Daemon refuses to stop while managed sessions remain active. Sessions do not survive daemon or OS termination, and raw replay is not a full screen snapshot.
+- Windows requires Microsoft Edge WebView2 Runtime; WSL sessions require an installed and initialized WSL distribution.
 
 [Unreleased]: https://github.com/xswt442-cmd/DiggerTerm/compare/v0.0.6...dev
 [0.0.6]: https://github.com/xswt442-cmd/DiggerTerm/compare/v0.0.5...v0.0.6

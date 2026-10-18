@@ -31,7 +31,7 @@ jobs:
           sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
             libgtk-4-dev libwebkitgtk-6.0-dev libayatana-appindicator3-dev pkg-config gcc nano
       - name: Check bilingual release generation
-        run: node --test scripts/release-notes.test.mjs
+        run: node --test scripts/release-notes.test.mjs scripts/release-downloads.test.mjs
       - name: Install frontend dependencies
         run: npm --prefix frontend ci
       - name: Run all frontend tests
@@ -59,7 +59,7 @@ jobs:
           cache: npm
           cache-dependency-path: frontend/package-lock.json
       - name: Check bilingual release generation
-        run: node --test scripts/release-notes.test.mjs
+        run: node --test scripts/release-notes.test.mjs scripts/release-downloads.test.mjs
       - name: Install frontend dependencies
         run: npm --prefix frontend ci
       - name: Test frontend preferences, themes, shortcuts and layouts

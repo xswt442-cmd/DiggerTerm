@@ -205,6 +205,8 @@ jobs:
           node scripts/verify-release.mjs "$RELEASE_VERSION"
           node scripts/release-notes.mjs --changelog CHANGELOG.md --tag "$RELEASE_VERSION" \
             --manifest frontend/package.json > "$RUNNER_TEMP/release-notes.md"
+          node scripts/release-downloads.mjs --tag "$RELEASE_VERSION" \
+            --repo "$GITHUB_REPOSITORY" --dir dist >> "$RUNNER_TEMP/release-notes.md"
           if gh release view "$RELEASE_VERSION" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
             echo 'Refusing to replace an existing published release' >&2
             exit 1
