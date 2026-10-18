@@ -8,6 +8,12 @@ This file records shipped desktop features, fixes, platform support, and compati
 
 ### 简体中文
 
+### English
+
+## [0.0.6] - 2026-10-18
+
+### 简体中文
+
 - 新增终端缓冲区搜索、键盘快速选择和命令面板，支持在工作区内定位并执行可用操作。
 - 新增 Dig 进程观察的变化提示与关注状态，保持不同 Windows/WSL 来源及进程身份的边界。
 - 新增会话输出活动提示，改善终端搜索、选区操作和外部链接处理。
@@ -110,7 +116,8 @@ Initial public preview with a Windows x64 portable build.
 - Added a separate Session Daemon, user-private local IPC, GUI reconnection, and system tray hiding.
 - Daemon refuses to stop while managed sessions remain active. Sessions do not survive daemon or OS termination, and raw replay is not a full screen snapshot.
 
-[Unreleased]: https://github.com/xswt442-cmd/DiggerTerm/compare/v0.0.5...dev
+[Unreleased]: https://github.com/xswt442-cmd/DiggerTerm/compare/v0.0.6...dev
+[0.0.6]: https://github.com/xswt442-cmd/DiggerTerm/compare/v0.0.5...v0.0.6
 [0.0.5]: https://github.com/xswt442-cmd/DiggerTerm/compare/v0.0.4...v0.0.5
 [0.0.4]: https://github.com/xswt442-cmd/DiggerTerm/compare/v0.0.3...v0.0.4
 [0.0.3]: https://github.com/xswt442-cmd/DiggerTerm/compare/v0.0.2...v0.0.3
