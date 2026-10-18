@@ -65,7 +65,7 @@ async function choose(command: PaletteCommand) {
 </script>
 
 <template>
-  <Teleport to="body">
+  <Teleport to=".layout[data-dt-theme]">
     <div class="command-palette-backdrop" @pointerdown.self="emit('close')">
       <section class="command-palette" role="dialog" aria-modal="true"
         :aria-label="text('命令面板', 'Command palette')" @keydown="handleKeydown">

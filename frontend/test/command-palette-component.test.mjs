@@ -46,11 +46,15 @@ function mount() {
     },
   })
   const body = node('body')
+  const layout = node('main')
+  layout.props['data-dt-theme'] = 'nightfall'
+  layout.parent = body
+  body.children.push(layout)
   const renderer = createRenderer({
     createElement: type => node(type),
     createText: text => node('#text', text),
     createComment: text => node('#comment', text),
-    querySelector: selector => selector === 'body' ? body : null,
+    querySelector: selector => selector === 'body' ? body : selector === '.layout[data-dt-theme]' ? layout : null,
     setText: (target, text) => { target.text = text },
     setElementText: (target, text) => { target.children = []; target.text = text },
     patchProp: (target, key, _previous, value) => { target.props[key] = value },
@@ -101,7 +105,7 @@ function mount() {
     }
     return visit(body)
   }
-  return { app, events, find, focused: () => focused }
+  return { app, body, layout, events, find, focused: () => focused }
 }
 
 test('focuses the palette, skips disabled actions, executes the selected ID, and closes with Escape', async () => {
@@ -117,4 +121,14 @@ test('focuses the palette, skips disabled actions, executes the selected ID, and
     dialog.props.onKeydown({ key: 'Escape', isComposing: false, preventDefault() {}, stopPropagation() {} })
     assert.deepEqual(view.events, ['second', 'close'])
     view.app.unmount()
+})
+
+test('teleports the palette into the active themed layout', async () => {
+  const view = mount()
+  await nextTick()
+  const backdrop = view.find(node => node.props.class === 'command-palette-backdrop')
+  assert.ok(backdrop)
+  assert.equal(backdrop.parent, view.layout)
+  assert.equal(view.layout.props['data-dt-theme'], 'nightfall')
+  view.app.unmount()
 })

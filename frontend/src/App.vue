@@ -232,7 +232,7 @@ const dig = useDig({
 const {
   snapshot: externalSnapshot, error: externalError, loading: refreshingExternal,
   watchSupported, watchStatus, watchSources, watchChanges, filteredWatchChanges,
-  watchedProcesses, watchedCount, watchFilter, toggleWatched, isWatched, followedState, clearWatchChanges, pruneWatchChanges,
+  watchedProcesses, watchedCount, watchFilter, toggleWatched, isWatched, followedState, clearWatchChanges, pruneWatchState,
   processes: observedProcesses, distributions: observedDistributions,
   sourceFilter: observedSourceFilter, kindFilter: observedKindFilter,
   distributionFilter: observedDistroFilter, filteredGroups: filteredObservedGroups,
@@ -374,15 +374,7 @@ const selectObserved = dig.selectProcess
 const refreshObserved = dig.refresh
 const digWatchOpen = ref(false)
 const digWatchMessage = ref('')
-let digWatchPruneTimer: ReturnType<typeof setInterval> | undefined
-watch(digWatchOpen, open => {
-  if (digWatchPruneTimer) clearInterval(digWatchPruneTimer)
-  digWatchPruneTimer = undefined
-  if (open) {
-    pruneWatchChanges()
-    digWatchPruneTimer = setInterval(pruneWatchChanges, 60_000)
-  }
-})
+const digWatchPruneTimer = setInterval(pruneWatchState, 60_000)
 
 function toggleProcessWatch(process: Process) {
   const added = toggleWatched(process.key)

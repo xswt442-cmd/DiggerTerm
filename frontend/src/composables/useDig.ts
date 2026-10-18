@@ -184,7 +184,7 @@ export function useDig(options: UseDigOptions) {
   function isWatched(key: string) { return watchState.isWatched(key) }
   function followedState(key: string) { return watchState.followedState(key) }
   function clearWatchChanges() { watchState.clearChanges() }
-  function pruneWatchChanges() { watchState.pruneExpired() }
+  function pruneWatchState() { watchState.pruneExpired() }
 
   watch([() => options.connectionRevision?.value, () => options.observeEnabled.value], (next, previous) => {
     const connectionChanged = next[0] !== previous[0]
@@ -211,7 +211,7 @@ export function useDig(options: UseDigOptions) {
     sourceFilter, kindFilter, distributionFilter, filteredGroups,
     expansionPreferences, setExpanded,
     watchSupported, watchStatus, watchSources, watchChanges, filteredWatchChanges,
-    watchedProcesses, watchedCount, watchFilter, toggleWatched, isWatched, followedState, clearWatchChanges, pruneWatchChanges,
+    watchedProcesses, watchedCount, watchFilter, toggleWatched, isWatched, followedState, clearWatchChanges, pruneWatchState,
     activeProcess, activePath, activeNode, classificationLabel,
     refresh, selectProcess, clearSelection,
   }

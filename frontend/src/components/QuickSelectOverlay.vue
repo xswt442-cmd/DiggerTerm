@@ -25,12 +25,12 @@ watch(() => props.candidates, () => {
 function handleKeydown(event: KeyboardEvent) {
   event.stopPropagation()
   if (event.isComposing || event.key === 'Process' || event.key === 'Dead') return
-  if ((event.target as HTMLElement).closest('button,select')) return
   if (event.key === 'Escape') {
     event.preventDefault()
     emit('close')
     return
   }
+  if ((event.target as HTMLElement).closest('button,select')) return
   if (event.ctrlKey || event.metaKey || event.altKey || !/^[a-z]$/i.test(event.key)) return
   event.preventDefault()
   const next = typed.value + event.key.toLowerCase()

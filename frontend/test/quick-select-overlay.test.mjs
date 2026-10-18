@@ -110,6 +110,27 @@ try {
     assert.deepEqual(view.events.at(-1), ['range', 'buffer'])
     view.app.unmount()
   })
+
+  test('Escape closes Quick Select when a candidate or range control has focus', async () => {
+    const view = mount([candidate('a', '/home/sam/a', false)])
+    await nextTick()
+    const host = view.find(item => item.props.role === 'group')
+    for (const tag of ['button', 'select']) {
+      let prevented = false
+      host.props.onKeydown({
+        key: 'Escape', isComposing: false,
+        target: { closest: selector => selector.split(',').includes(tag) ? {} : null },
+        preventDefault() { prevented = true }, stopPropagation() {},
+      })
+      assert.equal(prevented, true)
+    }
+    host.props.onKeydown({
+      key: 'Escape', isComposing: true, target: { closest: () => ({}) },
+      preventDefault() { assert.fail('composing Escape must stay with the IME') }, stopPropagation() {},
+    })
+    assert.deepEqual(view.events, [['close'], ['close']])
+    view.app.unmount()
+  })
 } finally {
   await rm(tempRoot, { recursive: true, force: true })
 }

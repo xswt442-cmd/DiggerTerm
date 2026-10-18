@@ -20,6 +20,7 @@ interface TrustedSource {
   policy: string
   processes: Map<string, Process>
   status: SourceStatus
+  lastTrustedAt: number
 }
 
 export interface WatchSnapshot {
@@ -31,7 +32,9 @@ export interface WatchSnapshot {
 
 const maxChanges = 500
 const maxWatched = 100
+const maxTrustedSources = 32
 const changeLifetimeMs = 30 * 60 * 1000
+const trustedSourceLifetimeMs = 30 * 60 * 1000
 
 function sourceKey(source: string, distribution: string): string {
   return source === 'wsl' ? `wsl:${distribution}` : source
@@ -49,7 +52,7 @@ export class DigWatchState {
   constructor(private readonly changed: () => void = () => {}) {}
 
   update(snapshot: WatchSnapshot, now = Date.now()) {
-    this.expire(now)
+    this.expire(now, false)
     const statuses = snapshot.sources
     if (!statuses?.length) {
       this.currentStatuses = []
@@ -107,7 +110,7 @@ export class DigWatchState {
         }
       }
       for (const [processKey, process] of current) if (this.watched.has(processKey)) this.watched.set(processKey, process)
-      this.trusted.set(key, { namespace: status.namespace, policy: status.policy, processes: current, status })
+      this.trusted.set(key, { namespace: status.namespace, policy: status.policy, processes: current, status, lastTrustedAt: now })
       views.set(key, { ...status, stale: false })
     }
 
@@ -127,6 +130,7 @@ export class DigWatchState {
     for (const [key, status] of byStatus) {
       if (status.state === 'skipped' && !views.has(key)) views.set(key, { ...status, stale: true })
     }
+    this.trimTrustedSources(views)
     this.currentStatuses = [...views.values()]
     this.changed()
   }
@@ -216,16 +220,48 @@ export class DigWatchState {
     }
   }
 
+  private trimTrustedSources(views: Map<string, WatchSource>) {
+    while (this.trusted.size > maxTrustedSources) {
+      let oldestKey = ''
+      let oldestAt = Infinity
+      for (const [key, source] of this.trusted) {
+        if (source.lastTrustedAt < oldestAt) {
+          oldestKey = key
+          oldestAt = source.lastTrustedAt
+        }
+      }
+      if (!oldestKey) return
+      this.trusted.delete(oldestKey)
+      this.baselinePending.delete(oldestKey)
+      views.delete(oldestKey)
+    }
+  }
+
   private record(kind: WatchChangeKind, source: string, process: Process, at: number) {
     this.changes.unshift({ id: ++this.nextID, kind, key: process.key, process, sourceKey: source, at })
     if (this.changes.length > maxChanges) this.changes.length = maxChanges
   }
 
-  private expire(now: number) {
+  private expire(now: number, notify = true) {
+    let didChange = false
+    const expiredSources = new Set<string>()
+    for (const [key, source] of this.trusted) {
+      if (now - source.lastTrustedAt < trustedSourceLifetimeMs) continue
+      this.trusted.delete(key)
+      this.baselinePending.delete(key)
+      expiredSources.add(key)
+    }
+    if (expiredSources.size) {
+      this.currentStatuses = this.currentStatuses.filter(source =>
+        (source.source === 'wsl' && !source.distribution) ||
+        !expiredSources.has(sourceKey(source.source, source.distribution)))
+      didChange = true
+    }
     const retained = this.changes.filter(change => change.at + changeLifetimeMs > now)
     if (retained.length !== this.changes.length) {
       this.changes = retained
-      this.changed()
+      didChange = true
     }
+    if (didChange && notify) this.changed()
   }
 }

@@ -15,7 +15,7 @@ import { terminalColors } from '../userThemes'
 import { matchBinding, type Binding } from '../keybindings'
 import { queueSessionOperation, updateAttachment } from '../terminalAttachment'
 import { sliceOutput } from '../terminalReplay'
-import { validateExternalWebURL } from '../externalLinks'
+import { createExplicitWebLinkActivator, validateExternalWebURL } from '../externalLinks'
 import { withTerminalSearchSupport } from '../terminalSearch'
 import type { PositionedQuickSelectCandidate } from '../quickSelect'
 import TerminalSearch from './TerminalSearch.vue'
@@ -298,12 +298,6 @@ async function confirmAndOpenWebLink(value: string) {
   }
 }
 
-async function openTerminalLink(event: MouseEvent, value: string) {
-  if (isMac ? !event.metaKey : !event.ctrlKey) return
-  event.preventDefault()
-  await confirmAndOpenWebLink(value)
-}
-
 function updateSelectedWebURL() {
   selectedWebURL.value = ''
   const selected = terminal?.getSelection().trim() ?? ''
@@ -525,6 +519,8 @@ async function readClipboard(): Promise<string> {
 const isMac = typeof navigator !== 'undefined' &&
   /Mac/i.test(navigator.userAgent)
 
+const openTerminalLink = createExplicitWebLinkActivator(isMac, value => { void confirmAndOpenWebLink(value) })
+
 function onTerminalKeydown(event: KeyboardEvent) {
   // Do not steal shortcuts from the sidebar, search or settings. The
   // listener is attached only to the active terminal's DOM subtree.
@@ -663,6 +659,7 @@ onMounted(async () => {
     scrollSensitivity: props.scrollSensitivity,
     rightClickSelectsWord: props.rightClickSelectsWord,
     macOptionClickForcesSelection: true,
+    linkHandler: { activate: openTerminalLink },
     convertEol: false,
     theme: props.colors,
   }))

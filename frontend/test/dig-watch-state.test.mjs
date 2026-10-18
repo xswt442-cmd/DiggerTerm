@@ -128,3 +128,24 @@ test('bounds the in-memory change record count', () => {
   }
   assert.equal(watch.changesList().length, 500)
 })
+
+test('expires stale source snapshots and caps retained sources without losing followed identities', () => {
+  const watch = new DigWatchState()
+  for (let index = 0; index < 40; index++) {
+    const distribution = `Distro-${index}`
+    const source = status('wsl', { distribution, namespace: `wsl:${distribution}:boot` })
+    const item = process(`p${index}`, 'wsl', distribution)
+    watch.update(snapshot([item], [source]), index)
+    if (index === 39) assert.equal(watch.toggleWatch(item.key), true)
+  }
+  assert.equal(watch.trustedProcesses().length, 32)
+  assert.equal(watch.sources().filter(source => source.distribution).length, 32)
+  assert.equal(watch.watchedProcesses().length, 1)
+
+  watch.pruneExpired(100 * 60 * 60 * 1000)
+  assert.equal(watch.trustedProcesses().length, 0)
+  assert.equal(watch.sources().filter(source => source.distribution).length, 0)
+  assert.equal(watch.watchedProcesses()[0].key, 'p39')
+  assert.equal(watch.followedState('p39'), 'unknown')
+  assert.equal(watch.changesList().some(change => change.kind === 'not-seen'), false)
+})
