@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url';
 const VERSION_TAG = /^v(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/;
 const REPOSITORY = /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/;
 
-export function releaseDownloadSection(tag, repository, assetNames) {
+export function releaseDownloadSections(tag, repository, assetNames) {
   const match = VERSION_TAG.exec(tag);
   if (!match) throw new Error('tag must use vX.Y.Z');
   if (!REPOSITORY.test(repository)) throw new Error('repository must be owner/name');
@@ -29,18 +29,27 @@ export function releaseDownloadSection(tag, repository, assetNames) {
     throw new Error('release assets do not match the expected packages and checksum for ' + tag);
   }
   const url = (name) => `https://github.com/${repository}/releases/download/${tag}/${name}`;
-  const table = [
-    '## 下载 / Downloads',
+  const chinese = [
+    '### 下载',
     '',
-    '| 平台 / Platform | 格式 / Package | 下载 / Download |',
+    '| 平台 | 格式 | 下载 |',
     '| --- | --- | --- |',
-    ...rows.map(([platform, format, filename]) => `| ${platform} | ${format} | [下载 / Download](${url(filename)}) |`),
-    `| 校验 / Checksums | SHA-256 | [${checksum}](${url(checksum)}) |`,
+    ...rows.map(([platform, format, filename]) => `| ${platform} | ${format} | [下载](${url(filename)}) |`),
+    `| 校验文件 | SHA-256 | [${checksum}](${url(checksum)}) |`,
     '',
-    '**数字签名 / Signatures:** Windows 发行包未进行代码签名；本版没有随附发行者数字签名。SHA-256 仅验证文件完整性，不代表发布者身份。 / Windows packages are unsigned; no publisher digital signature is provided. SHA-256 checks integrity, not publisher identity.',
+    '**签名状态：** Windows 发行包未进行代码签名，本版没有随附发行者数字签名。SHA-256 仅验证文件完整性，不代表发布者身份。',
+  ].join('\n');
+  const english = [
+    '### Downloads',
     '',
-  ];
-  return table.join('\n');
+    '| Platform | Package | Download |',
+    '| --- | --- | --- |',
+    ...rows.map(([platform, format, filename]) => `| ${platform} | ${format} | [Download](${url(filename)}) |`),
+    `| Checksums | SHA-256 | [${checksum}](${url(checksum)}) |`,
+    '',
+    '**Signing status:** Windows packages are unsigned; no publisher digital signature is provided. SHA-256 checks integrity, not publisher identity.',
+  ].join('\n');
+  return { chinese, english };
 }
 
 function cliArgs(argv) {
@@ -72,7 +81,8 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
         throw new Error('release directory contains an empty or non-file asset');
       }
     }
-    process.stdout.write(releaseDownloadSection(args['--tag'], args['--repo'], assets));
+    const sections = releaseDownloadSections(args['--tag'], args['--repo'], assets);
+    process.stdout.write(sections.chinese + '\n\n' + sections.english + '\n');
   } catch (error) {
     process.stderr.write('release-downloads: ' + error.message + '\n');
     process.exitCode = 1;

@@ -1,6 +1,7 @@
-import { readFileSync } from 'node:fs';
+import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { releaseDownloadSections } from './release-downloads.mjs';
 
 const RELEASE_TAG = /^(?:[a-z][a-z0-9-]*-)?v((?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*))$/;
 const VERSION_HEADING = /^## \[([^\]]+)\](?: - .+)?$/;
@@ -68,11 +69,25 @@ export function extractReleaseNotes(changelog, tag) {
   return '# ' + tag + '\n\n' + body.join('\n').trim() + '\n';
 }
 
+export function addReleaseDownloads(notes, tag, repository, assetNames) {
+  const lines = notes.trimEnd().split('\n');
+  const english = lines.findIndex((line) => line.trim() === '### English');
+  if (english < 0 || lines.some((line) => /^### Downloads?$/.test(line.trim()))) {
+    throw new Error('release notes must have one English section and no existing download section');
+  }
+  const sections = releaseDownloadSections(tag, repository, assetNames);
+  lines.splice(english, 0, '', sections.chinese, '');
+  const englishStart = lines.findIndex((line) => line.trim() === '### English');
+  lines.push('', sections.english);
+  return lines.slice(0, englishStart + 1).join('\n')
+    + '\n\n' + lines.slice(englishStart + 1).join('\n').trim() + '\n';
+}
+
 function parseArgs(argv) {
   if (argv.length === 0 || argv.length % 2 !== 0) {
-    throw new Error('usage: node scripts/release-notes.mjs --changelog FILE --tag TAG [--manifest FILE]');
+    throw new Error('usage: node scripts/release-notes.mjs --changelog FILE --tag TAG [--manifest FILE] [--repo OWNER/REPO --assets-dir DIR]');
   }
-  const allowed = new Set(['--changelog', '--tag', '--manifest']);
+  const allowed = new Set(['--changelog', '--tag', '--manifest', '--repo', '--assets-dir']);
   const args = {};
   for (let i = 0; i < argv.length; i += 2) {
     if (!allowed.has(argv[i]) || Object.hasOwn(args, argv[i]) || !argv[i + 1]) {
@@ -82,6 +97,9 @@ function parseArgs(argv) {
   }
   if (!args['--changelog'] || !args['--tag']) {
     throw new Error('both --changelog and --tag are required');
+  }
+  if (Boolean(args['--repo']) !== Boolean(args['--assets-dir'])) {
+    throw new Error('--repo and --assets-dir must be provided together');
   }
   return args;
 }
@@ -94,7 +112,16 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
       checkManifestVersion(readFileSync(resolve(args['--manifest']), 'utf8'), tag);
     }
     const changelog = readFileSync(resolve(args['--changelog']), 'utf8');
-    process.stdout.write(extractReleaseNotes(changelog, tag));
+    let notes = extractReleaseNotes(changelog, tag);
+    if (args['--repo']) {
+      const dir = resolve(args['--assets-dir']);
+      const assets = readdirSync(dir);
+      if (assets.some((name) => !statSync(resolve(dir, name)).isFile() || statSync(resolve(dir, name)).size === 0)) {
+        throw new Error('release directory contains an empty or non-file asset');
+      }
+      notes = addReleaseDownloads(notes, tag, args['--repo'], assets);
+    }
+    process.stdout.write(notes);
   } catch (error) {
     process.stderr.write('release-notes: ' + error.message + '\n');
     process.exitCode = 1;

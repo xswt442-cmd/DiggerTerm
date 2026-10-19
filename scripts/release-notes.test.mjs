@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { checkManifestVersion, extractReleaseNotes, versionFromTag } from './release-notes.mjs';
+import { addReleaseDownloads, checkManifestVersion, extractReleaseNotes, versionFromTag } from './release-notes.mjs';
 
 const changelog = [
   '# Changelog',
@@ -36,10 +36,30 @@ const changelog = [
 test('extracts exactly the target version in two languages', () => {
   const release = extractReleaseNotes(changelog, 'v1.2.4');
   assert.match(release, /^# v1\.2\.4\n/);
+  assert.doesNotMatch(release, /更新说明|Release highlights/);
   assert.match(release, /修复列表筛选/);
   assert.match(release, /Fixed list filtering/);
   assert.doesNotMatch(release, /新增分页/);
   assert.doesNotMatch(release, /Unreleased/);
+});
+
+test('places localized downloads inside their matching language sections', () => {
+  const notes = extractReleaseNotes(changelog, 'v1.2.4');
+  const complete = addReleaseDownloads(notes, 'v1.2.4', 'owner/repo', [
+    'DiggerTerm-v1.2.4-windows-amd64.exe',
+    'DiggerTerm-v1.2.4-linux-x86_64.AppImage',
+    'DiggerTerm-v1.2.4-linux-amd64.deb',
+    'SHA256SUMS',
+  ]);
+  const chinese = complete.indexOf('### 简体中文');
+  const english = complete.indexOf('### English');
+  const chineseDownloads = complete.indexOf('### 下载');
+  const englishDownloads = complete.indexOf('### Downloads');
+  assert.ok(chinese < chineseDownloads && chineseDownloads < english);
+  assert.ok(english < englishDownloads);
+  assert.doesNotMatch(complete, /## 下载 \/ Downloads/);
+  assert.doesNotMatch(complete, /平台 \/ Platform|下载 \/ Download/);
+  assert.throws(() => addReleaseDownloads(complete, 'v1.2.4', 'owner/repo', []), /existing download section/);
 });
 
 test('supports product-scoped tags', () => {

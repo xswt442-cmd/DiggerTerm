@@ -1,6 +1,6 @@
 # DiggerTerm 发布流程
 
-本手册记录可重复执行的版本检查、打包、发布和回滚规则。GitHub Release 的变更内容从发布 Tag 对应的 `CHANGELOG.md` 提取，并根据已校验的发行资产自动附上中英双语下载表与数字签名状态；不维护第二份版本说明。
+本手册记录可重复执行的版本检查、打包、发布和回滚规则。GitHub Release 的变更内容从发布 Tag 对应的 `CHANGELOG.md` 提取；下载信息和签名状态由已校验的发行资产生成，并分别放在简体中文和 English 模块中，不维护第二份版本说明。
 
 ## 发布范围
 
@@ -33,11 +33,10 @@
 1. 将验证通过的提交合入 `main`，核对正式版本对应的 CI 结果。
 2. 从发行提交创建并推送新的注释 Tag `vX.Y.Z`。
 3. `.github/workflows/release.yml` 运行 Windows/Linux 构建和发布资产检查，确认三个安装包、版本标记、文件格式及 SHA-256。
-4. 工作流通过 `scripts/release-notes.mjs` 提取目标版本的中英双语变更，再用 `scripts/release-downloads.mjs` 从已校验的真实附件名称生成末尾下载表和签名说明；随后上传三个安装包和校验文件，创建 GitHub Release：
+4. 工作流通过 `scripts/release-notes.mjs` 提取目标版本的中英双语变更，并从已校验的真实附件名称生成各自语言的下载表和签名说明；随后上传三个安装包和校验文件，创建 GitHub Release。标题只写产品和版本，不加“更新说明 / Release highlights”：
 
    ```sh
-   node scripts/release-notes.mjs --changelog CHANGELOG.md --tag vX.Y.Z --manifest frontend/package.json
-   node scripts/release-downloads.mjs --tag vX.Y.Z --repo xswt442-cmd/DiggerTerm --dir dist
+   node scripts/release-notes.mjs --changelog CHANGELOG.md --tag vX.Y.Z --manifest frontend/package.json --repo xswt442-cmd/DiggerTerm --assets-dir dist
    ```
 
 5. 下载发行附件校验 SHA-256，在目标平台安装、启动并验证基本终端功能。
