@@ -9,6 +9,7 @@ export type ActionId =
   | 'openSettings'
   | 'terminalSearch'
   | 'quickSelect'
+  | 'quickCd'
   | 'openCommandPalette'
 
 export type KeybindingScope = 'terminal' | 'workspace'
@@ -38,6 +39,7 @@ const actionList: ActionDefinition[] = [
   { id: 'openSettings', labelZh: '打开设置', labelEn: 'Open settings', scope: 'workspace', defaultKeys: { other: ['Ctrl+Shift+Comma'], mac: ['Ctrl+Shift+Comma'] } },
   { id: 'terminalSearch', labelZh: '搜索当前终端', labelEn: 'Search terminal', scope: 'terminal', defaultKeys: { other: ['Ctrl+Shift+F'], mac: ['Ctrl+Shift+F'] } },
   { id: 'quickSelect', labelZh: '快速选择文字', labelEn: 'Quick select text', scope: 'terminal', defaultKeys: { other: ['Ctrl+Shift+X'], mac: ['Ctrl+Shift+X'] } },
+  { id: 'quickCd', labelZh: '快速切换目录', labelEn: 'Quick CD', scope: 'workspace', defaultKeys: { other: ['Ctrl+Shift+G'], mac: ['Ctrl+Shift+G'] } },
   { id: 'openCommandPalette', labelZh: '打开命令面板', labelEn: 'Open command palette', scope: 'workspace', defaultKeys: { other: ['Ctrl+Shift+P'], mac: ['Ctrl+Shift+P'] } },
 ]
 
@@ -125,7 +127,7 @@ export function mergeBindings(overrides: Binding[], isMac: boolean): Binding[] {
   }
   const explicitChords = new Set(overrides.flatMap(binding => binding.keys))
   for (const binding of effective) {
-    if (['terminalSearch', 'quickSelect', 'openCommandPalette'].includes(binding.action) && !overrides.some(item => item.action === binding.action) &&
+    if (['terminalSearch', 'quickSelect', 'quickCd', 'openCommandPalette'].includes(binding.action) && !overrides.some(item => item.action === binding.action) &&
         binding.keys.some(key => explicitChords.has(key))) binding.keys = []
   }
   return effective

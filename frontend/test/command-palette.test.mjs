@@ -37,16 +37,17 @@ test('builds contextual commands without exposing destructive controls', () => {
     profiles: [{ id: 'ssh', name: 'SSH', description: 'Remote' }],
     themes: [{ id: 'builtin:nightfall', nameEn: 'Nightfall', nameZh: '夜航' }],
     daemonConnected: false, creating: false, inManagedWorkspace: false, paneCount: 2,
-    canUseTerminalTools: false, observeEnabled: true, observationBusy: false,
+    canUseTerminalTools: false, canUseQuickCd: false, observeEnabled: true, observationBusy: false,
     actions: {
       openSettings: id => actions.push(['settings', id]), setTheme: id => actions.push(['theme', id]),
       selectSession: id => actions.push(['session', id]), createSession: id => actions.push(['create', id]),
       split: direction => actions.push(['split', direction]), nextPane: () => actions.push(['next']),
       closePane: () => actions.push(['close-pane']), search: () => actions.push(['search']),
-      quickSelect: () => actions.push(['quick-select']), refreshDig: () => actions.push(['dig']),
+      quickSelect: () => actions.push(['quick-select']), quickCd: () => actions.push(['quick-cd']), refreshDig: () => actions.push(['dig']),
     },
   })
   assert.equal(palette.find(item => item.id === 'terminal:search').enabled, false)
+  assert.equal(palette.find(item => item.id === 'terminal:quick-cd').enabled, false)
   assert.equal(palette.find(item => item.id === 'workspace:split-right').enabled, false)
   assert.equal(palette.find(item => item.id === 'dig:refresh').enabled, true)
   assert.equal(palette.some(item => /terminate|stop-all/i.test(item.id)), false)

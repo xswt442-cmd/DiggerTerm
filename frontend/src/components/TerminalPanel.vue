@@ -15,6 +15,7 @@ import { terminalColors } from '../userThemes'
 import { matchBinding, type Binding } from '../keybindings'
 import { queueSessionOperation, updateAttachment } from '../terminalAttachment'
 import { queueAcceptedTerminalInput } from '../sessionQueue'
+import { cdShellForProfile, formatCdCommand, localDefaultDirectoryAllowed, type CdShell } from '../quickCd'
 import { sliceOutput } from '../terminalReplay'
 import { createExplicitWebLinkActivator, validateExternalWebURL } from '../externalLinks'
 import { withTerminalSearchSupport } from '../terminalSearch'
@@ -43,9 +44,10 @@ const props = defineProps<{
   locale: Locale
   bindings: Binding[]
   toolsEnabled: boolean
-  toolRequest: { sequence: number; action: 'search' | 'quickSelect' } | null
+  defaultDirectory: string
+  toolRequest: { sequence: number; action: 'search' | 'quickSelect' | 'quickCd' } | null
 }>()
-const emit = defineEmits<{ error: [message: string] }>()
+const emit = defineEmits<{ error: [message: string]; setDefaultDirectory: [path: string] }>()
 const container = ref<HTMLElement | null>(null)
 const copyMode = ref(false)
 const copyText = ref('')
@@ -65,6 +67,13 @@ const searchQuery = ref('')
 const searchCaseSensitive = ref(false)
 const searchResultIndex = ref(-1)
 const searchResultCount = ref(0)
+const quickCdOpen = ref(false)
+const quickCdPath = ref('')
+const quickCdShell = ref<CdShell>('posix')
+const quickCdSaveDefault = ref(false)
+const quickCdError = ref('')
+const isWindows = typeof navigator !== 'undefined' && /Windows/i.test(navigator.userAgent)
+const quickCdLocalProfile = () => ['powershell', 'cmd', 'bash', 'shell'].includes(props.session.profile)
 const quickSelectOpen = ref(false)
 const quickSelectLoading = ref(false)
 const quickSelectRange = ref<'visible' | 'buffer'>('visible')
@@ -241,8 +250,52 @@ async function scanQuickSelect() {
   }
 }
 
+async function openQuickCd() {
+  if (!props.active || !props.focused || !props.connected || !controlled.value ||
+      recovering.value || replayError.value || props.session.streamClosed || props.session.status !== 'running') return
+  if (searchOpen.value) await closeSearch()
+  if (quickSelectOpen.value) await closeQuickSelect()
+  if (copyMode.value) await toggleCopyMode()
+  quickCdShell.value = cdShellForProfile(props.session.profile)
+  quickCdPath.value = quickCdLocalProfile() ? props.defaultDirectory : ''
+  quickCdSaveDefault.value = false
+  quickCdError.value = ''
+  quickCdOpen.value = true
+  await nextTick()
+  quickCdInput.value?.focus()
+}
+
+const quickCdInput = ref<HTMLInputElement | null>(null)
+function closeQuickCd() {
+  quickCdOpen.value = false
+  quickCdError.value = ''
+  void nextTick(() => focus())
+}
+
+async function insertQuickCd() {
+  if (!quickCdOpen.value || !controlled.value || !props.connected || props.session.streamClosed ||
+      props.session.status !== 'running' || recovering.value || replayError.value) return
+  try {
+    const command = formatCdCommand(quickCdPath.value, quickCdShell.value)
+    if (quickCdSaveDefault.value && !localDefaultDirectoryAllowed(props.session.profile, quickCdPath.value, isWindows)) {
+      throw new Error(text('默认目录必须是当前系统上的绝对本地路径（最多 512 字符）。', 'Default directory must be an absolute local OS path (up to 512 characters).'))
+    }
+    // Deliberately omit Enter: the current foreground program might be vim
+    // or an Agent CLI, rather than a shell prompt. Only the user can execute.
+    await queueAcceptedTerminalInput(props.session.id, command, Write)
+    if (quickCdSaveDefault.value) emit('setDefaultDirectory', quickCdPath.value)
+    quickCdOpen.value = false
+    notice.value = text('已插入 cd 命令；请确认处于 Shell 提示符后按 Enter。', 'CD command inserted. At a shell prompt, press Enter to run it.')
+    await nextTick()
+    focus()
+  } catch (error) {
+    quickCdError.value = String(error)
+  }
+}
+
 async function openQuickSelect() {
   if (quickSelectOpen.value || !props.focused || !controlled.value || recovering.value || !terminal) return
+  if (quickCdOpen.value) closeQuickCd()
   if (searchOpen.value) await closeSearch()
   if (copyMode.value) await toggleCopyMode()
   quickSelectOpen.value = true
@@ -619,6 +672,7 @@ watch(() => props.padding, async () => {
 
 watch(() => props.toolsEnabled, enabled => {
   if (enabled) return
+  if (quickCdOpen.value) closeQuickCd()
   if (searchOpen.value) void closeSearch()
   if (quickSelectOpen.value) void closeQuickSelect()
   if (copyMode.value) void toggleCopyMode()
@@ -626,6 +680,7 @@ watch(() => props.toolsEnabled, enabled => {
 watch(() => props.toolRequest, request => {
   if (!request || !props.focused || !props.toolsEnabled) return
   if (request.action === 'search') void openSearch()
+  else if (request.action === 'quickCd') void openQuickCd()
   else void openQuickSelect()
 })
 
@@ -642,6 +697,7 @@ watch(() => props.focused, async (focused) => {
     if (!document.activeElement?.matches('select,input,textarea:not(.xterm-helper-textarea)')) focus()
   } else {
     copyMenu.value = null
+    if (quickCdOpen.value) closeQuickCd()
     terminal?.blur()
   }
 })
@@ -746,10 +802,34 @@ onBeforeUnmount(() => {
       <button type="button" :disabled="!controlled || recovering" :aria-pressed="copyMode" @click="toggleCopyMode">{{ copyMode ? text('退出复制模式', 'Exit copy mode') : text('复制模式', 'Copy mode') }}</button>
       <button type="button" :disabled="!connected || recovering" @click="reconnectView">{{ text('重新回放', 'Replay') }}</button>
       <button type="button" :disabled="!focused" :aria-pressed="searchOpen" @click="toggleSearch">{{ text('搜索', 'Search') }}</button>
+      <button type="button" :disabled="!focused || !connected || !controlled || recovering || !!replayError || session.streamClosed || session.status !== 'running'" :aria-expanded="quickCdOpen" @click="openQuickCd">{{ text('快速 cd', 'Quick CD') }}</button>
       <button type="button" :disabled="!focused || !controlled || recovering" :aria-pressed="quickSelectOpen" @click="toggleQuickSelect">{{ text('快速选择', 'Quick Select') }}</button>
       <button v-if="selectedWebURL" type="button" @click="openSelectedWebLink">{{ text('打开所选链接…', 'Open selected link…') }}</button>
       <small>{{ text('可尝试 Shift 拖选（macOS Option）；无效时使用复制模式。', 'Try Shift-drag (Option on macOS); use Copy mode if unavailable.') }}</small>
     </div>
+    <form v-if="quickCdOpen" class="quick-cd-form" :aria-label="text('快速更改目录', 'Quick directory change')" @submit.prevent="insertQuickCd" @keydown.esc.stop.prevent="closeQuickCd">
+      <label>{{ text('目标目录（不会自动执行）', 'Target directory (not automatically executed)') }}
+        <input ref="quickCdInput" v-model="quickCdPath" type="text" spellcheck="false" autocomplete="off" maxlength="2048"
+          :placeholder="text('输入终端所在系统的目录路径', 'Enter a path on the terminal host')" :aria-label="text('目标目录', 'Directory path')" />
+      </label>
+      <label v-if="session.profile === 'ssh'">{{ text('远端 Shell 语法', 'Remote shell syntax') }}
+        <select v-model="quickCdShell" :aria-label="text('远端 Shell 语法', 'Remote shell syntax')">
+          <option value="posix">POSIX (bash / zsh / sh)</option>
+          <option value="powershell">PowerShell</option>
+          <option value="cmd">CMD</option>
+        </select>
+      </label>
+      <label v-if="quickCdLocalProfile()" class="quick-cd-check">
+        <input v-model="quickCdSaveDefault" type="checkbox" />
+        {{ text('同时设为新本地会话默认目录', 'Also use as the default directory for new local sessions') }}
+      </label>
+      <p class="quick-cd-help">{{ text('命令会立即作为输入发给当前前台程序，但不发送回车。请先确认已回到 Shell 提示符、输入行为空；不要在 vim 或 Agent 等程序内插入。', 'Sends quoted command text to the foreground program without Enter. First ensure an empty shell prompt; do not insert it while vim, an Agent, or another interactive app is active.') }}</p>
+      <p v-if="quickCdError" role="alert" class="quick-cd-error">{{ quickCdError }}</p>
+      <div class="quick-cd-buttons">
+        <button type="submit" :disabled="!quickCdPath || !connected || !controlled || recovering">{{ text('插入命令', 'Insert command') }}</button>
+        <button type="button" @click="closeQuickCd">{{ text('取消', 'Cancel') }}</button>
+      </div>
+    </form>
     <TerminalSearch v-if="searchOpen" :locale="locale" :query="searchQuery" :case-sensitive="searchCaseSensitive"
       :result-index="searchResultIndex" :result-count="searchResultCount"
       @update:query="searchQuery = $event" @update:case-sensitive="searchCaseSensitive = $event"
@@ -796,6 +876,15 @@ onBeforeUnmount(() => {
   background: var(--canvas);
 }
 .terminal-content { min-height: 0; flex: 1; position: relative; }
+.quick-cd-form { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 9px; background: var(--surface); border-bottom: 1px solid var(--accent); color: var(--text); font-size: 12px; }
+.quick-cd-form label { display: flex; align-items: center; gap: 6px; }
+.quick-cd-form input[type="text"], .quick-cd-form select { min-width: 190px; max-width: min(420px, 75vw); padding: 5px 7px; border: 1px solid var(--border); border-radius: var(--dt-radius, 4px); color: var(--text); background: var(--canvas); }
+.quick-cd-form input[type="text"] { width: min(360px, 65vw); }
+.quick-cd-check { white-space: nowrap; }
+.quick-cd-help { width: 100%; margin: 0; color: var(--muted); line-height: 1.45; }
+.quick-cd-error { width: 100%; margin: 0; color: var(--negative); }
+.quick-cd-buttons { display: flex; gap: 6px; }
+.quick-cd-buttons button { background: var(--canvas); color: var(--text); border: 1px solid var(--border); border-radius: var(--dt-radius, 4px); padding: 5px 9px; cursor: pointer; }
 .xterm-host { position: absolute; inset: 0; overflow: hidden; }
 .terminal-actions { display: flex; align-items: center; flex-wrap: nowrap; flex: 0 0 28px; min-height: 28px; gap: 4px; padding: 2px 6px; border-bottom: 1px solid var(--border-faint); }
 .terminal-actions button { flex: 0 0 auto; color: var(--text); background: var(--surface); border: 1px solid var(--border); border-radius: var(--dt-radius, 4px); font-size: 10px; line-height: 1.2; padding: 2px 5px; white-space: nowrap; }

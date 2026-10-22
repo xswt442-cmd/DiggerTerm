@@ -30,6 +30,7 @@ Checksums: [SHA256SUMS](https://github.com/xswt442-cmd/DiggerTerm/releases/downl
 
 - **Multiple terminals:** sidebar navigation, search, rename, nested horizontal/vertical splits, draggable dividers and layout restore; closing a pane keeps its session running.
 - **Local and remote shells:** PowerShell, CMD, Git Bash (requires Git for Windows), WSL, Linux Bash, and SSH.
+- **Quick CD:** in a managed terminal, use the Quick CD button or `Ctrl+Shift+G` to quote and insert a shell-specific directory command without automatically pressing Enter. Local shells can also save the path as the default directory for new sessions.
 - **Persistent sessions:** the daemon keeps sessions running after the GUI exits; reconnect on restart.
 - **Dig process tree:** browse discovered shells, agents and descendants by Windows/WSL distribution, expand and filter the tree, and inspect read-only details without taking control.
 - **Preferences:** dark themes, fonts, sizes, language, default shell, and working directory.
@@ -41,6 +42,8 @@ Smart **Ctrl+C** copies a terminal selection or interrupts without one; full-scr
 Copy [example JSON/CSS files](examples/themes/) into `DiggerTerm/` under your OS user's home directory, then refresh Settings → Appearance. Appearance shows the resolved directory and can open it directly. JSON `name` supplies the display name; optional `custom.css` overrides all themes. Shortcut configuration is stored separately as `keybindings.json` in the same directory.
 
 Windows requires WebView2; binaries are unsigned. Linux packages are built for Ubuntu 24.04; other distributions may require matching system dependencies such as GTK4 and WebKitGTK 6. Sessions are not guaranteed to survive daemon crashes or system reboots.
+
+Quick CD does not change the working directory of a running process directly or execute the command automatically. Confirm the terminal is at an editable shell prompt before pressing Enter. SSH defaults to POSIX syntax; choose PowerShell/CMD for other remote shells. Use POSIX paths in WSL/Git Bash. Dig's read-only external processes do not support Quick CD.
 
 Settings provide manual reconnection and session exit details. A running managed session allows only one GUI controller; another GUI can inspect it but cannot terminate it while controlled elsewhere. Accepted terminal input is sent in order before the pane detaches. IPC requests have timeouts; if creation or termination times out, the operation may still complete, so refresh the session list before retrying.
 

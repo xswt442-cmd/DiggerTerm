@@ -13,6 +13,7 @@ This file records shipped desktop features, fixes, platform support, and compati
 - 修复切换或关闭终端面板时已排队输入被丢弃的问题，确保这些输入先于视图分离发送。
 
 **改进**
+- 新增托管终端“快速 cd”入口与可配置快捷键，按 Shell 类型安全引用路径、插入命令而不自动执行；本地路径可同步为新会话默认启动目录。
 - 为 Daemon IPC 请求增加有界超时与可取消等待；超时不代表操作已撤销，重试创建或终止前应先检查会话状态。
 - 将文档链接、开发文档中英文配对、CHANGELOG 双语分类及版本一致性检查接入 PR CI，并校验项目 PR 模板同步。
 
@@ -23,6 +24,7 @@ This file records shipped desktop features, fixes, platform support, and compati
 - Kept already-queued terminal input in order ahead of pane detach when switching or closing a pane.
 
 **Improved**
+- Added a Quick CD action and configurable shortcut for managed terminals, with shell-aware path quoting and insertion without automatic execution; local paths can also become the new-session default.
 - Bounded daemon IPC requests with timeouts and cancelable waits; a timeout does not roll back an action, so clients should inspect session state before retrying a create or termination.
 - Added PR CI checks for documentation links, paired translations, bilingual CHANGELOG categories, version alignment, and PR-template synchronization.
 
