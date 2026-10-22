@@ -8,7 +8,23 @@ This file records shipped desktop features, fixes, platform support, and compati
 
 ### 简体中文
 
+**修复**
+- 阻止其他 GUI 在会话已由一个 GUI 控制时绕过控制租约终止该会话；无控制者的托管会话仍可显式终止。
+- 修复切换或关闭终端面板时已排队输入被丢弃的问题，确保这些输入先于视图分离发送。
+
+**改进**
+- 为 Daemon IPC 请求增加有界超时与可取消等待；超时不代表操作已撤销，重试创建或终止前应先检查会话状态。
+- 将文档链接、开发文档中英文配对、CHANGELOG 双语分类及版本一致性检查接入 PR CI，并校验项目 PR 模板同步。
+
 ### English
+
+**Fixed**
+- Prevented another GUI from bypassing the active controller's lease to terminate a managed session; unowned sessions remain explicitly terminable.
+- Kept already-queued terminal input in order ahead of pane detach when switching or closing a pane.
+
+**Improved**
+- Bounded daemon IPC requests with timeouts and cancelable waits; a timeout does not roll back an action, so clients should inspect session state before retrying a create or termination.
+- Added PR CI checks for documentation links, paired translations, bilingual CHANGELOG categories, version alignment, and PR-template synchronization.
 
 ## [0.0.6] - 2026-10-18
 

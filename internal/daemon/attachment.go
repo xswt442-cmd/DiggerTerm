@@ -74,6 +74,32 @@ func (s *Server) withSessionLease(p *peer, id string, operation func() error) er
 	return err
 }
 
+// Termination is a one-shot control action. It must respect another GUI's
+// live lease but must not acquire a lasting lease for an unowned session.
+func (s *Server) terminateManaged(p *peer, id string) error {
+	if _, err := s.managedSession(id); err != nil {
+		return err
+	}
+	lease := s.sessionLease(id)
+	lease.mu.Lock()
+	defer lease.mu.Unlock()
+	info, err := s.managedSession(id)
+	if err != nil {
+		s.pruneSessionLeaseLocked(id, lease)
+		return err
+	}
+	if info.Status != "running" {
+		return session.ErrNotRunning
+	}
+	if peerClosed(p) {
+		return errors.New("GUI connection is closed")
+	}
+	if owner := lease.owner; owner != nil && owner != p && !peerClosed(owner) {
+		return errors.New("session controlled by another GUI")
+	}
+	return s.manager.Terminate(id)
+}
+
 func (s *Server) claimLocked(lease *sessionLease, p *peer) error {
 	if peerClosed(p) {
 		return errors.New("GUI connection is closed")

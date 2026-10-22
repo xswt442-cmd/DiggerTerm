@@ -132,7 +132,7 @@ func (s *Server) dispatch(p *peer, req request) message {
 		reply, err := s.manager.Snapshot(req.SessionID)
 		return response(req.ID, reply, err)
 	case "terminate":
-		return response(req.ID, nil, s.manager.Terminate(req.SessionID))
+		return response(req.ID, nil, s.terminateManaged(p, req.SessionID))
 	case "forget":
 		err := s.manager.Forget(req.SessionID)
 		if err == nil {

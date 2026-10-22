@@ -2,6 +2,7 @@ package daemon
 
 import (
 	"bufio"
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -16,7 +17,7 @@ import (
 
 type Client struct {
 	conn           net.Conn
-	writeMu        sync.Mutex
+	writeGate      chan struct{}
 	mu             sync.Mutex
 	pending        map[uint64]chan message
 	nextID         atomic.Uint64
@@ -30,7 +31,7 @@ func Dial(events func(string, json.RawMessage)) (*Client, error) {
 	if err != nil {
 		return nil, err
 	}
-	c := &Client{conn: conn, pending: make(map[uint64]chan message), done: make(chan struct{}), events: events}
+	c := &Client{conn: conn, pending: make(map[uint64]chan message), writeGate: make(chan struct{}, 1), done: make(chan struct{}), events: events}
 	go c.readLoop()
 	var ok string
 	if err := c.call(request{Method: "ping"}, &ok); err != nil {
@@ -81,7 +82,30 @@ func (c *Client) readLoop() {
 	}
 }
 
+// Each request is bounded independently. A timeout means the result is
+// unknown, not that the daemon rolled back the action; callers must reconcile
+// with List/Snapshot before retrying non-idempotent operations.
+func requestTimeout(method string) time.Duration {
+	switch method {
+	case "observe":
+		return 45 * time.Second // daemon-side scan has a 40-second limit
+	case "create", "createLocal", "createSSH", "createSSHWithOptions":
+		return 30 * time.Second
+	default:
+		return 15 * time.Second
+	}
+}
+
 func (c *Client) call(req request, out any) error {
+	ctx, cancel := context.WithTimeout(context.Background(), requestTimeout(req.Method))
+	defer cancel()
+	return c.callContext(ctx, req, out)
+}
+
+func (c *Client) callContext(ctx context.Context, req request, out any) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 	req.ID = c.nextID.Add(1)
 	ch := make(chan message, 1)
 	c.mu.Lock()
@@ -99,17 +123,8 @@ func (c *Client) call(req request, out any) error {
 	if len(data) > maxMessageBytes-1 {
 		return errors.New("IPC request too large")
 	}
-	c.writeMu.Lock()
-	select {
-	case <-c.done:
-		c.writeMu.Unlock()
-		return ErrDisconnected
-	default:
-	}
-	_, err = c.conn.Write(append(data, '\n'))
-	c.writeMu.Unlock()
-	if err != nil {
-		return failed("write IPC", err)
+	if err := c.writeRequest(ctx, data); err != nil {
+		return err
 	}
 	select {
 	case result := <-ch:
@@ -122,9 +137,53 @@ func (c *Client) call(req request, out any) error {
 			}
 		}
 		return nil
+	case <-ctx.Done():
+		return ctx.Err()
 	case <-c.done:
 		return ErrDisconnected
 	}
+}
+
+// A context-aware gate bounds both the wait for another caller's write and
+// the network write. Release the gate BEFORE waiting for the RPC response so
+// concurrent requests do not block behind an unrelated slow operation.
+func (c *Client) writeRequest(ctx context.Context, data []byte) error {
+	select {
+	case c.writeGate <- struct{}{}:
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-c.done:
+		return ErrDisconnected
+	}
+	defer func() { <-c.writeGate }()
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	select {
+	case <-c.done:
+		return ErrDisconnected
+	default:
+	}
+	if deadline, ok := ctx.Deadline(); ok {
+		if err := c.conn.SetWriteDeadline(deadline); err != nil {
+			return failed("set IPC write deadline", err)
+		}
+	}
+	_, err := c.conn.Write(append(data, '\n'))
+	_ = c.conn.SetWriteDeadline(time.Time{})
+	if err != nil {
+		// A failed/partial write invalidates JSON framing for the connection.
+		_ = c.conn.Close()
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
+		var netErr net.Error
+		if errors.As(err, &netErr) && netErr.Timeout() {
+			return fmt.Errorf("write IPC: %w", context.DeadlineExceeded)
+		}
+		return failed("write IPC", err)
+	}
+	return nil
 }
 
 func (c *Client) Profiles() ([]session.Profile, error) {

@@ -14,6 +14,7 @@ import { decideTerminalShortcut } from '../terminalShortcuts'
 import { terminalColors } from '../userThemes'
 import { matchBinding, type Binding } from '../keybindings'
 import { queueSessionOperation, updateAttachment } from '../terminalAttachment'
+import { queueAcceptedTerminalInput } from '../sessionQueue'
 import { sliceOutput } from '../terminalReplay'
 import { createExplicitWebLinkActivator, validateExternalWebURL } from '../externalLinks'
 import { withTerminalSearchSupport } from '../terminalSearch'
@@ -117,7 +118,6 @@ let offSelection: { dispose(): void } | undefined
 let pending: OutputEvent[] = []
 let replaying = true
 let lastOffset = 0
-let writeQueue: Promise<void> = Promise.resolve()
 let lastSize = ''
 
 function decodeBase64(data: string): Uint8Array {
@@ -688,10 +688,9 @@ onMounted(async () => {
     if (!props.connected || props.session.streamClosed || replayError.value || !controlled.value || props.session.status !== 'running') return
     // onData also carries live terminal protocol replies, which background
     // panes must send. DOM key/paste handling separately guards user focus.
-    writeQueue = writeQueue
-      .then(() => queueSessionOperation(props.session.id, async () => {
-        if (terminal === term && props.connected && !props.session.streamClosed && controlled.value && props.session.status === 'running') await Write(props.session.id, input)
-      }))
+    // Input accepted here is delivered before the pane's queued detach, even
+    // when Vue unmounts this component before the daemon can acknowledge it.
+    void queueAcceptedTerminalInput(props.session.id, input, Write)
       .catch((err: unknown) => emit('error', String(err)))
   })
 

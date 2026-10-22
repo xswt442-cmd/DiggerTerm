@@ -256,7 +256,7 @@ func dialTestClient(t *testing.T, address string) *Client {
 	if err != nil {
 		t.Fatal(err)
 	}
-	client := &Client{conn: conn, pending: make(map[uint64]chan message), done: make(chan struct{})}
+	client := &Client{conn: conn, pending: make(map[uint64]chan message), writeGate: make(chan struct{}, 1), done: make(chan struct{})}
 	go client.readLoop()
 	t.Cleanup(func() { _ = client.Close() })
 	return client
