@@ -181,8 +181,7 @@ func TestQueuedWriteAndResizeRepliesRemainFIFO(t *testing.T) {
 		t.Skipf("create isolated test shell: %v", err)
 	}
 	t.Cleanup(func() {
-		_ = creator.Terminate(info.ID)
-		waitForClientSessionExit(t, creator, info.ID)
+		terminateTestOwnedSession(t, server, creator, info.ID)
 	})
 
 	conn, err := net.Dial("tcp", listener.Addr().String())
