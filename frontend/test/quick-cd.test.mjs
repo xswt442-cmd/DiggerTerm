@@ -7,7 +7,7 @@ const source = readFileSync(new URL('../src/quickCd.ts', import.meta.url), 'utf8
 const js = ts.transpileModule(source, {
   compilerOptions: { module: ts.ModuleKind.ES2022, target: ts.ScriptTarget.ES2022 },
 }).outputText
-const { cdShellForProfile, formatCdCommand, localDefaultDirectoryAllowed } =
+const { cdShellForProfile, formatCdCommand, localDefaultDirectoryAllowed, directoryFromNativePicker } =
   await import('data:text/javascript;base64,' + Buffer.from(js).toString('base64'))
 
 test('profile selects correct shell quoting and unknown remote defaults to POSIX', () => {
@@ -42,6 +42,40 @@ test('rejects control chars, multi-line injection and excessive paths', () => {
       assert.throws(() => formatCdCommand(path, shell))
     }
   }
+})
+
+
+test('native folder picks preserve Windows paths for PowerShell/CMD', () => {
+  const local = 'E:\\Work projects\\Code'
+  assert.equal(directoryFromNativePicker('powershell', local, true), local)
+  assert.equal(directoryFromNativePicker('cmd', local, true), local)
+  assert.equal(directoryFromNativePicker('powershell', '\\\\fileserver\\share\\dev', true), '\\\\fileserver\\share\\dev')
+})
+
+test('native Windows folders map to WSL automount and Git Bash drives', () => {
+  assert.equal(directoryFromNativePicker('wsl', 'C:\\Projects\\Hello World', true), '/mnt/c/Projects/Hello World')
+  assert.equal(directoryFromNativePicker('bash', 'E:\\.codes\\DiggerTerm', true), '/e/.codes/DiggerTerm')
+  assert.equal(directoryFromNativePicker('wsl', 'D:\\', true), '/mnt/d/')
+  assert.equal(directoryFromNativePicker('bash', 'C:/Work', true), '/c/Work')
+})
+
+test('native Unix folder picks use POSIX absolute paths unchanged', () => {
+  assert.equal(directoryFromNativePicker('shell', "/home/dev/it's here", false), "/home/dev/it's here")
+  assert.equal(directoryFromNativePicker('bash', '/tmp/space folder', false), '/tmp/space folder')
+})
+
+test('folder picker cannot browse remote hosts or translate UNC to WSL/Git Bash', () => {
+  for (const profile of ['ssh', 'unknown']) {
+    assert.throws(() => directoryFromNativePicker(profile, 'C:\\Work', true), /remote|native/i)
+  }
+  for (const profile of ['bash', 'wsl']) {
+    assert.throws(() => directoryFromNativePicker(profile, '\\\\wsl.localhost\\Ubuntu\\home', true), /UNC/)
+    assert.throws(() => directoryFromNativePicker(profile, '\\\\server\\share', true), /UNC/)
+  }
+  assert.throws(() => directoryFromNativePicker('cmd', '\\\\server\\share', true), /UNC/)
+  assert.throws(() => directoryFromNativePicker('shell', 'relative/folder', false), /absolute/)
+  assert.throws(() => directoryFromNativePicker('powershell', 'C:\\abc\nmalicious', true), /invalid/)
+  assert.throws(() => directoryFromNativePicker('wsl', 'C:\\' + 'x'.repeat(2050), true), /invalid/)
 })
 
 test('only OS-local absolute paths can be saved as new-session defaults', () => {

@@ -198,6 +198,12 @@ func (c *Client) Capabilities() (Capabilities, error) {
 	return result, err
 }
 
+func (c *Client) BrowseSSHDirectories(id, directory string) (session.SSHDirectoryListing, error) {
+	var result session.SSHDirectoryListing
+	err := c.call(request{Method: "browseSSH", SessionID: id, Directory: directory}, &result)
+	return result, err
+}
+
 func (c *Client) SSHHosts() ([]string, error) {
 	var aliases []string
 	err := c.call(request{Method: "sshHosts"}, &aliases)

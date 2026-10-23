@@ -62,7 +62,18 @@ func (m *Manager) CreateSSHWithOptions(target string, port int, options SSHOptio
 	if err != nil {
 		return Info{}, err
 	}
-	return m.createSpec(spec, "SSH · "+target, "ssh", cols, rows)
+	info, err := m.createSpec(spec, "SSH · "+target, "ssh", cols, rows)
+	if err != nil {
+		return Info{}, err
+	}
+	managed, err := m.get(info.ID)
+	if err != nil {
+		return Info{}, err
+	}
+	managed.mu.Lock()
+	managed.sshTarget, managed.sshPort = target, port
+	managed.mu.Unlock()
+	return info, nil
 }
 
 func (m *Manager) createSpec(spec commandSpec, name, profile string, cols, rows int) (Info, error) {

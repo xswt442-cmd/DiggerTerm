@@ -43,3 +43,29 @@ export function localDefaultDirectoryAllowed(profile: string, path: string, wind
   if (!['powershell', 'cmd', 'bash', 'shell'].includes(profile) || path.length > 512) return false
   return windows ? /^(?:[A-Za-z]:[\\/]|\\\\[^\\/]+[\\/][^\\/]+)/.test(path) : path.startsWith('/')
 }
+// The native dialog only browses local folders. WSL and Git Bash need their
+// default Windows-drive mount convention, not a literal Windows path.
+export function directoryFromNativePicker(profile: string, path: string, windows: boolean): string {
+  if (!['powershell', 'cmd', 'bash', 'wsl', 'shell'].includes(profile)) {
+    throw new Error('The native folder picker cannot browse remote SSH directories')
+  }
+  if (!path || path.length > 2048 || /[\x00-\x1f\x7f-\x9f\u2028\u2029\u202a-\u202e\u2066-\u2069]/u.test(path)) {
+    throw new Error('Selected directory contains invalid characters')
+  }
+  if (!windows) {
+    if (!path.startsWith('/')) throw new Error('Select an absolute directory')
+    return path
+  }
+  const drive = /^([A-Za-z]):[\\/](.*)$/.exec(path)
+  if (profile === 'wsl' || profile === 'bash') {
+    if (!drive) throw new Error('Select a drive folder; UNC and WSL network paths cannot be translated')
+    const letter = drive[1].toLowerCase()
+    const suffix = drive[2].replaceAll('\\', '/')
+    return (profile === 'wsl' ? '/mnt/' : '/') + letter + '/' + suffix
+  }
+  if (profile === 'cmd' && !drive) {
+    throw new Error('CMD cannot change to a network UNC folder with cd /d')
+  }
+  if (drive || (profile === 'powershell' && /^\\\\[^\\]+\\[^\\]+(?:\\.*)?$/.test(path))) return path
+  throw new Error('Select an absolute Windows folder')
+}
