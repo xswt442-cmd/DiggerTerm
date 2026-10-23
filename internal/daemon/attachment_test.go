@@ -34,16 +34,14 @@ func TestPeerSessionControlLeaseAndDisconnect(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() {
-		_ = first.Terminate(info.ID)
-		waitForClientSessionExit(t, first, info.ID)
+		terminateTestOwnedSession(t, server, first, info.ID)
 	})
 	secondInfo, err := first.Create(session.Profiles()[0].ID, 80, 24)
 	if err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() {
-		_ = first.Terminate(secondInfo.ID)
-		waitForClientSessionExit(t, first, secondInfo.ID)
+		terminateTestOwnedSession(t, server, first, secondInfo.ID)
 	})
 	blockedLease := server.sessionLease(info.ID)
 	blockedLease.mu.Lock()
@@ -260,6 +258,16 @@ func dialTestClient(t *testing.T, address string) *Client {
 	go client.readLoop()
 	t.Cleanup(func() { _ = client.Close() })
 	return client
+}
+
+// Test-owned processes must be cleaned up independently of which GUI currently
+// holds their control lease. Production termination still uses terminateManaged.
+func terminateTestOwnedSession(t *testing.T, server *Server, client *Client, id string) {
+	t.Helper()
+	if err := server.manager.Terminate(id); err != nil && !errors.Is(err, session.ErrNotRunning) {
+		t.Errorf("terminate test-owned session %s: %v", id, err)
+	}
+	waitForClientSessionExit(t, client, id)
 }
 
 func waitForClientSessionExit(t *testing.T, client *Client, id string) {
