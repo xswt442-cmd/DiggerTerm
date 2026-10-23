@@ -8,6 +8,7 @@
 - IPC operations must have bounded deadlines. A timed-out request has an unknown outcome until the GUI queries the Daemon again; never automatically retry non-idempotent operations.
 - Distinguish `Managed` sessions owned by the Daemon from `Observed` external processes. Observation is read-only and does not authorize terminal takeover, input injection, process termination, or other control.
 - Quick CD may insert only a shell-quoted, single-line command into an attached managed session; it must not auto-execute it or modify observed processes. Only OS-local absolute directories may become new-session defaults.
+- SSH directory browsing uses immutable managed-session connection metadata and a separate bounded, read-only OpenSSH connection with host-key verification. Never send discovery commands to the active PTY.
 - Keep Windows ConPTY, WSL, Unix PTY, and OpenSSH behavior behind appropriate platform boundaries. Document only platform features supported by the current implementation.
 
 ## Documentation and reviews
