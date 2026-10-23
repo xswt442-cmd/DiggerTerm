@@ -7,7 +7,7 @@ const source = readFileSync(new URL('../src/quickCd.ts', import.meta.url), 'utf8
 const js = ts.transpileModule(source, {
   compilerOptions: { module: ts.ModuleKind.ES2022, target: ts.ScriptTarget.ES2022 },
 }).outputText
-const { cdShellForProfile, formatCdCommand, localDefaultDirectoryAllowed, directoryFromNativePicker } =
+const { cdShellForProfile, formatCdCommand, localDefaultDirectoryAllowed, directoryFromNativePicker, supportsLocalDefaultDirectory, supportsNativeFolderPicker } =
   await import('data:text/javascript;base64,' + Buffer.from(js).toString('base64'))
 
 test('profile selects correct shell quoting and unknown remote defaults to POSIX', () => {
@@ -76,6 +76,17 @@ test('folder picker cannot browse remote hosts or translate UNC to WSL/Git Bash'
   assert.throws(() => directoryFromNativePicker('shell', 'relative/folder', false), /absolute/)
   assert.throws(() => directoryFromNativePicker('powershell', 'C:\\abc\nmalicious', true), /invalid/)
   assert.throws(() => directoryFromNativePicker('wsl', 'C:\\' + 'x'.repeat(2050), true), /invalid/)
+})
+
+test('profile capabilities consistently distinguish local defaults and native picking', () => {
+  for (const profile of ['powershell', 'cmd', 'bash', 'shell']) {
+    assert.equal(supportsLocalDefaultDirectory(profile), true)
+    assert.equal(supportsNativeFolderPicker(profile), true)
+  }
+  assert.equal(supportsLocalDefaultDirectory('wsl'), false)
+  assert.equal(supportsNativeFolderPicker('wsl'), true)
+  assert.equal(supportsLocalDefaultDirectory('ssh'), false)
+  assert.equal(supportsNativeFolderPicker('ssh'), false)
 })
 
 test('only OS-local absolute paths can be saved as new-session defaults', () => {

@@ -15,7 +15,7 @@ import { terminalColors } from '../userThemes'
 import { matchBinding, type Binding } from '../keybindings'
 import { queueSessionOperation, updateAttachment } from '../terminalAttachment'
 import { queueAcceptedTerminalInput } from '../sessionQueue'
-import { cdShellForProfile, formatCdCommand, localDefaultDirectoryAllowed, directoryFromNativePicker, type CdShell } from '../quickCd'
+import { cdShellForProfile, formatCdCommand, localDefaultDirectoryAllowed, directoryFromNativePicker, supportsLocalDefaultDirectory, supportsNativeFolderPicker, type CdShell } from '../quickCd'
 import { sliceOutput } from '../terminalReplay'
 import { createExplicitWebLinkActivator, validateExternalWebURL } from '../externalLinks'
 import { withTerminalSearchSupport } from '../terminalSearch'
@@ -77,7 +77,6 @@ const quickCdBrowsing = ref(false)
 const quickCdRemoteBrowseOpen = ref(false)
 const quickCdPicked = ref<{ converted: string; native: string } | null>(null)
 const isWindows = typeof navigator !== 'undefined' && /Windows/i.test(navigator.userAgent)
-const quickCdLocalProfile = () => ['powershell', 'cmd', 'bash', 'shell'].includes(props.session.profile)
 watch(quickCdShell, shell => { if (shell !== 'posix') quickCdRemoteBrowseOpen.value = false })
 const quickSelectOpen = ref(false)
 const quickSelectLoading = ref(false)
@@ -262,7 +261,7 @@ async function openQuickCd() {
   if (quickSelectOpen.value) await closeQuickSelect()
   if (copyMode.value) await toggleCopyMode()
   quickCdShell.value = cdShellForProfile(props.session.profile)
-  quickCdPath.value = quickCdLocalProfile() ? props.defaultDirectory : ''
+  quickCdPath.value = supportsLocalDefaultDirectory(props.session.profile) ? props.defaultDirectory : ''
   if (isWindows && props.session.profile === 'bash' && quickCdPath.value) {
     try { quickCdPath.value = directoryFromNativePicker('bash', quickCdPath.value, true) }
     catch { quickCdPath.value = '' }
@@ -290,7 +289,7 @@ watch(quickCdPath, (path) => {
 
 async function browseQuickCdDirectory() {
   if (!quickCdOpen.value || quickCdBrowsing.value || !props.active || !props.focused ||
-      props.session.profile === 'ssh' || !props.connected || !controlled.value) return
+      !supportsNativeFolderPicker(props.session.profile) || !props.connected || !controlled.value) return
   const initialSessionID = props.session.id
   quickCdBrowsing.value = true
   quickCdError.value = ''
@@ -861,7 +860,7 @@ onBeforeUnmount(() => {
         <input ref="quickCdInput" v-model="quickCdPath" type="text" spellcheck="false" autocomplete="off" maxlength="2048"
           :placeholder="text('输入终端所在系统的目录路径', 'Enter a path on the terminal host')" :aria-label="text('目标目录', 'Directory path')" />
       </label>
-      <button v-if="session.profile !== 'ssh'" type="button" class="quick-cd-browse" :disabled="quickCdBrowsing || !connected || !controlled" @click="browseQuickCdDirectory">{{ quickCdBrowsing ? text('正在打开…', 'Opening…') : text('浏览文件夹…', 'Browse folders…') }}</button>
+      <button v-if="supportsNativeFolderPicker(session.profile)" type="button" class="quick-cd-browse" :disabled="quickCdBrowsing || !connected || !controlled" @click="browseQuickCdDirectory">{{ quickCdBrowsing ? text('正在打开…', 'Opening…') : text('浏览文件夹…', 'Browse folders…') }}</button>
       <button v-else type="button" class="quick-cd-browse" :disabled="!connected || !controlled || quickCdShell !== 'posix'" :aria-expanded="quickCdRemoteBrowseOpen" @click="quickCdRemoteBrowseOpen = !quickCdRemoteBrowseOpen">{{ text('浏览远程目录…', 'Browse remote folders…') }}</button>
       <label v-if="session.profile === 'ssh'">{{ text('远端 Shell 语法', 'Remote shell syntax') }}
         <select v-model="quickCdShell" :aria-label="text('远端 Shell 语法', 'Remote shell syntax')">
@@ -870,7 +869,7 @@ onBeforeUnmount(() => {
           <option value="cmd">CMD</option>
         </select>
       </label>
-      <label v-if="quickCdLocalProfile()" class="quick-cd-check">
+      <label v-if="supportsLocalDefaultDirectory(session.profile)" class="quick-cd-check">
         <input v-model="quickCdSaveDefault" type="checkbox" />
         {{ text('同时设为新本地会话默认目录', 'Also use as the default directory for new local sessions') }}
       </label>

@@ -39,14 +39,22 @@ export function formatCdCommand(rawPath: string, shell: CdShell): string {
   throw new Error('Unsupported shell syntax')
 }
 
+export function supportsLocalDefaultDirectory(profile: string): boolean {
+  return profile === 'powershell' || profile === 'cmd' || profile === 'bash' || profile === 'shell'
+}
+
+export function supportsNativeFolderPicker(profile: string): boolean {
+  return supportsLocalDefaultDirectory(profile) || profile === 'wsl'
+}
+
 export function localDefaultDirectoryAllowed(profile: string, path: string, windows: boolean): boolean {
-  if (!['powershell', 'cmd', 'bash', 'shell'].includes(profile) || path.length > 512) return false
+  if (!supportsLocalDefaultDirectory(profile) || path.length > 512) return false
   return windows ? /^(?:[A-Za-z]:[\\/]|\\\\[^\\/]+[\\/][^\\/]+)/.test(path) : path.startsWith('/')
 }
 // The native dialog only browses local folders. WSL and Git Bash need their
 // default Windows-drive mount convention, not a literal Windows path.
 export function directoryFromNativePicker(profile: string, path: string, windows: boolean): string {
-  if (!['powershell', 'cmd', 'bash', 'wsl', 'shell'].includes(profile)) {
+  if (!supportsNativeFolderPicker(profile)) {
     throw new Error('The native folder picker cannot browse remote SSH directories')
   }
   if (!path || path.length > 2048 || /[\x00-\x1f\x7f-\x9f\u2028\u2029\u202a-\u202e\u2066-\u2069]/u.test(path)) {

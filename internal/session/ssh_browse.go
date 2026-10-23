@@ -108,11 +108,8 @@ func sshBrowseCommand(path string) (string, error) {
 	if len(path) > 2048 || !utf8.ValidString(path) {
 		return "", errors.New("invalid remote directory")
 	}
-	for _, char := range path {
-		if char < 0x20 || char == 0x7f || (char >= 0x80 && char <= 0x9f) ||
-			(char >= 0x202a && char <= 0x202e) || (char >= 0x2066 && char <= 0x2069) {
-			return "", errors.New("remote directory contains control characters")
-		}
+	if containsRemoteControls(path) {
+		return "", errors.New("remote directory contains control characters")
 	}
 	if path != "." && !strings.HasPrefix(path, "/") {
 		return "", errors.New("remote directory must be absolute")
