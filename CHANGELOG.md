@@ -8,6 +8,12 @@ This file records shipped desktop features, fixes, platform support, and compati
 
 ### 简体中文
 
+### English
+
+## [0.0.7] - 2026-10-24
+
+### 简体中文
+
 **新增**
 - 托管终端 Quick CD 提供原生本地文件夹选择和独立的只读 SSH 远程目录浏览，也可手动输入路径；支持可配置快捷键及 Windows 盘符到默认 WSL/Git Bash 挂载路径的转换。命令仅插入、不自动执行，本地路径可设为新会话默认目录。
 
