@@ -32,6 +32,11 @@ jobs:
             libgtk-4-dev libwebkitgtk-6.0-dev libayatana-appindicator3-dev pkg-config gcc nano
       - name: Check bilingual release generation
         run: node --test scripts/release-notes.test.mjs scripts/release-downloads.test.mjs
+      - name: Check documentation and PR collaboration files
+        run: |
+          node --test scripts/check-docs.test.mjs
+          node scripts/check-docs.mjs
+          node .github/engineering/scripts/sync-pr.mjs --check .
       - name: Install frontend dependencies
         run: npm --prefix frontend ci
       - name: Run all frontend tests
@@ -60,6 +65,11 @@ jobs:
           cache-dependency-path: frontend/package-lock.json
       - name: Check bilingual release generation
         run: node --test scripts/release-notes.test.mjs scripts/release-downloads.test.mjs
+      - name: Check documentation and PR collaboration files
+        run: |
+          node --test scripts/check-docs.test.mjs
+          node scripts/check-docs.mjs
+          node .github/engineering/scripts/sync-pr.mjs --check .
       - name: Install frontend dependencies
         run: npm --prefix frontend ci
       - name: Test frontend preferences, themes, shortcuts and layouts

@@ -135,6 +135,16 @@ func (s *SessionService) Reconnect() ([]session.Info, error) {
 	return current, nil
 }
 
+// BrowseSSHDirectories performs a separate, read-only noninteractive SSH
+// request using immutable connection metadata from the managed daemon session.
+func (s *SessionService) BrowseSSHDirectories(id, directory string) (session.SSHDirectoryListing, error) {
+	client, err := s.backend()
+	if err != nil {
+		return session.SSHDirectoryListing{}, err
+	}
+	return client.BrowseSSHDirectories(id, directory)
+}
+
 // SetUILanguage changes only the GUI's native menu; it never touches the
 // session daemon or any running PTY. The caller sends an effective locale,
 // after resolving the UI's "follow system" preference in the WebView.

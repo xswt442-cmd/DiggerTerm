@@ -3,7 +3,7 @@ import { defineAsyncComponent, nextTick, onBeforeUnmount, onMounted, ref, watch 
 import { Terminal } from '@xterm/xterm'
 import { FitAddon } from '@xterm/addon-fit'
 import type { ISearchOptions, SearchAddon as SearchAddonInstance } from '@xterm/addon-search'
-import { Browser } from '@wailsio/runtime'
+import { Browser, Dialogs } from '@wailsio/runtime'
 import { Events } from '@wailsio/runtime'
 import { ReadText, WriteText } from '../../bindings/github.com/xswt442-cmd/DiggerTerm/internal/desktop/clipboardservice'
 import { Resize, Snapshot, Write } from '../../bindings/github.com/xswt442-cmd/DiggerTerm/internal/desktop/sessionservice'
@@ -14,12 +14,15 @@ import { decideTerminalShortcut } from '../terminalShortcuts'
 import { terminalColors } from '../userThemes'
 import { matchBinding, type Binding } from '../keybindings'
 import { queueSessionOperation, updateAttachment } from '../terminalAttachment'
+import { queueAcceptedTerminalInput } from '../sessionQueue'
+import { cdShellForProfile, formatCdCommand, localDefaultDirectoryAllowed, directoryFromNativePicker, supportsLocalDefaultDirectory, supportsNativeFolderPicker, type CdShell } from '../quickCd'
 import { sliceOutput } from '../terminalReplay'
 import { createExplicitWebLinkActivator, validateExternalWebURL } from '../externalLinks'
 import { withTerminalSearchSupport } from '../terminalSearch'
 import type { PositionedQuickSelectCandidate } from '../quickSelect'
 import TerminalSearch from './TerminalSearch.vue'
 const QuickSelectOverlay = defineAsyncComponent(() => import('./QuickSelectOverlay.vue'))
+const SSHDirectoryBrowser = defineAsyncComponent(() => import('./SSHDirectoryBrowser.vue'))
 import '@xterm/xterm/css/xterm.css'
 
 const props = defineProps<{
@@ -42,9 +45,10 @@ const props = defineProps<{
   locale: Locale
   bindings: Binding[]
   toolsEnabled: boolean
-  toolRequest: { sequence: number; action: 'search' | 'quickSelect' } | null
+  defaultDirectory: string
+  toolRequest: { sequence: number; action: 'search' | 'quickSelect' | 'quickCd' } | null
 }>()
-const emit = defineEmits<{ error: [message: string] }>()
+const emit = defineEmits<{ error: [message: string]; setDefaultDirectory: [path: string] }>()
 const container = ref<HTMLElement | null>(null)
 const copyMode = ref(false)
 const copyText = ref('')
@@ -64,6 +68,16 @@ const searchQuery = ref('')
 const searchCaseSensitive = ref(false)
 const searchResultIndex = ref(-1)
 const searchResultCount = ref(0)
+const quickCdOpen = ref(false)
+const quickCdPath = ref('')
+const quickCdShell = ref<CdShell>('posix')
+const quickCdSaveDefault = ref(false)
+const quickCdError = ref('')
+const quickCdBrowsing = ref(false)
+const quickCdRemoteBrowseOpen = ref(false)
+const quickCdPicked = ref<{ converted: string; native: string } | null>(null)
+const isWindows = typeof navigator !== 'undefined' && /Windows/i.test(navigator.userAgent)
+watch(quickCdShell, shell => { if (shell !== 'posix') quickCdRemoteBrowseOpen.value = false })
 const quickSelectOpen = ref(false)
 const quickSelectLoading = ref(false)
 const quickSelectRange = ref<'visible' | 'buffer'>('visible')
@@ -117,7 +131,6 @@ let offSelection: { dispose(): void } | undefined
 let pending: OutputEvent[] = []
 let replaying = true
 let lastOffset = 0
-let writeQueue: Promise<void> = Promise.resolve()
 let lastSize = ''
 
 function decodeBase64(data: string): Uint8Array {
@@ -241,8 +254,96 @@ async function scanQuickSelect() {
   }
 }
 
+async function openQuickCd() {
+  if (!props.active || !props.focused || !props.connected || !controlled.value ||
+      recovering.value || replayError.value || props.session.streamClosed || props.session.status !== 'running') return
+  if (searchOpen.value) await closeSearch()
+  if (quickSelectOpen.value) await closeQuickSelect()
+  if (copyMode.value) await toggleCopyMode()
+  quickCdShell.value = cdShellForProfile(props.session.profile)
+  quickCdPath.value = supportsLocalDefaultDirectory(props.session.profile) ? props.defaultDirectory : ''
+  if (isWindows && props.session.profile === 'bash' && quickCdPath.value) {
+    try { quickCdPath.value = directoryFromNativePicker('bash', quickCdPath.value, true) }
+    catch { quickCdPath.value = '' }
+  }
+  quickCdPicked.value = null
+  quickCdRemoteBrowseOpen.value = false
+  quickCdSaveDefault.value = false
+  quickCdError.value = ''
+  quickCdOpen.value = true
+  await nextTick()
+  quickCdInput.value?.focus()
+}
+
+const quickCdInput = ref<HTMLInputElement | null>(null)
+function selectRemoteDirectory(directory: string) {
+  if (!quickCdOpen.value || props.session.profile !== 'ssh') return
+  quickCdPath.value = directory
+  quickCdRemoteBrowseOpen.value = false
+  quickCdError.value = ''
+  void nextTick(() => quickCdInput.value?.focus())
+}
+watch(quickCdPath, (path) => {
+  if (quickCdPicked.value?.converted !== path) quickCdPicked.value = null
+})
+
+async function browseQuickCdDirectory() {
+  if (!quickCdOpen.value || quickCdBrowsing.value || !props.active || !props.focused ||
+      !supportsNativeFolderPicker(props.session.profile) || !props.connected || !controlled.value) return
+  const initialSessionID = props.session.id
+  quickCdBrowsing.value = true
+  quickCdError.value = ''
+  try {
+    const selected = await Dialogs.OpenFile({
+      Title: text('选择本机文件夹', 'Choose local folder'),
+      CanChooseDirectories: true,
+      CanChooseFiles: false,
+      AllowsMultipleSelection: false,
+    })
+    if (!quickCdOpen.value || props.session.id !== initialSessionID || !selected) return
+    const converted = directoryFromNativePicker(props.session.profile, selected, isWindows)
+    quickCdPath.value = converted
+    quickCdPicked.value = { converted, native: selected }
+  } catch (error) {
+    if (quickCdOpen.value) quickCdError.value = String(error)
+  } finally {
+    quickCdBrowsing.value = false
+    if (quickCdOpen.value) await nextTick(() => quickCdInput.value?.focus())
+  }
+}
+function closeQuickCd() {
+  quickCdOpen.value = false
+  quickCdRemoteBrowseOpen.value = false
+  quickCdPicked.value = null
+  quickCdError.value = ''
+  void nextTick(() => focus())
+}
+
+async function insertQuickCd() {
+  if (!quickCdOpen.value || quickCdBrowsing.value || !controlled.value || !props.connected || props.session.streamClosed ||
+      props.session.status !== 'running' || recovering.value || replayError.value) return
+  try {
+    const command = formatCdCommand(quickCdPath.value, quickCdShell.value)
+    const defaultPath = quickCdPicked.value?.converted === quickCdPath.value ? quickCdPicked.value.native : quickCdPath.value
+    if (quickCdSaveDefault.value && !localDefaultDirectoryAllowed(props.session.profile, defaultPath, isWindows)) {
+      throw new Error(text('默认目录必须是当前系统上的绝对本地路径（最多 512 字符）。', 'Default directory must be an absolute local OS path (up to 512 characters).'))
+    }
+    // Deliberately omit Enter: the current foreground program might be vim
+    // or an Agent CLI, rather than a shell prompt. Only the user can execute.
+    await queueAcceptedTerminalInput(props.session.id, command, Write)
+    if (quickCdSaveDefault.value) emit('setDefaultDirectory', defaultPath)
+    quickCdOpen.value = false
+    notice.value = text('已插入 cd 命令；请确认处于 Shell 提示符后按 Enter。', 'CD command inserted. At a shell prompt, press Enter to run it.')
+    await nextTick()
+    focus()
+  } catch (error) {
+    quickCdError.value = String(error)
+  }
+}
+
 async function openQuickSelect() {
   if (quickSelectOpen.value || !props.focused || !controlled.value || recovering.value || !terminal) return
+  if (quickCdOpen.value) closeQuickCd()
   if (searchOpen.value) await closeSearch()
   if (copyMode.value) await toggleCopyMode()
   quickSelectOpen.value = true
@@ -619,6 +720,7 @@ watch(() => props.padding, async () => {
 
 watch(() => props.toolsEnabled, enabled => {
   if (enabled) return
+  if (quickCdOpen.value) closeQuickCd()
   if (searchOpen.value) void closeSearch()
   if (quickSelectOpen.value) void closeQuickSelect()
   if (copyMode.value) void toggleCopyMode()
@@ -626,6 +728,7 @@ watch(() => props.toolsEnabled, enabled => {
 watch(() => props.toolRequest, request => {
   if (!request || !props.focused || !props.toolsEnabled) return
   if (request.action === 'search') void openSearch()
+  else if (request.action === 'quickCd') void openQuickCd()
   else void openQuickSelect()
 })
 
@@ -642,6 +745,7 @@ watch(() => props.focused, async (focused) => {
     if (!document.activeElement?.matches('select,input,textarea:not(.xterm-helper-textarea)')) focus()
   } else {
     copyMenu.value = null
+    if (quickCdOpen.value) closeQuickCd()
     terminal?.blur()
   }
 })
@@ -688,10 +792,9 @@ onMounted(async () => {
     if (!props.connected || props.session.streamClosed || replayError.value || !controlled.value || props.session.status !== 'running') return
     // onData also carries live terminal protocol replies, which background
     // panes must send. DOM key/paste handling separately guards user focus.
-    writeQueue = writeQueue
-      .then(() => queueSessionOperation(props.session.id, async () => {
-        if (terminal === term && props.connected && !props.session.streamClosed && controlled.value && props.session.status === 'running') await Write(props.session.id, input)
-      }))
+    // Input accepted here is delivered before the pane's queued detach, even
+    // when Vue unmounts this component before the daemon can acknowledge it.
+    void queueAcceptedTerminalInput(props.session.id, input, Write)
       .catch((err: unknown) => emit('error', String(err)))
   })
 
@@ -747,10 +850,37 @@ onBeforeUnmount(() => {
       <button type="button" :disabled="!controlled || recovering" :aria-pressed="copyMode" @click="toggleCopyMode">{{ copyMode ? text('退出复制模式', 'Exit copy mode') : text('复制模式', 'Copy mode') }}</button>
       <button type="button" :disabled="!connected || recovering" @click="reconnectView">{{ text('重新回放', 'Replay') }}</button>
       <button type="button" :disabled="!focused" :aria-pressed="searchOpen" @click="toggleSearch">{{ text('搜索', 'Search') }}</button>
+      <button type="button" :disabled="!focused || !connected || !controlled || recovering || !!replayError || session.streamClosed || session.status !== 'running'" :aria-expanded="quickCdOpen" @click="openQuickCd">{{ text('快速 cd', 'Quick CD') }}</button>
       <button type="button" :disabled="!focused || !controlled || recovering" :aria-pressed="quickSelectOpen" @click="toggleQuickSelect">{{ text('快速选择', 'Quick Select') }}</button>
       <button v-if="selectedWebURL" type="button" @click="openSelectedWebLink">{{ text('打开所选链接…', 'Open selected link…') }}</button>
       <small>{{ text('可尝试 Shift 拖选（macOS Option）；无效时使用复制模式。', 'Try Shift-drag (Option on macOS); use Copy mode if unavailable.') }}</small>
     </div>
+    <form v-if="quickCdOpen" class="quick-cd-form" :aria-label="text('快速更改目录', 'Quick directory change')" @submit.prevent="insertQuickCd" @keydown.esc.stop.prevent="closeQuickCd">
+      <label>{{ text('目标目录（不会自动执行）', 'Target directory (not automatically executed)') }}
+        <input ref="quickCdInput" v-model="quickCdPath" type="text" spellcheck="false" autocomplete="off" maxlength="2048"
+          :placeholder="text('输入终端所在系统的目录路径', 'Enter a path on the terminal host')" :aria-label="text('目标目录', 'Directory path')" />
+      </label>
+      <button v-if="supportsNativeFolderPicker(session.profile)" type="button" class="quick-cd-browse" :disabled="quickCdBrowsing || !connected || !controlled" @click="browseQuickCdDirectory">{{ quickCdBrowsing ? text('正在打开…', 'Opening…') : text('浏览文件夹…', 'Browse folders…') }}</button>
+      <button v-else type="button" class="quick-cd-browse" :disabled="!connected || !controlled || quickCdShell !== 'posix'" :aria-expanded="quickCdRemoteBrowseOpen" @click="quickCdRemoteBrowseOpen = !quickCdRemoteBrowseOpen">{{ text('浏览远程目录…', 'Browse remote folders…') }}</button>
+      <label v-if="session.profile === 'ssh'">{{ text('远端 Shell 语法', 'Remote shell syntax') }}
+        <select v-model="quickCdShell" :aria-label="text('远端 Shell 语法', 'Remote shell syntax')">
+          <option value="posix">POSIX (bash / zsh / sh)</option>
+          <option value="powershell">PowerShell</option>
+          <option value="cmd">CMD</option>
+        </select>
+      </label>
+      <label v-if="supportsLocalDefaultDirectory(session.profile)" class="quick-cd-check">
+        <input v-model="quickCdSaveDefault" type="checkbox" />
+        {{ text('同时设为新本地会话默认目录', 'Also use as the default directory for new local sessions') }}
+      </label>
+      <p class="quick-cd-help">{{ session.profile === 'ssh' ? text('SSH 的目录在远程服务器上，请手动输入远程路径。不会自动执行命令。', 'SSH directories live on the remote server: enter a remote path manually. The command is not auto-executed.') : session.profile === 'wsl' && isWindows ? text('文件夹窗口浏览 Windows 目录，使用默认 WSL 挂载规则转换为 /mnt/盘符/…；自定义挂载路径需手动输入。', 'Browse Windows folders; drive paths are converted using default WSL /mnt/drive mounts. Enter paths manually if automount differs.') : text('使用系统文件夹窗口选择本机目录；命令不会自动执行。', 'Select a local folder in the system dialog; the command is not auto-executed.') }} {{ text('请在空白 Shell 提示符下插入，确认后自行按 Enter；不要在 vim 或 Agent 中使用。', 'Insert only at an empty shell prompt, then press Enter yourself; do not use it inside vim or an Agent.') }}</p>
+      <p v-if="quickCdError" role="alert" class="quick-cd-error">{{ quickCdError }}</p>
+      <SSHDirectoryBrowser v-if="quickCdRemoteBrowseOpen && session.profile === 'ssh'" :session-id="session.id" :initial-path="quickCdPath" :locale="locale" @choose="selectRemoteDirectory" @close="quickCdRemoteBrowseOpen = false" />
+      <div class="quick-cd-buttons">
+        <button type="submit" :disabled="!quickCdPath || quickCdBrowsing || !connected || !controlled || recovering">{{ text('插入命令', 'Insert command') }}</button>
+        <button type="button" @click="closeQuickCd">{{ text('取消', 'Cancel') }}</button>
+      </div>
+    </form>
     <TerminalSearch v-if="searchOpen" :locale="locale" :query="searchQuery" :case-sensitive="searchCaseSensitive"
       :result-index="searchResultIndex" :result-count="searchResultCount"
       @update:query="searchQuery = $event" @update:case-sensitive="searchCaseSensitive = $event"
@@ -797,6 +927,15 @@ onBeforeUnmount(() => {
   background: var(--canvas);
 }
 .terminal-content { min-height: 0; flex: 1; position: relative; }
+.quick-cd-form { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 9px; background: var(--surface); border-bottom: 1px solid var(--accent); color: var(--text); font-size: 12px; }
+.quick-cd-form label { display: flex; align-items: center; gap: 6px; }
+.quick-cd-form input[type="text"], .quick-cd-form select { min-width: 190px; max-width: min(420px, 75vw); padding: 5px 7px; border: 1px solid var(--border); border-radius: var(--dt-radius, 4px); color: var(--text); background: var(--canvas); }
+.quick-cd-form input[type="text"] { width: min(360px, 65vw); }
+.quick-cd-check { white-space: nowrap; }
+.quick-cd-help { width: 100%; margin: 0; color: var(--muted); line-height: 1.45; }
+.quick-cd-error { width: 100%; margin: 0; color: var(--negative); }
+.quick-cd-buttons { display: flex; gap: 6px; }
+.quick-cd-buttons button { background: var(--canvas); color: var(--text); border: 1px solid var(--border); border-radius: var(--dt-radius, 4px); padding: 5px 9px; cursor: pointer; }
 .xterm-host { position: absolute; inset: 0; overflow: hidden; }
 .terminal-actions { display: flex; align-items: center; flex-wrap: nowrap; flex: 0 0 28px; min-height: 28px; gap: 4px; padding: 2px 6px; border-bottom: 1px solid var(--border-faint); }
 .terminal-actions button { flex: 0 0 auto; color: var(--text); background: var(--surface); border: 1px solid var(--border); border-radius: var(--dt-radius, 4px); font-size: 10px; line-height: 1.2; padding: 2px 5px; white-space: nowrap; }

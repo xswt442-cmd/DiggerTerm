@@ -1,5 +1,6 @@
 # Local scratch
 /testplace/
+/Microsoft/
 
 # Frontend
 node_modules/

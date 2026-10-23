@@ -30,6 +30,7 @@ Checksums: [SHA256SUMS](https://github.com/xswt442-cmd/DiggerTerm/releases/downl
 
 - **Multiple terminals:** sidebar navigation, search, rename, nested horizontal/vertical splits, draggable dividers and layout restore; closing a pane keeps its session running.
 - **Local and remote shells:** PowerShell, CMD, Git Bash (requires Git for Windows), WSL, Linux Bash, and SSH.
+- **Quick CD:** use the Quick CD button or `Ctrl+Shift+G` in a managed terminal. Local sessions can choose a folder through the native OS dialog; SSH sessions have a separate read-only remote directory browser. Paths may also be typed manually. Quoted `cd` commands are inserted without automatic execution; local paths can become the new-session default.
 - **Persistent sessions:** the daemon keeps sessions running after the GUI exits; reconnect on restart.
 - **Dig process tree:** browse discovered shells, agents and descendants by Windows/WSL distribution, expand and filter the tree, and inspect read-only details without taking control.
 - **Preferences:** dark themes, fonts, sizes, language, default shell, and working directory.
@@ -42,7 +43,13 @@ Copy [example JSON/CSS files](examples/themes/) into `DiggerTerm/` under your OS
 
 Windows requires WebView2; binaries are unsigned. Linux packages are built for Ubuntu 24.04; other distributions may require matching system dependencies such as GTK4 and WebKitGTK 6. Sessions are not guaranteed to survive daemon crashes or system reboots.
 
-Settings provide manual reconnection and session exit details. New features require a matching daemon version; finish existing sessions before stopping the old daemon and opening the updated app. Reconnection restores recent terminal output; long-running full-screen applications may not be fully restored.
+Quick CD inserts a quoted command into the managed terminal without automatically sending Enter. Insert it only at an empty shell prompt, then press Enter yourself; do not use it while `vim`, an Agent, or another foreground application is active. Dig's read-only external processes do not support Quick CD.
+
+The local folder picker converts Windows drive folders to default WSL `/mnt/c/...` or Git Bash `/c/...` paths. Custom WSL mounts and Linux-only paths require manual entry. The SSH directory browser uses a separate OpenSSH connection and requires a POSIX-compatible remote shell plus noninteractive key/SSH Agent authentication, preserving `ssh_config` and host-key verification. Password-only or non-POSIX SSH sessions can still enter paths manually (with the appropriate shell syntax).
+
+Settings provide manual reconnection and session exit details. A running managed session allows only one GUI controller; another GUI can inspect it but cannot terminate it while controlled elsewhere. Accepted terminal input is sent in order before the pane detaches. IPC requests have timeouts; if creation or termination times out, the operation may still complete, so refresh the session list before retrying.
+
+New features require a matching daemon version; finish existing sessions before stopping the old daemon and opening the updated app. Reconnection restores recent terminal output; long-running full-screen applications may not be fully restored.
 
 ## License
 

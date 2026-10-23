@@ -35,7 +35,7 @@ const {
   openThemeDirectory,
 } = settings
 const commandPaletteOpen = ref(false)
-const paletteToolRequest = ref<{ sequence: number; action: 'search' | 'quickSelect' } | null>(null)
+const paletteToolRequest = ref<{ sequence: number; action: 'search' | 'quickSelect' | 'quickCd' } | null>(null)
 let nextPaletteToolRequest = 0
 
 const kindLabel = (kind: string) => t(kind === 'terminal' ? 'kindTerminal' : kind === 'agent' ? 'kindAgent' : kind === 'descendant' ? 'kindDescendant' : 'kindOther')
@@ -56,7 +56,8 @@ function workspaceKey(event: KeyboardEvent) {
     event.preventDefault(); event.stopPropagation(); settingsOpen.value = true
   } else if (action && !selectedExternalKey.value) {
     event.preventDefault(); event.stopPropagation()
-    if (action === 'splitRight') splitPane('horizontal')
+    if (action === 'quickCd') requestTerminalTool('quickCd')
+    else if (action === 'splitRight') splitPane('horizontal')
     else if (action === 'splitDown') splitPane('vertical')
     else if (action === 'focusNextPane') focusNextPane()
     else if (action === 'closePane') closePane(layout.value.focusedPaneId)
@@ -266,6 +267,7 @@ async function refreshPaletteCommands() {
     inManagedWorkspace,
     paneCount: paneLeaves.value.length,
     canUseTerminalTools: !!selectedId.value,
+    canUseQuickCd: !!activeSession.value && activeSession.value.status === 'running' && !activeSession.value.streamClosed,
     observeEnabled: preferences.value.observeEnabled,
     observationBusy: refreshingExternal.value,
     actions: {
@@ -287,6 +289,7 @@ async function refreshPaletteCommands() {
       closePane: () => closePane(layout.value.focusedPaneId),
       search: () => requestTerminalTool('search'),
       quickSelect: () => requestTerminalTool('quickSelect'),
+      quickCd: () => requestTerminalTool('quickCd'),
       refreshDig: () => refreshObserved(),
     },
   })
@@ -314,7 +317,7 @@ async function executePaletteCommand(id: string) {
   if (current?.enabled) await current.run()
 }
 
-function requestTerminalTool(action: 'search' | 'quickSelect') {
+function requestTerminalTool(action: 'search' | 'quickSelect' | 'quickCd') {
   paletteToolRequest.value = { sequence: ++nextPaletteToolRequest, action }
 }
 
@@ -899,6 +902,7 @@ onBeforeUnmount(() => {
           <button type="button" @click="splitPane('horizontal')">{{ locale === 'zh' ? '向右分屏' : 'Split right' }}</button>
           <button type="button" @click="splitPane('vertical')">{{ locale === 'zh' ? '向下分屏' : 'Split down' }}</button>
           <button type="button" @click="focusNextPane">{{ locale === 'zh' ? '下一面板' : 'Next pane' }}</button>
+          <button type="button" :disabled="!daemonConnected || activeSession?.status !== 'running' || !!activeSession?.streamClosed" @click="requestTerminalTool('quickCd')">{{ locale === 'zh' ? '快速 cd' : 'Quick CD' }}</button>
           <button type="button" :aria-expanded="commandPaletteOpen" @click="openCommandPalette">{{ locale === 'zh' ? '命令' : 'Commands' }}</button>
         </div>
         <span class="status" :class="{ live: daemonConnected && activeSession?.status === 'running' && !activeSession.streamClosed }">
@@ -933,7 +937,8 @@ onBeforeUnmount(() => {
                 :right-click-selects-word="preferences.rightClickSelectsWord"
                 :padding="preferences.terminalPadding"
                 :colors="palette.terminal" :theme-revision="themeRevision" :locale="locale" :bindings="bindings"
-                :tools-enabled="!commandPaletteOpen" :tool-request="paletteToolRequest" @error="reportError" />
+                :tools-enabled="!commandPaletteOpen" :tool-request="paletteToolRequest" :default-directory="preferences.defaultDirectory"
+                @set-default-directory="preferences.defaultDirectory = $event" @error="reportError" />
               <p v-else-if="sessions.length > 0" class="pane-placeholder">{{ locale === 'zh' ? '从侧栏或上方选择托管会话。关闭面板仅分离视图。' : 'Choose a managed session here or in the sidebar. Closing a pane only detaches its view.' }}</p>
             </div>
           </template>

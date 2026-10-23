@@ -24,13 +24,14 @@ type Server struct {
 	attachmentMu sync.Mutex
 	leases       map[string]*sessionLease
 	observeSlots chan struct{}
+	browseSlots  chan struct{}
 	observeScan  func(context.Context, []int) (observe.Snapshot, error)
 }
 
 func NewServer(listener net.Listener) *Server {
 	s := &Server{
 		listener: listener, peers: make(map[*peer]struct{}), leases: make(map[string]*sessionLease),
-		observeSlots: make(chan struct{}, 1), observeScan: observe.ScanContext,
+		observeSlots: make(chan struct{}, 1), browseSlots: make(chan struct{}, 2), observeScan: observe.ScanContext,
 	}
 	s.manager = session.NewManager(
 		func(output session.Output) { s.broadcast("terminal:output", output) },
@@ -158,6 +159,10 @@ func (s *Server) servePeer(p *peer) {
 		}
 		if req.Method == "observe" {
 			s.startObserve(p, req)
+			continue
+		}
+		if req.Method == "browseSSH" {
+			s.startBrowseSSH(p, req)
 			continue
 		}
 		reply := s.dispatch(p, req)

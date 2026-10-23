@@ -56,6 +56,8 @@ type managed struct {
 	mu                   sync.Mutex
 	writeMu              sync.Mutex
 	info                 Info
+	sshTarget            string // immutable connection metadata; never derived from renameable display name
+	sshPort              int
 	pty                  pty.Pty
 	cmd                  *pty.Cmd
 	history              []byte

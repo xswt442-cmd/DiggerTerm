@@ -12,7 +12,7 @@ const keybindings = await import('data:text/javascript;base64,' + Buffer.from(co
 test('publishes the whitelist and safe platform defaults', () => {
   assert.deepEqual(keybindings.actionDefinitions.map(({ id }) => id), [
     'copySelection', 'pasteClipboard', 'toggleCopyMode', 'splitRight', 'splitDown',
-    'focusNextPane', 'closePane', 'openSettings', 'terminalSearch', 'quickSelect', 'openCommandPalette',
+    'focusNextPane', 'closePane', 'openSettings', 'terminalSearch', 'quickSelect', 'quickCd', 'openCommandPalette',
   ])
   const windows = keybindings.defaultBindings(false)
   const mac = keybindings.defaultBindings(true)
@@ -21,6 +21,7 @@ test('publishes the whitelist and safe platform defaults', () => {
   assert.deepEqual(windows.find((binding) => binding.action === 'pasteClipboard').keys, ['Ctrl+Shift+V', 'Shift+Insert'])
   assert.deepEqual(windows.find((binding) => binding.action === 'terminalSearch').keys, ['Ctrl+Shift+F'])
   assert.deepEqual(windows.find((binding) => binding.action === 'quickSelect').keys, ['Ctrl+Shift+X'])
+  assert.deepEqual(windows.find((binding) => binding.action === 'quickCd').keys, ['Ctrl+Shift+G'])
   assert.deepEqual(windows.find((binding) => binding.action === 'openCommandPalette').keys, ['Ctrl+Shift+P'])
 })
 
@@ -86,7 +87,7 @@ test('allows simultaneous shortcut swaps with final conflict validation', () => 
 })
 
 test('keeps an older user shortcut when it conflicts with a new default action', () => {
-  for (const [key, newAction] of [['F', 'terminalSearch'], ['X', 'quickSelect'], ['P', 'openCommandPalette']]) {
+  for (const [key, newAction] of [['F', 'terminalSearch'], ['X', 'quickSelect'], ['G', 'quickCd'], ['P', 'openCommandPalette']]) {
     const oldConfig = JSON.stringify({ version: 1, bindings: [
       { action: 'splitRight', scope: 'workspace', keys: [`Ctrl+Shift+${key}`] },
     ] })
