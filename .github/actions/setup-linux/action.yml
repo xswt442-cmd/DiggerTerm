@@ -1,11 +1,8 @@
 name: 'Set up Linux build and test environment'
-description: 'Checks out the repository and installs the Go, Node, and GTK4/WebKitGTK6 toolchains.'
+description: 'Installs the Go, Node, and GTK4/WebKitGTK6 toolchains. Run after actions/checkout.'
 runs:
   using: composite
   steps:
-    - uses: actions/checkout@v7
-      with:
-        persist-credentials: false
     - uses: actions/setup-go@v7
       with:
         go-version-file: go.mod
