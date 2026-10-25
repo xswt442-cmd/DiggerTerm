@@ -1,0 +1,24 @@
+name: 'Set up Linux build and test environment'
+description: 'Checks out the repository and installs the Go, Node, and GTK4/WebKitGTK6 toolchains.'
+runs:
+  using: composite
+  steps:
+    - uses: actions/checkout@v7
+      with:
+        persist-credentials: false
+    - uses: actions/setup-go@v7
+      with:
+        go-version-file: go.mod
+        cache: true
+    - uses: actions/setup-node@v7
+      with:
+        node-version: '24'
+        cache: npm
+        cache-dependency-path: frontend/package-lock.json
+    - name: Install GTK4 / WebKitGTK6 build dependencies
+      shell: bash
+      run: |
+        sudo apt-get update
+        sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+          libgtk-4-dev libwebkitgtk-6.0-dev libayatana-appindicator3-dev \
+          libgdk-pixbuf2.0-bin pkg-config gcc nano

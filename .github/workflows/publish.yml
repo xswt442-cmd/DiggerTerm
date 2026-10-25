@@ -1,4 +1,4 @@
-name: Release
+name: publish
 
 on:
   push:
@@ -16,56 +16,40 @@ permissions:
   contents: read
 
 concurrency:
-  group: release-${{ github.ref }}-${{ github.event_name }}
+  group: ${{ github.workflow }}-${{ github.ref }}-${{ github.event_name }}
   cancel-in-progress: false
 
 jobs:
+  verify:
+    uses: ./.github/workflows/verify.yml
+
   windows:
-    name: Windows x64 EXE
+    name: windows x64 exe
     runs-on: windows-latest
     timeout-minutes: 45
     env:
       RELEASE_VERSION: ${{ inputs.version || github.ref_name }}
     steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-go@v7
-        with:
-          go-version-file: go.mod
-          cache: true
-      - uses: actions/setup-node@v7
-        with:
-          node-version: '24'
-          cache: npm
-          cache-dependency-path: frontend/package-lock.json
-
+      - uses: ./.github/actions/setup-windows
       - name: Verify versions and release notes
         run: node scripts/verify-release.mjs "$env:RELEASE_VERSION"
         shell: pwsh
-
       - name: Install frontend
         run: npm --prefix frontend ci
-      - name: Run frontend tests
-        run: npm --prefix frontend test
       - name: Build frontend (Go embeds dist)
         run: npm --prefix frontend run build
-      - name: Go tests and vet
-        run: |
-          go test ./... -count=1
-          go vet ./...
-
       - name: Install pinned Wails CLI
         shell: pwsh
         run: |
           go install github.com/wailsapp/wails/v3/cmd/wails3@v3.0.0-beta.29
           "$(go env GOPATH)\bin" >> $env:GITHUB_PATH
-
       - name: Build Wails Windows production binary
         run: wails3 build
       - name: Package Windows x64 EXE
         shell: pwsh
         run: ./scripts/package-windows-exe.ps1 -Version $env:RELEASE_VERSION -OutputDir dist
       - name: Upload Windows package
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: windows-release
           path: dist/DiggerTerm-*.exe
@@ -74,47 +58,21 @@ jobs:
           compression-level: 0
 
   linux:
-    name: Linux x64 AppImage + DEB
+    name: linux x64 appimage and deb
     runs-on: ubuntu-24.04
     timeout-minutes: 75
     env:
       RELEASE_VERSION: ${{ inputs.version || github.ref_name }}
     steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-go@v7
-        with:
-          go-version-file: go.mod
-          cache: true
-      - uses: actions/setup-node@v7
-        with:
-          node-version: '24'
-          cache: npm
-          cache-dependency-path: frontend/package-lock.json
-
+      - uses: ./.github/actions/setup-linux
       - name: Verify versions and release notes
         run: node scripts/verify-release.mjs "$RELEASE_VERSION"
-
-      - name: Install native GTK4 / WebKitGTK6 dependencies
-        run: |
-          sudo apt-get update
-          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
-            libgtk-4-dev libwebkitgtk-6.0-dev libayatana-appindicator3-dev \
-            libgdk-pixbuf2.0-bin pkg-config gcc nano
-
       - name: Install frontend
         run: npm --prefix frontend ci
-      - name: Frontend tests and build
-        run: |
-          npm --prefix frontend test
-          npm --prefix frontend run build
-      - name: Linux Go tests and vet (includes GNU nano PTY)
-        run: |
-          go test ./... -count=1
-          go vet ./...
-
+      - name: Build frontend (Go embeds dist)
+        run: npm --prefix frontend run build
       - name: Package native Linux AppImage and DEB
         run: bash scripts/package-linux.sh "$RELEASE_VERSION" dist
-
       - name: Verify Linux artifacts and AppImage payload
         run: |
           set -euo pipefail
@@ -130,9 +88,8 @@ jobs:
           test -x "$stage/squashfs-root/usr/bin/diggerterm"
           test -f "$stage/squashfs-root/diggerterm.desktop"
           echo 'AppImage and Debian package structure verified'
-
       - name: Upload Linux packages
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: linux-release
           path: |
@@ -143,7 +100,7 @@ jobs:
           compression-level: 0
 
   verify_artifacts:
-    name: Verify packages and SHA-256
+    name: verify packages and sha-256
     needs: [windows, linux]
     runs-on: ubuntu-24.04
     timeout-minutes: 15
@@ -151,11 +108,13 @@ jobs:
       RELEASE_VERSION: ${{ inputs.version || github.ref_name }}
     steps:
       - uses: actions/checkout@v7
-      - uses: actions/download-artifact@v4
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@v8
         with:
           name: windows-release
           path: dist
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           name: linux-release
           path: dist
@@ -165,7 +124,7 @@ jobs:
           node scripts/verify-release.mjs "$RELEASE_VERSION"
           bash scripts/verify-release-assets.sh "$RELEASE_VERSION" dist
       - name: Upload verified checksums
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: release-checksums
           path: dist/SHA256SUMS
@@ -173,8 +132,8 @@ jobs:
           retention-days: 7
 
   publish:
-    name: Publish verified GitHub release
-    needs: [windows, linux, verify_artifacts]
+    name: publish verified github release
+    needs: [verify, windows, linux, verify_artifacts]
     # No tag means no release; manual workflow_dispatch is always build-only.
     if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-24.04
@@ -186,15 +145,17 @@ jobs:
       RELEASE_VERSION: ${{ github.ref_name }}
     steps:
       - uses: actions/checkout@v7
-      - uses: actions/download-artifact@v4
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@v8
         with:
           name: windows-release
           path: dist
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           name: linux-release
           path: dist
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           name: release-checksums
           path: dist
