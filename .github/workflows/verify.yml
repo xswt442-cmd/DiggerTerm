@@ -71,6 +71,8 @@ jobs:
           $env:DIGGERTERM_REQUIRE_ELEVATED_TEST = '1'
           go test ./internal/winsecurity -run '^TestElevatedPipeRoundTrip$' -v -count=1
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          go test ./internal/session -run '^TestAdministratorSessionInheritsElevation$' -v -count=1
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Install pinned Wails CLI
         shell: pwsh
         run: |
