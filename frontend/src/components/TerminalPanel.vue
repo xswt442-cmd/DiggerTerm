@@ -15,7 +15,7 @@ import { terminalColors } from '../userThemes'
 import { matchBinding, type Binding } from '../keybindings'
 import { queueSessionOperation, updateAttachment } from '../terminalAttachment'
 import { queueAcceptedTerminalInput } from '../sessionQueue'
-import { cdShellForProfile, formatCdCommand, localDefaultDirectoryAllowed, directoryFromNativePicker, supportsLocalDefaultDirectory, supportsNativeFolderPicker, type CdShell } from '../quickCd'
+import { cdShellForProfile, formatCdInput, localDefaultDirectoryAllowed, directoryFromNativePicker, supportsLocalDefaultDirectory, supportsNativeFolderPicker, type CdShell } from '../quickCd'
 import { sliceOutput } from '../terminalReplay'
 import { createExplicitWebLinkActivator, validateExternalWebURL } from '../externalLinks'
 import { withTerminalSearchSupport } from '../terminalSearch'
@@ -74,6 +74,7 @@ const quickCdShell = ref<CdShell>('posix')
 const quickCdSaveDefault = ref(false)
 const quickCdError = ref('')
 const quickCdBrowsing = ref(false)
+const quickCdExecuting = ref(false)
 const quickCdRemoteBrowseOpen = ref(false)
 const quickCdPicked = ref<{ converted: string; native: string } | null>(null)
 const isWindows = typeof navigator !== 'undefined' && /Windows/i.test(navigator.userAgent)
@@ -319,25 +320,25 @@ function closeQuickCd() {
   void nextTick(() => focus())
 }
 
-async function insertQuickCd() {
-  if (!quickCdOpen.value || quickCdBrowsing.value || !controlled.value || !props.connected || props.session.streamClosed ||
+async function executeQuickCd() {
+  if (!quickCdOpen.value || quickCdBrowsing.value || quickCdExecuting.value || !controlled.value || !props.connected || props.session.streamClosed ||
       props.session.status !== 'running' || recovering.value || replayError.value) return
+  quickCdExecuting.value = true
   try {
-    const command = formatCdCommand(quickCdPath.value, quickCdShell.value)
+    const command = formatCdInput(quickCdPath.value, quickCdShell.value)
     const defaultPath = quickCdPicked.value?.converted === quickCdPath.value ? quickCdPicked.value.native : quickCdPath.value
     if (quickCdSaveDefault.value && !localDefaultDirectoryAllowed(props.session.profile, defaultPath, isWindows)) {
       throw new Error(text('默认目录必须是当前系统上的绝对本地路径（最多 512 字符）。', 'Default directory must be an absolute local OS path (up to 512 characters).'))
     }
-    // Deliberately omit Enter: the current foreground program might be vim
-    // or an Agent CLI, rather than a shell prompt. Only the user can execute.
     await queueAcceptedTerminalInput(props.session.id, command, Write)
     if (quickCdSaveDefault.value) emit('setDefaultDirectory', defaultPath)
     quickCdOpen.value = false
-    notice.value = text('已插入 cd 命令；请确认处于 Shell 提示符后按 Enter。', 'CD command inserted. At a shell prompt, press Enter to run it.')
     await nextTick()
     focus()
   } catch (error) {
     quickCdError.value = String(error)
+  } finally {
+    quickCdExecuting.value = false
   }
 }
 
@@ -855,8 +856,8 @@ onBeforeUnmount(() => {
       <button v-if="selectedWebURL" type="button" @click="openSelectedWebLink">{{ text('打开所选链接…', 'Open selected link…') }}</button>
       <small>{{ text('可尝试 Shift 拖选（macOS Option）；无效时使用复制模式。', 'Try Shift-drag (Option on macOS); use Copy mode if unavailable.') }}</small>
     </div>
-    <form v-if="quickCdOpen" class="quick-cd-form" :aria-label="text('快速更改目录', 'Quick directory change')" @submit.prevent="insertQuickCd" @keydown.esc.stop.prevent="closeQuickCd">
-      <label>{{ text('目标目录（不会自动执行）', 'Target directory (not automatically executed)') }}
+    <form v-if="quickCdOpen" class="quick-cd-form" :aria-label="text('快速更改目录', 'Quick directory change')" @submit.prevent="executeQuickCd" @keydown.esc.stop.prevent="closeQuickCd">
+      <label>{{ text('目标目录', 'Target directory') }}
         <input ref="quickCdInput" v-model="quickCdPath" type="text" spellcheck="false" autocomplete="off" maxlength="2048"
           :placeholder="text('输入终端所在系统的目录路径', 'Enter a path on the terminal host')" :aria-label="text('目标目录', 'Directory path')" />
       </label>
@@ -873,11 +874,10 @@ onBeforeUnmount(() => {
         <input v-model="quickCdSaveDefault" type="checkbox" />
         {{ text('同时设为新本地会话默认目录', 'Also use as the default directory for new local sessions') }}
       </label>
-      <p class="quick-cd-help">{{ session.profile === 'ssh' ? text('SSH 的目录在远程服务器上，请手动输入远程路径。不会自动执行命令。', 'SSH directories live on the remote server: enter a remote path manually. The command is not auto-executed.') : session.profile === 'wsl' && isWindows ? text('文件夹窗口浏览 Windows 目录，使用默认 WSL 挂载规则转换为 /mnt/盘符/…；自定义挂载路径需手动输入。', 'Browse Windows folders; drive paths are converted using default WSL /mnt/drive mounts. Enter paths manually if automount differs.') : text('使用系统文件夹窗口选择本机目录；命令不会自动执行。', 'Select a local folder in the system dialog; the command is not auto-executed.') }} {{ text('请在空白 Shell 提示符下插入，确认后自行按 Enter；不要在 vim 或 Agent 中使用。', 'Insert only at an empty shell prompt, then press Enter yourself; do not use it inside vim or an Agent.') }}</p>
       <p v-if="quickCdError" role="alert" class="quick-cd-error">{{ quickCdError }}</p>
       <SSHDirectoryBrowser v-if="quickCdRemoteBrowseOpen && session.profile === 'ssh'" :session-id="session.id" :initial-path="quickCdPath" :locale="locale" @choose="selectRemoteDirectory" @close="quickCdRemoteBrowseOpen = false" />
       <div class="quick-cd-buttons">
-        <button type="submit" :disabled="!quickCdPath || quickCdBrowsing || !connected || !controlled || recovering">{{ text('插入命令', 'Insert command') }}</button>
+        <button type="submit" :disabled="!quickCdPath || quickCdBrowsing || quickCdExecuting || !connected || !controlled || recovering">{{ text('快速 CD', 'Quick CD') }}</button>
         <button type="button" @click="closeQuickCd">{{ text('取消', 'Cancel') }}</button>
       </div>
     </form>
@@ -932,7 +932,6 @@ onBeforeUnmount(() => {
 .quick-cd-form input[type="text"], .quick-cd-form select { min-width: 190px; max-width: min(420px, 75vw); padding: 5px 7px; border: 1px solid var(--border); border-radius: var(--dt-radius, 4px); color: var(--text); background: var(--canvas); }
 .quick-cd-form input[type="text"] { width: min(360px, 65vw); }
 .quick-cd-check { white-space: nowrap; }
-.quick-cd-help { width: 100%; margin: 0; color: var(--muted); line-height: 1.45; }
 .quick-cd-error { width: 100%; margin: 0; color: var(--negative); }
 .quick-cd-buttons { display: flex; gap: 6px; }
 .quick-cd-buttons button { background: var(--canvas); color: var(--text); border: 1px solid var(--border); border-radius: var(--dt-radius, 4px); padding: 5px 9px; cursor: pointer; }

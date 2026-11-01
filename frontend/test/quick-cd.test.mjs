@@ -7,13 +7,21 @@ const source = readFileSync(new URL('../src/quickCd.ts', import.meta.url), 'utf8
 const js = ts.transpileModule(source, {
   compilerOptions: { module: ts.ModuleKind.ES2022, target: ts.ScriptTarget.ES2022 },
 }).outputText
-const { cdShellForProfile, formatCdCommand, localDefaultDirectoryAllowed, directoryFromNativePicker, supportsLocalDefaultDirectory, supportsNativeFolderPicker } =
+const { cdShellForProfile, formatCdCommand, formatCdInput, localDefaultDirectoryAllowed, directoryFromNativePicker, supportsLocalDefaultDirectory, supportsNativeFolderPicker } =
   await import('data:text/javascript;base64,' + Buffer.from(js).toString('base64'))
 
 test('profile selects correct shell quoting and unknown remote defaults to POSIX', () => {
   assert.equal(cdShellForProfile('powershell'), 'powershell')
   assert.equal(cdShellForProfile('cmd'), 'cmd')
   for (const profile of ['wsl', 'ssh', 'bash', 'shell']) assert.equal(cdShellForProfile(profile), 'posix')
+})
+
+test('Quick CD sends one quoted command followed by Enter', () => {
+  for (const shell of ['posix', 'cmd', 'powershell']) {
+    const path = 'folder & safe'
+    assert.equal(formatCdInput(path, shell), formatCdCommand(path, shell) + '\r')
+    assert.throws(() => formatCdInput('bad\ncommand', shell))
+  }
 })
 
 test('PowerShell literal quoting blocks interpolation and handles apostrophes', () => {

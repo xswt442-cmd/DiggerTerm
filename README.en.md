@@ -16,21 +16,13 @@
 
 ## Download
 
-[v0.0.7 · GitHub Release](https://github.com/xswt442-cmd/DiggerTerm/releases/tag/v0.0.7)
-
-| Platform | Package |
-| --- | --- |
-| Windows x64 | [`.exe`](https://github.com/xswt442-cmd/DiggerTerm/releases/download/v0.0.7/DiggerTerm-v0.0.7-windows-amd64.exe) |
-| Linux x64 | [`.AppImage`](https://github.com/xswt442-cmd/DiggerTerm/releases/download/v0.0.7/DiggerTerm-v0.0.7-linux-x86_64.AppImage) |
-| Ubuntu / Debian x64 | [`.deb`](https://github.com/xswt442-cmd/DiggerTerm/releases/download/v0.0.7/DiggerTerm-v0.0.7-linux-amd64.deb) |
-
-Checksums: [SHA256SUMS](https://github.com/xswt442-cmd/DiggerTerm/releases/download/v0.0.7/SHA256SUMS).
+Download the Windows x64, Linux x64, or Ubuntu / Debian x64 packages and SHA-256 checksums from [GitHub Releases](https://github.com/xswt442-cmd/DiggerTerm/releases/latest).
 
 ## Features
 
 - **Multiple terminals:** sidebar navigation, search, rename, nested horizontal/vertical splits, draggable dividers and layout restore; closing a pane keeps its session running.
 - **Local and remote shells:** PowerShell, CMD, Git Bash (requires Git for Windows), WSL, Linux Bash, and SSH.
-- **Quick CD:** use the Quick CD button or `Ctrl+Shift+G` in a managed terminal. Local sessions can choose a folder through the native OS dialog; SSH sessions have a separate read-only remote directory browser. Paths may also be typed manually. Quoted `cd` commands are inserted without automatic execution; local paths can become the new-session default.
+- **Quick CD:** use the Quick CD button or `Ctrl+Shift+G` in a managed terminal. Local sessions can choose a folder through the native OS dialog; SSH sessions have a separate read-only remote directory browser. Paths may also be typed manually. Click Quick CD to send a quoted `cd` command and execute it; local paths can become the new-session default.
 - **Persistent sessions:** the daemon keeps sessions running after the GUI exits; reconnect on restart.
 - **Dig process tree:** browse discovered shells, agents and descendants by Windows/WSL distribution, expand and filter the tree, and inspect read-only details without taking control.
 - **Preferences:** dark themes, fonts, sizes, language, default shell, and working directory.
@@ -41,9 +33,11 @@ Smart **Ctrl+C** copies a terminal selection or interrupts without one; full-scr
 
 Copy [example JSON/CSS files](examples/themes/) into `DiggerTerm/` under your OS user's home directory, then refresh Settings → Appearance. Appearance shows the resolved directory and can open it directly. JSON `name` supplies the display name; optional `custom.css` overrides all themes. Shortcut configuration is stored separately as `keybindings.json` in the same directory.
 
+The Windows installer creates a Start menu shortcut and Explorer folder context menus for the current user. “Open in DiggerTerm” opens a new window with a PowerShell session in the selected folder; on Windows 11 it may appear under “Show more options”. Uninstall removes these entries and retains user data. Finish existing sessions and exit the daemon before upgrading or uninstalling.
+
 Windows requires WebView2; binaries are unsigned. Linux packages are built for Ubuntu 24.04; other distributions may require matching system dependencies such as GTK4 and WebKitGTK 6. Sessions are not guaranteed to survive daemon crashes or system reboots.
 
-Quick CD inserts a quoted command into the managed terminal without automatically sending Enter. Insert it only at an empty shell prompt, then press Enter yourself; do not use it while `vim`, an Agent, or another foreground application is active. Dig's read-only external processes do not support Quick CD.
+Quick CD sends a quoted command and Enter to the managed terminal. Use it only at an empty shell prompt, not while `vim`, an Agent, or another foreground application is active or when the prompt contains existing input. Dig's read-only external processes do not support Quick CD.
 
 The local folder picker converts Windows drive folders to default WSL `/mnt/c/...` or Git Bash `/c/...` paths. Custom WSL mounts and Linux-only paths require manual entry. The SSH directory browser uses a separate OpenSSH connection and requires a POSIX-compatible remote shell plus noninteractive key/SSH Agent authentication, preserving `ssh_config` and host-key verification. Password-only or non-POSIX SSH sessions can still enter paths manually (with the appropriate shell syntax).
 

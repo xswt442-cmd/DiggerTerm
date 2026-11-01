@@ -18,7 +18,8 @@ files=(*)
 [[ "${#files[@]}" == 3 ]] || {
   printf 'Expected exactly 3 installers, found: %s\n' "${files[*]}" >&2; exit 1;
 }
-file "$win" | grep -E 'PE32\+.*x86-64'
+# NSIS uses a 32-bit bootstrap executable for the x64 application.
+file "$win" | grep -E 'PE32.*(Intel 80386|x86-64)'
 file "$image" | grep -E 'ELF 64-bit.*x86-64'
 [[ "$(dpkg-deb --field "$deb" Architecture)" == amd64 ]]
 [[ "$(dpkg-deb --field "$deb" Version)" == "${version#v}" ]]

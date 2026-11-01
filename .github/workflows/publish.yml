@@ -24,7 +24,7 @@ jobs:
     uses: ./.github/workflows/verify.yml
 
   windows:
-    name: windows x64 exe
+    name: windows x64 setup
     runs-on: windows-latest
     timeout-minutes: 45
     env:
@@ -48,9 +48,12 @@ jobs:
           "$(go env GOPATH)\bin" >> $env:GITHUB_PATH
       - name: Build Wails Windows production binary
         run: wails3 build
-      - name: Package Windows x64 EXE
+      - name: Package Windows x64 installer
         shell: pwsh
         run: ./scripts/package-windows-exe.ps1 -Version $env:RELEASE_VERSION -OutputDir dist
+      - name: Verify installer and uninstall
+        shell: pwsh
+        run: ./scripts/test-windows-installer.ps1 -Installer "dist/DiggerTerm-$env:RELEASE_VERSION-windows-amd64.exe"
       - name: Upload Windows package
         uses: actions/upload-artifact@v7
         with:

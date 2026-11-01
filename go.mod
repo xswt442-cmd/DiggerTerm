@@ -8,8 +8,8 @@ require (
 	github.com/tdewolff/parse/v2 v2.8.10
 	github.com/wailsapp/wails/v3 v3.0.0-beta.29
 	golang.design/x/clipboard v0.11.0
-	golang.org/x/crypto v0.53.0
-	golang.org/x/sys v0.46.0
+	golang.org/x/crypto v0.55.0
+	golang.org/x/sys v0.47.0
 )
 
 require (
@@ -24,6 +24,6 @@ require (
 	github.com/u-root/u-root v0.16.0 // indirect
 	golang.design/x/x11 v0.2.0 // indirect
 	golang.org/x/exp/shiny v0.0.0-20250606033433-dcc06ee1d476 // indirect
-	golang.org/x/image v0.41.0 // indirect
+	golang.org/x/image v0.45.0 // indirect
 	golang.org/x/mobile v0.0.0-20250606033058-a2a15c67f36f // indirect
 )

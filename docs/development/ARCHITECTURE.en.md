@@ -17,7 +17,7 @@ DiggerTerm is a Go/Wails 3 desktop terminal using Vue 3/TypeScript and xterm.js 
 
 The GUI is an IPC client of the Daemon. Closing, hiding, or reopening the GUI can leave Daemon-managed sessions alive and reconnectable; terminating the Daemon or the operating system does not preserve active processes. IPC is scoped to the current OS user, and the GUI cannot bypass the Daemon to control terminals directly.
 
-Quick CD quotes the chosen path for PowerShell, CMD, or POSIX and queues the command through the managed terminal's existing input channel without sending Enter. The user executes it at an empty shell prompt. This does not modify another process's working directory. Only local absolute paths can optionally become the default directory for new local sessions; observed external processes have no Quick CD control.
+Quick CD quotes the chosen path for PowerShell, CMD, or POSIX and queues the command and Enter through the managed terminal's existing input channel after the user clicks Quick CD. The user must ensure the terminal is at an empty shell prompt. This does not modify another process's working directory. Only local absolute paths can optionally become the default directory for new local sessions; observed external processes have no Quick CD control.
 
 Local folder selection uses Wails 3's native dialog without Daemon involvement. On Windows, drive paths translate to the default WSL/Git Bash mounts; custom mounts require manual entry.
 
