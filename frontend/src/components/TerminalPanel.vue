@@ -16,6 +16,7 @@ import { matchBinding, type Binding } from '../keybindings'
 import { queueSessionOperation, updateAttachment } from '../terminalAttachment'
 import { queueAcceptedTerminalInput } from '../sessionQueue'
 import { cdShellForProfile, formatCdInput, localDefaultDirectoryAllowed, directoryFromNativePicker, supportsLocalDefaultDirectory, supportsNativeFolderPicker, type CdShell } from '../quickCd'
+import { directoryScope, type DirectoryItem, type WorkspaceLibrary } from '../workspaceLibrary'
 import { sliceOutput } from '../terminalReplay'
 import { createExplicitWebLinkActivator, validateExternalWebURL } from '../externalLinks'
 import { withTerminalSearchSupport } from '../terminalSearch'
@@ -46,9 +47,10 @@ const props = defineProps<{
   bindings: Binding[]
   toolsEnabled: boolean
   defaultDirectory: string
+  library: WorkspaceLibrary
   toolRequest: { sequence: number; action: 'search' | 'quickSelect' | 'quickCd' } | null
 }>()
-const emit = defineEmits<{ error: [message: string]; setDefaultDirectory: [path: string] }>()
+const emit = defineEmits<{ error: [message: string]; setDefaultDirectory: [path: string]; directoryUsed: [item: DirectoryItem]; toggleFavorite: [item: DirectoryItem]; removeRecent: [item: DirectoryItem] }>()
 const container = ref<HTMLElement | null>(null)
 const copyMode = ref(false)
 const copyText = ref('')
@@ -325,13 +327,16 @@ async function executeQuickCd() {
       props.session.status !== 'running' || recovering.value || replayError.value) return
   quickCdExecuting.value = true
   try {
-    const command = formatCdInput(quickCdPath.value, quickCdShell.value)
-    const defaultPath = quickCdPicked.value?.converted === quickCdPath.value ? quickCdPicked.value.native : quickCdPath.value
-    if (quickCdSaveDefault.value && !localDefaultDirectoryAllowed(props.session.profile, defaultPath, isWindows)) {
+    const path = quickCdPath.value
+    const saveDefault = quickCdSaveDefault.value
+    const command = formatCdInput(path, quickCdShell.value)
+    const defaultPath = quickCdPicked.value?.converted === path ? quickCdPicked.value.native : path
+    if (saveDefault && !localDefaultDirectoryAllowed(props.session.profile, defaultPath, isWindows)) {
       throw new Error(text('默认目录必须是当前系统上的绝对本地路径（最多 512 字符）。', 'Default directory must be an absolute local OS path (up to 512 characters).'))
     }
     await queueAcceptedTerminalInput(props.session.id, command, Write)
-    if (quickCdSaveDefault.value) emit('setDefaultDirectory', defaultPath)
+    emit('directoryUsed', { scope: directoryScope(props.session.profile, props.session.id), path })
+    if (saveDefault) emit('setDefaultDirectory', defaultPath)
     quickCdOpen.value = false
     await nextTick()
     focus()
@@ -848,13 +853,16 @@ onBeforeUnmount(() => {
     <div class="terminal-actions">
       <button type="button" :disabled="!controlled || recovering" @click="copySelection">{{ text('复制选区', 'Copy') }}</button>
       <button type="button" :disabled="!connected || session.streamClosed || recovering || !!replayError || !controlled || copyMode || session.status !== 'running'" @click="pasteClipboard">{{ text('粘贴', 'Paste') }}</button>
-      <button type="button" :disabled="!controlled || recovering" :aria-pressed="copyMode" @click="toggleCopyMode">{{ copyMode ? text('退出复制模式', 'Exit copy mode') : text('复制模式', 'Copy mode') }}</button>
-      <button type="button" :disabled="!connected || recovering" @click="reconnectView">{{ text('重新回放', 'Replay') }}</button>
       <button type="button" :disabled="!focused" :aria-pressed="searchOpen" @click="toggleSearch">{{ text('搜索', 'Search') }}</button>
-      <button type="button" :disabled="!focused || !connected || !controlled || recovering || !!replayError || session.streamClosed || session.status !== 'running'" :aria-expanded="quickCdOpen" @click="openQuickCd">{{ text('快速 cd', 'Quick CD') }}</button>
-      <button type="button" :disabled="!focused || !controlled || recovering" :aria-pressed="quickSelectOpen" @click="toggleQuickSelect">{{ text('快速选择', 'Quick Select') }}</button>
+      <details class="terminal-more">
+        <summary>{{ text('更多', 'More') }}</summary>
+        <div class="terminal-more-menu">
+          <button type="button" :disabled="!controlled || recovering" :aria-pressed="copyMode" @click="toggleCopyMode">{{ copyMode ? text('退出复制模式', 'Exit copy mode') : text('复制模式', 'Copy mode') }}</button>
+          <button type="button" :disabled="!connected || recovering" @click="reconnectView">{{ text('重新回放', 'Replay') }}</button>
+          <button type="button" :disabled="!focused || !controlled || recovering" :aria-pressed="quickSelectOpen" @click="toggleQuickSelect">{{ text('快速选择', 'Quick Select') }}</button>
+        </div>
+      </details>
       <button v-if="selectedWebURL" type="button" @click="openSelectedWebLink">{{ text('打开所选链接…', 'Open selected link…') }}</button>
-      <small>{{ text('可尝试 Shift 拖选（macOS Option）；无效时使用复制模式。', 'Try Shift-drag (Option on macOS); use Copy mode if unavailable.') }}</small>
     </div>
     <form v-if="quickCdOpen" class="quick-cd-form" :aria-label="text('快速更改目录', 'Quick directory change')" @submit.prevent="executeQuickCd" @keydown.esc.stop.prevent="closeQuickCd">
       <label>{{ text('目标目录', 'Target directory') }}
@@ -874,6 +882,20 @@ onBeforeUnmount(() => {
         <input v-model="quickCdSaveDefault" type="checkbox" />
         {{ text('同时设为新本地会话默认目录', 'Also use as the default directory for new local sessions') }}
       </label>
+      <details class="quick-cd-library">
+        <summary>{{ text('常用与最近目录', 'Favorites & recent') }}</summary>
+        <div class="directory-list">
+          <button type="button" :disabled="!quickCdPath" @click="emit('toggleFavorite', { scope: directoryScope(session.profile, session.id), path: quickCdPath })">
+            {{ library.favorites.some(item => item.scope === directoryScope(session.profile, session.id) && item.path === quickCdPath) ? text('取消收藏当前目录', 'Unfavorite current path') : text('收藏当前目录', 'Favorite current path') }}
+          </button>
+          <template v-for="item in library.favorites.filter(item => item.scope === directoryScope(session.profile, session.id))" :key="'fav:' + item.path">
+            <span class="directory-entry"><button type="button" :title="item.path" @click="quickCdPath = item.path">★ {{ item.path }}</button><button type="button" :aria-label="text('取消收藏', 'Remove favorite') + ' ' + item.path" @click="emit('toggleFavorite', item)">×</button></span>
+          </template>
+          <template v-for="item in library.recent.filter(item => item.scope === directoryScope(session.profile, session.id) && !library.favorites.some(favorite => favorite.scope === item.scope && favorite.path === item.path))" :key="'recent:' + item.path">
+            <span class="directory-entry"><button type="button" :title="item.path" @click="quickCdPath = item.path">{{ item.path }}</button><button type="button" :aria-label="text('删除记录', 'Remove recent') + ' ' + item.path" @click="emit('removeRecent', item)">×</button></span>
+          </template>
+        </div>
+      </details>
       <p v-if="quickCdError" role="alert" class="quick-cd-error">{{ quickCdError }}</p>
       <SSHDirectoryBrowser v-if="quickCdRemoteBrowseOpen && session.profile === 'ssh'" :session-id="session.id" :initial-path="quickCdPath" :locale="locale" @choose="selectRemoteDirectory" @close="quickCdRemoteBrowseOpen = false" />
       <div class="quick-cd-buttons">
@@ -932,13 +954,20 @@ onBeforeUnmount(() => {
 .quick-cd-form input[type="text"], .quick-cd-form select { min-width: 190px; max-width: min(420px, 75vw); padding: 5px 7px; border: 1px solid var(--border); border-radius: var(--dt-radius, 4px); color: var(--text); background: var(--canvas); }
 .quick-cd-form input[type="text"] { width: min(360px, 65vw); }
 .quick-cd-check { white-space: nowrap; }
+.quick-cd-library { width: 100%; color: var(--muted); }
+.quick-cd-library summary { cursor: pointer; }
+.directory-list { display: flex; flex-wrap: wrap; gap: 4px; max-height: 140px; overflow-y: auto; margin-top: 6px; }
+.directory-entry { display: inline-flex; max-width: 300px; }
+.directory-list button { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text); background: var(--canvas); border: 1px solid var(--border); padding: 4px 6px; }
 .quick-cd-error { width: 100%; margin: 0; color: var(--negative); }
 .quick-cd-buttons { display: flex; gap: 6px; }
 .quick-cd-buttons button { background: var(--canvas); color: var(--text); border: 1px solid var(--border); border-radius: var(--dt-radius, 4px); padding: 5px 9px; cursor: pointer; }
 .xterm-host { position: absolute; inset: 0; overflow: hidden; }
-.terminal-actions { display: flex; align-items: center; flex-wrap: nowrap; flex: 0 0 28px; min-height: 28px; gap: 4px; padding: 2px 6px; border-bottom: 1px solid var(--border-faint); }
+.terminal-actions { position: relative; display: flex; align-items: center; flex-wrap: nowrap; flex: 0 0 28px; min-height: 28px; gap: 4px; padding: 2px 6px; border-bottom: 1px solid var(--border-faint); }
 .terminal-actions button { flex: 0 0 auto; color: var(--text); background: var(--surface); border: 1px solid var(--border); border-radius: var(--dt-radius, 4px); font-size: 10px; line-height: 1.2; padding: 2px 5px; white-space: nowrap; }
-.terminal-actions small { flex: 0 1 auto; min-width: 0; margin-left: auto; overflow: hidden; color: var(--faint); font-size: 9px; text-align: right; text-overflow: ellipsis; white-space: nowrap; }
+.terminal-more summary { cursor: pointer; color: var(--muted); font-size: 10px; padding: 3px 5px; }
+.terminal-more-menu { position: absolute; z-index: 5; top: 100%; display: grid; gap: 4px; padding: 6px; background: var(--surface); border: 1px solid var(--border); border-radius: 4px; }
+.terminal-more-menu button { text-align: left; }
 .copy-notice { color: var(--muted); font-size: 10px; }
 .copy-notice { padding: 4px 8px; }
 .copy-overlay { position: absolute; z-index: 2; inset: 0; display: flex; flex-direction: column; gap: 8px; padding: 8px; background: var(--canvas); }

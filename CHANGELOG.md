@@ -15,6 +15,7 @@ This file records shipped desktop features, fixes, platform support, and compati
 ### 简体中文
 
 **新增**
+- 快速 CD 支持收藏和最近目录；托管会话可添加备注与颜色，本地 Shell 和 SSH 连接可保存会话预设。
 - Windows 开始菜单和文件夹右键菜单支持按需以管理员身份启动；管理员与普通窗口的 Daemon 和会话相互隔离。
 - Windows 安装程序为当前用户添加开始菜单快捷方式及资源管理器文件夹右键入口，在所选目录创建 PowerShell 会话；卸载保留用户数据。
 
@@ -25,6 +26,7 @@ This file records shipped desktop features, fixes, platform support, and compati
 - 更新 Go 图像和加密依赖，修复 VP8L 内存分配及 SSH 源地址限制漏洞。
 
 **改进**
+- 收起终端低频操作和非活动会话的操作按钮，精简日常工作区界面。
 - 快速 CD 选择目录后可直接发送并执行切换目录命令。
 - Linux 发布打包工具固定到指定上游版本并校验 SHA-256。
 - 将验证链整合为 ci 与 publish 共用的可复用 verify 工作流；发布构建不再重复运行测试；检查工作流更名为 ci、发布工作流更名为 publish；ci 支持手动触发并取消非 main 分支的过期并发运行；产物 Action 升级到 Node 24 版本。
@@ -32,6 +34,7 @@ This file records shipped desktop features, fixes, platform support, and compati
 ### English
 
 **Added**
+- Quick CD supports favorite and recent directories; managed sessions can have notes and colors, and local shells and SSH connections can be saved as session presets.
 - Windows Start menu and folder context menu support on-demand administrator launch; elevated and standard windows use separate daemons and sessions.
 - The per-user Windows installer adds a Start menu shortcut and Explorer folder context menu to create a PowerShell session in the selected directory; uninstall preserves user data.
 
@@ -42,6 +45,7 @@ This file records shipped desktop features, fixes, platform support, and compati
 - Updated Go image and crypto dependencies to address VP8L memory allocation and SSH source-address restriction vulnerabilities.
 
 **Improved**
+- Grouped less frequent terminal actions and concealed inactive session actions to simplify the workspace.
 - Quick CD sends and executes the directory change command after a directory is selected.
 - Pinned Linux release packaging tools to specific upstream versions with SHA-256 verification.
 - Consolidated the verification chain into a reusable verify workflow shared by ci and publish; release builds no longer rerun tests; the check workflow is renamed ci and the release workflow publish; ci supports manual dispatch and cancels superseded runs on non-main branches; artifact actions upgraded to Node 24 versions.

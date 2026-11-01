@@ -23,6 +23,7 @@ Download the Windows x64, Linux x64, or Ubuntu / Debian x64 packages and SHA-256
 - **Multiple terminals:** sidebar navigation, search, rename, nested horizontal/vertical splits, draggable dividers and layout restore; closing a pane keeps its session running.
 - **Local and remote shells:** PowerShell, CMD, Git Bash (requires Git for Windows), WSL, Linux Bash, and SSH.
 - **Quick CD:** use the Quick CD button or `Ctrl+Shift+G` in a managed terminal. Local sessions can choose a folder through the native OS dialog; SSH sessions have a separate read-only remote directory browser. Paths may also be typed manually. Click Quick CD to send a quoted `cd` command and execute it; local paths can become the new-session default.
+- **Workspace information:** favorite paths and recall recently sent directories in Quick CD; add notes and colors to sessions. Session presets save a local shell and starting directory or an SSH host and port for later use.
 - **Persistent sessions:** the daemon keeps sessions running after the GUI exits; reconnect on restart.
 - **Dig process tree:** browse discovered shells, agents and descendants by Windows/WSL distribution, expand and filter the tree, and inspect read-only details without taking control.
 - **Preferences:** dark themes, fonts, sizes, language, default shell, and working directory.
@@ -40,6 +41,8 @@ On Windows, use “DiggerTerm (Administrator)” in the Start menu or “Open in
 Windows requires WebView2; binaries are unsigned. Linux packages are built for Ubuntu 24.04; other distributions may require matching system dependencies such as GTK4 and WebKitGTK 6. Sessions are not guaranteed to survive daemon crashes or system reboots.
 
 Quick CD sends a quoted command and Enter to the managed terminal. Use it only at an empty shell prompt, not while `vim`, an Agent, or another foreground application is active or when the prompt contains existing input. Dig's read-only external processes do not support Quick CD.
+
+Favorites, directory history, session notes and colors, and presets are stored in the local GUI. Recent directories record commands sent, not confirmed shell changes; SSH directories are isolated by managed session. SSH presets do not store passwords or automatically change remote directories; WSL presets do not set a Windows starting directory.
 
 The local folder picker converts Windows drive folders to default WSL `/mnt/c/...` or Git Bash `/c/...` paths. Custom WSL mounts and Linux-only paths require manual entry. The SSH directory browser uses a separate OpenSSH connection and requires a POSIX-compatible remote shell plus noninteractive key/SSH Agent authentication, preserving `ssh_config` and host-key verification. Password-only or non-POSIX SSH sessions can still enter paths manually (with the appropriate shell syntax).
 

@@ -18,12 +18,30 @@ import type { Info, Profile } from '../bindings/github.com/xswt442-cmd/DiggerTer
 import type { Process } from '../bindings/github.com/xswt442-cmd/DiggerTerm/internal/observe/models'
 import type { WatchSource } from './dig/watchState'
 import { useSettings } from './composables/useSettings'
+import { loadLibrary, saveLibrary, rememberDirectory, toggleFavorite, markColors, type DirectoryItem, type SessionPreset } from './workspaceLibrary'
+import SessionPresets from './components/SessionPresets.vue'
 
 const CommandPalette = defineAsyncComponent(() => import('./components/CommandPalette.vue'))
 const TerminalPanel = defineAsyncComponent(() => import('./components/TerminalPanel.vue'))
 const errorMessage = ref('')
 function reportError(err: unknown) {
   errorMessage.value = err instanceof Error ? err.message : String(err)
+}
+const library = ref(loadLibrary())
+watch(library, value => {
+  try { saveLibrary(value) } catch { reportError('Unable to save workspace information') }
+}, { deep: true })
+function removeRecent(item: DirectoryItem) {
+  library.value.recent = library.value.recent.filter(x => x.scope !== item.scope || x.path !== item.path)
+}
+function updateMark(id: string, field: 'note' | 'color', event: Event) {
+  const value = (event.target as HTMLInputElement).value
+  if (!library.value.marks[id] && Object.keys(library.value.marks).length >= 500) { reportError('Session information limit reached'); return }
+  const current = library.value.marks[id] ?? { note: '', color: '' }
+  if (field === 'note') current.note = value.replace(/[\x00-\x1f\x7f-\x9f]/gu, '').slice(0, 240)
+  else if (markColors.includes(value as typeof markColors[number])) current.color = value
+  if (!current.note && !current.color) delete library.value.marks[id]
+  else library.value.marks[id] = { ...current }
 }
 const settings = useSettings({ onError: reportError })
 const {
@@ -242,7 +260,7 @@ const {
   activeProcess: activeObserved, activePath: activeObservedPath, activeNode: activeObservedNode,
   classificationLabel,
 } = dig
-const filteredSessions = computed(() => sessions.value.filter((s) => (s.name + ' ' + s.id + ' ' + s.profile + ' ' + s.pid).toLowerCase().includes(query.value.trim().toLowerCase())))
+const filteredSessions = computed(() => sessions.value.filter((s) => (s.name + ' ' + s.id + ' ' + s.profile + ' ' + s.pid + ' ' + (library.value.marks[s.id]?.note ?? '')).toLowerCase().includes(query.value.trim().toLowerCase())))
 const activeSession = computed(() => sessions.value.find((s) => s.id === selectedId.value))
 const activeObservedWatchSource = computed(() => {
   const process = activeObserved.value
@@ -493,6 +511,23 @@ async function createSession() {
   }
 }
 
+async function launchPreset(preset: SessionPreset) {
+  if (!daemonConnected.value || creating.value || !profiles.value.some(p => p.id === preset.profile)) return
+  creating.value = true
+  errorMessage.value = ''
+  try {
+    const info = preset.profile === 'ssh'
+      ? await CreateSSH(preset.target ?? '', preset.port ?? 0, 100, 30)
+      : preset.directory ? await CreateLocal(preset.profile, preset.directory, 100, 30) : await Create(preset.profile, 100, 30)
+    sessions.value = mergeSessions(sessions.value, [info])
+    activityTracker.created(info, focusedTerminalSessionID() === info.id, preferences.value.sessionActivityEnabled)
+    if (preferences.value.activateNewSession || (!selectedId.value && !selectedExternalKey.value)) selectManaged(info.id)
+    try { sessions.value = mergeSessions(sessions.value, [await Rename(info.id, preset.name)]) }
+    catch (error) { reportError(error) }
+  } catch (error) { reportError(error) }
+  finally { creating.value = false }
+}
+
 async function openNewSSHConnection() {
   profileId.value = 'ssh'
   sshTarget.value = ''
@@ -543,6 +578,7 @@ async function removeExited(info: Info) {
   if (info.status === 'running') return
   try {
     await Forget(info.id)
+    delete library.value.marks[info.id]
     sessions.value = sessions.value.filter((s) => s.id !== info.id)
     activityTracker.remove(info.id)
     sanitizeForSessions(sessions.value)
@@ -698,6 +734,9 @@ onBeforeUnmount(() => {
           @click="createSession"
         >{{ creating ? '…' : '+' }}</button>
       </div>
+      <SessionPresets class="session-presets" :presets="library.presets" :profiles="profiles" :locale="locale" :busy="creating" :connected="daemonConnected"
+        :default-profile="profileId" :default-directory="preferences.defaultDirectory"
+        @save="library.presets = [...library.presets.filter(p => p.id !== $event.id), $event]" @remove="library.presets = library.presets.filter(p => p.id !== $event)" @launch="launchPreset" />
       <form v-if="profileId === 'ssh'" class="ssh-connect" :aria-label="t('connect')" @submit.prevent="createSession">
         <input ref="sshTargetInput" v-model.trim="sshTarget" type="text" spellcheck="false" autocomplete="off"
           maxlength="255" :placeholder="t('sshHost')" list="ssh-host-aliases"
@@ -737,7 +776,7 @@ onBeforeUnmount(() => {
               {{ t(query ? 'searchNone' : 'noSessions') }}
             </div>
             <div v-for="s in filteredSessions" :key="s.id" class="session-entry">
-              <div class="session-row" :class="{ selected: selectedId === s.id }">
+              <div class="session-row" :class="[{ selected: selectedId === s.id }, library.marks[s.id]?.color ? 'mark-' + library.marks[s.id]?.color : '']">
                 <template v-if="editingSessionId === s.id">
                   <input v-model="renameDraft" ref="renameInput" class="rename-input" type="text"
                     maxlength="64" :aria-label="t('rename')" :disabled="renaming"
@@ -761,6 +800,7 @@ onBeforeUnmount(() => {
                     <span class="session-meta"><span class="dot" :class="{ running: daemonConnected && s.status === 'running' && !s.streamClosed }" />
                       {{ sessionStatus(s) }}<span v-if="preferences.showPid"> · PID {{ s.pid }}</span>
                     </span>
+                    <span v-if="library.marks[s.id]?.note" class="session-note" :title="library.marks[s.id]?.note">{{ library.marks[s.id]?.note }}</span>
                   </button>
                   <button type="button" class="session-action diagnostic-action" :title="t('sessionDiagnostics')"
                     :aria-label="t('sessionDiagnostics') + ' ' + s.name"
@@ -774,6 +814,12 @@ onBeforeUnmount(() => {
                 </template>
               </div>
               <div v-if="diagnosticsSessionId === s.id" class="session-diagnostics" role="region" :aria-label="t('sessionDiagnostics') + ' ' + s.name">
+                <div v-if="s.status === 'running'" class="session-mark-editor">
+                  <label>{{ locale === 'zh' ? '备注' : 'Note' }}<input :value="library.marks[s.id]?.note ?? ''" maxlength="240" @change="updateMark(s.id, 'note', $event)" /></label>
+                  <label>{{ locale === 'zh' ? '颜色' : 'Color' }}<select :value="library.marks[s.id]?.color ?? ''" @change="updateMark(s.id, 'color', $event)">
+                    <option value="">{{ locale === 'zh' ? '默认' : 'Default' }}</option><option value="blue">{{ locale === 'zh' ? '蓝色' : 'Blue' }}</option><option value="green">{{ locale === 'zh' ? '绿色' : 'Green' }}</option><option value="amber">{{ locale === 'zh' ? '琥珀色' : 'Amber' }}</option><option value="rose">{{ locale === 'zh' ? '玫瑰色' : 'Rose' }}</option><option value="violet">{{ locale === 'zh' ? '紫色' : 'Violet' }}</option>
+                  </select></label>
+                </div>
                 <dl>
                   <div><dt>ID / PID</dt><dd>{{ s.id }} / {{ s.pid }}</dd></div>
                   <div><dt>{{ locale === 'zh' ? '开始时间' : 'Started' }}</dt><dd>{{ s.startedAt ? new Date(s.startedAt).toLocaleString() : '—' }}</dd></div>
@@ -979,6 +1025,7 @@ onBeforeUnmount(() => {
                 :padding="preferences.terminalPadding"
                 :colors="palette.terminal" :theme-revision="themeRevision" :locale="locale" :bindings="bindings"
                 :tools-enabled="!commandPaletteOpen" :tool-request="paletteToolRequest" :default-directory="preferences.defaultDirectory"
+                :library="library" @directory-used="rememberDirectory(library, $event)" @toggle-favorite="toggleFavorite(library, $event)" @remove-recent="removeRecent"
                 @set-default-directory="preferences.defaultDirectory = $event" @error="reportError" />
               <p v-else-if="sessions.length > 0" class="pane-placeholder">{{ locale === 'zh' ? '从侧栏或上方选择托管会话。关闭面板仅分离视图。' : 'Choose a managed session here or in the sidebar. Closing a pane only detaches its view.' }}</p>
             </div>
@@ -1089,6 +1136,13 @@ button:focus-visible, input:focus-visible, select:focus-visible, [role="separato
 .session-row { display: flex; align-items: center; gap: 1px; width: 100%; min-height: 40px; padding: 0 2px; border-radius: 5px; }
 .session-row:hover, .observed-row:hover { background: var(--surface-hover); }
 .session-row.selected, .observed-row.selected { background: var(--surface-active); }
+.session-row { border-left: 3px solid transparent; }
+.session-row.mark-blue { border-left-color: #7fa9df; }
+.session-row.mark-green { border-left-color: #82bb98; }
+.session-row.mark-amber { border-left-color: #d4ae68; }
+.session-row.mark-rose { border-left-color: #d58a98; }
+.session-row.mark-violet { border-left-color: #af98d7; }
+.session-note { display: block; color: var(--muted); font-size: calc(9px * var(--ui-font-scale)); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .session-select { display: flex; flex-direction: column; justify-content: center; flex: 1 1 0; min-width: 0; min-height: 40px; border: 0; background: none; color: var(--text); text-align: left; padding: 5px 5px 5px 7px; }
 .session-name { display: flex; align-items: center; gap: 4px; width: 100%; min-width: 0; overflow: hidden; white-space: nowrap; font-size: calc(11px * var(--ui-font-scale)); font-weight: 620; }
 .session-title { min-width: 0; flex: 0 1 auto; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
@@ -1098,6 +1152,7 @@ button:focus-visible, input:focus-visible, select:focus-visible, [role="separato
 .dot { display: inline-block; flex: 0 0 6px; width: 6px; height: 6px; border-radius: 100%; background: var(--faint); }
 .dot.running { background: var(--positive); }
 .session-action { display: grid; place-items: center; flex: 0 0 22px; height: 30px; padding: 0; border: 0; background: transparent; color: var(--muted); font-size: calc(14px * var(--ui-font-scale)); border-radius: 4px; }
+.session-row:not(:hover):not(:focus-within):not(.selected) .session-action { opacity: 0; }
 .session-action:hover { color: var(--negative); background: var(--surface); }
 .session-action.diagnostic-action:hover, .session-action.diagnostic-action[aria-expanded="true"] { color: var(--accent-text); background: var(--surface); }
 .session-action.save-action:hover { color: var(--positive); }
@@ -1143,6 +1198,9 @@ button:focus-visible, input:focus-visible, select:focus-visible, [role="separato
 .gear { font-size: calc(17px * var(--ui-font-scale)); line-height: 1; }
 .settings-arrow { margin-left: auto; font-size: calc(17px * var(--ui-font-scale)); }
 .session-diagnostics { margin: 0 3px 5px 7px; padding: 5px 7px; border-left: 2px solid var(--border); border-radius: 0 0 4px 4px; background: var(--surface); color: var(--muted); font-size: calc(9px * var(--ui-font-scale)); }
+.session-mark-editor { display: grid; gap: 5px; margin-bottom: 7px; }
+.session-mark-editor label { display: grid; grid-template-columns: 42px minmax(0, 1fr); align-items: center; gap: 4px; }
+.session-mark-editor input, .session-mark-editor select { width: 100%; min-width: 0; padding: 3px; color: var(--text); background: var(--canvas); border: 1px solid var(--border); border-radius: 4px; }
 .session-diagnostics dl { display: grid; grid-template-columns: 76px minmax(0, 1fr); gap: 3px 6px; max-height: 140px; overflow: auto; margin: 0; }
 .session-diagnostics dt { color: var(--faint); }
 .session-diagnostics dd { min-width: 0; margin: 0; overflow-wrap: anywhere; }
@@ -1156,6 +1214,7 @@ button:focus-visible, input:focus-visible, select:focus-visible, [role="separato
 .layout.sidebar-collapsed .sidebar-search,
 .layout.sidebar-collapsed .main-heading,
 .layout.sidebar-collapsed .new-session,
+.layout.sidebar-collapsed .session-presets,
 .layout.sidebar-collapsed .ssh-connect,
 .layout.sidebar-collapsed .pane-stack,
 .layout.sidebar-collapsed .sidebar-status { display: none; }
