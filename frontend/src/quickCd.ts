@@ -1,6 +1,3 @@
-// Quick CD inserts a quoted command, never a newline or a shell side effect.
-// A foreground app may still receive typed text, so the user explicitly
-// presses Enter at a shell prompt to execute it.
 export type CdShell = 'posix' | 'powershell' | 'cmd'
 
 export function cdShellForProfile(profile: string): CdShell {
@@ -37,6 +34,10 @@ export function formatCdCommand(rawPath: string, shell: CdShell): string {
     return `cd '${safePath.replaceAll("'", "'\\''")}'`
   }
   throw new Error('Unsupported shell syntax')
+}
+
+export function formatCdInput(path: string, shell: CdShell): string {
+  return formatCdCommand(path, shell) + '\r'
 }
 
 export function supportsLocalDefaultDirectory(profile: string): boolean {

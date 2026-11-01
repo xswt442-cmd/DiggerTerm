@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { Call } from '@wailsio/runtime'
 import { computed, defineAsyncComponent, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { Events } from '@wailsio/runtime'
 import { mergeSessions } from './sessionState'
@@ -591,6 +592,15 @@ onMounted(async () => {
     finishActivityBaseline(existing ?? [])
     restoreWorkspace(sessions.value)
     daemonConnected.value = true
+    const launchDirectory = await Call.ByName('desktop.SessionService.LaunchDirectory') as string
+    if (launchDirectory) {
+      const localProfile = profiles.value.find(p => p.id === (navigator.platform.startsWith('Win') ? 'powershell' : 'shell'))
+      if (!localProfile) throw new Error('Local shell is unavailable')
+      const info = await CreateLocal(localProfile.id, launchDirectory, 100, 30)
+      sessions.value = mergeSessions(sessions.value, [info])
+      activityTracker.created(info, false, preferences.value.sessionActivityEnabled)
+      selectManaged(info.id)
+    }
   } catch (err) {
     reportError(err)
   }

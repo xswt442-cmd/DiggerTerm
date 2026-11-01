@@ -33,6 +33,9 @@ Unicode true
 ####
 ## Include the wails tools
 ####
+!ifndef WAILS_INSTALL_SCOPE
+    !define WAILS_INSTALL_SCOPE "user"
+!endif
 !include "wails_tools.nsh"
 
 # The version information for this two must consist of 4 parts
@@ -78,7 +81,8 @@ OutFile "..\..\..\bin\${INFO_PROJECTNAME}-${ARCH}-installer.exe" # Name of the i
 !else
     InstallDir "$PROGRAMFILES64\${INFO_COMPANYNAME}\${INFO_PRODUCTNAME}"
 !endif
-ShowInstDetails show # This will always show the installation details.
+InstallDirRegKey HKCU "Software\DiggerTerm" "InstallDir"
+ShowInstDetails show
 
 Function .onInit
    !insertmacro wails.checkArchitecture
@@ -87,11 +91,22 @@ FunctionEnd
 Section
     !insertmacro wails.setShellContext
 
-    !insertmacro wails.webview2runtime
-
     SetOutPath $INSTDIR
 
+    ClearErrors
     !insertmacro wails.files
+    IfErrors 0 +3
+        MessageBox MB_OK|MB_ICONSTOP "Could not install DiggerTerm. Close DiggerTerm and its daemon after finishing your sessions, then try again."
+        Abort
+
+    SetRegView 64
+    WriteRegStr HKCU "Software\DiggerTerm" "InstallDir" "$INSTDIR"
+    WriteRegStr HKCU "Software\Classes\Directory\shell\DiggerTerm" "" "Open in DiggerTerm"
+    WriteRegStr HKCU "Software\Classes\Directory\shell\DiggerTerm" "Icon" '$INSTDIR\${PRODUCT_EXECUTABLE}'
+    WriteRegStr HKCU "Software\Classes\Directory\shell\DiggerTerm\command" "" '"$INSTDIR\${PRODUCT_EXECUTABLE}" --directory "%1\."'
+    WriteRegStr HKCU "Software\Classes\Directory\Background\shell\DiggerTerm" "" "Open in DiggerTerm"
+    WriteRegStr HKCU "Software\Classes\Directory\Background\shell\DiggerTerm" "Icon" '$INSTDIR\${PRODUCT_EXECUTABLE}'
+    WriteRegStr HKCU "Software\Classes\Directory\Background\shell\DiggerTerm\command" "" '"$INSTDIR\${PRODUCT_EXECUTABLE}" --directory "%V\."'
 
     CreateShortcut "$SMPROGRAMS\${INFO_PRODUCTNAME}.lnk" "$INSTDIR\${PRODUCT_EXECUTABLE}"
     CreateShortCut "$DESKTOP\${INFO_PRODUCTNAME}.lnk" "$INSTDIR\${PRODUCT_EXECUTABLE}"
@@ -105,9 +120,18 @@ SectionEnd
 Section "uninstall"
     !insertmacro wails.setShellContext
 
-    RMDir /r "$AppData\${PRODUCT_EXECUTABLE}" # Remove the WebView2 DataPath
+    ClearErrors
+    Delete "$INSTDIR\${PRODUCT_EXECUTABLE}"
+    IfErrors 0 +3
+        MessageBox MB_OK|MB_ICONSTOP "Could not remove DiggerTerm. Close DiggerTerm and its daemon after finishing your sessions, then try again."
+        Abort
 
-    RMDir /r $INSTDIR
+    SetRegView 64
+    ReadRegStr $0 HKCU "Software\DiggerTerm" "InstallDir"
+    StrCmp $0 $INSTDIR 0 +4
+        DeleteRegKey HKCU "Software\Classes\Directory\shell\DiggerTerm"
+        DeleteRegKey HKCU "Software\Classes\Directory\Background\shell\DiggerTerm"
+        DeleteRegKey HKCU "Software\DiggerTerm"
 
     Delete "$SMPROGRAMS\${INFO_PRODUCTNAME}.lnk"
     Delete "$DESKTOP\${INFO_PRODUCTNAME}.lnk"
@@ -116,4 +140,5 @@ Section "uninstall"
     !insertmacro wails.unassociateCustomProtocols
 
     !insertmacro wails.deleteUninstaller
+    RMDir "$INSTDIR"
 SectionEnd

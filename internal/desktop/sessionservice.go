@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"os"
+	"path/filepath"
 	"sort"
 	"sync"
 	"time"
@@ -314,6 +316,25 @@ func (s *SessionService) stopAllSessionsAndDaemon(confirmedIDs []string) error {
 		return err
 	}
 	return stopManagedSessionsAndDaemon(client, confirmedIDs)
+}
+
+// LaunchDirectory returns the explicitly requested local startup directory.
+func (s *SessionService) LaunchDirectory() (string, error) {
+	if len(os.Args) != 3 || os.Args[1] != "--directory" {
+		return "", nil
+	}
+	dir := os.Args[2]
+	if !filepath.IsAbs(dir) {
+		return "", errors.New("startup directory must be absolute")
+	}
+	info, err := os.Stat(dir)
+	if err != nil {
+		return "", fmt.Errorf("startup directory: %w", err)
+	}
+	if !info.IsDir() {
+		return "", errors.New("startup path is not a directory")
+	}
+	return dir, nil
 }
 
 func (s *SessionService) Profiles() ([]session.Profile, error) {

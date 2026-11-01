@@ -8,12 +8,34 @@ This file records shipped desktop features, fixes, platform support, and compati
 
 ### 简体中文
 
+### English
+
+## [0.0.8] - 2026-11-01
+
+### 简体中文
+
+**新增**
+- Windows 安装程序为当前用户添加开始菜单快捷方式及资源管理器文件夹右键入口，在所选目录创建 PowerShell 会话；卸载保留用户数据。
+
+**安全**
+- 更新 Go 图像和加密依赖，修复 VP8L 内存分配及 SSH 源地址限制漏洞。
+
 **改进**
+- 快速 CD 选择目录后可直接发送并执行切换目录命令。
+- Linux 发布打包工具固定到指定上游版本并校验 SHA-256。
 - 将验证链整合为 ci 与 publish 共用的可复用 verify 工作流；发布构建不再重复运行测试；检查工作流更名为 ci、发布工作流更名为 publish；ci 支持手动触发并取消非 main 分支的过期并发运行；产物 Action 升级到 Node 24 版本。
 
 ### English
 
+**Added**
+- The per-user Windows installer adds a Start menu shortcut and Explorer folder context menu to create a PowerShell session in the selected directory; uninstall preserves user data.
+
+**Security**
+- Updated Go image and crypto dependencies to address VP8L memory allocation and SSH source-address restriction vulnerabilities.
+
 **Improved**
+- Quick CD sends and executes the directory change command after a directory is selected.
+- Pinned Linux release packaging tools to specific upstream versions with SHA-256 verification.
 - Consolidated the verification chain into a reusable verify workflow shared by ci and publish; release builds no longer rerun tests; the check workflow is renamed ci and the release workflow publish; ci supports manual dispatch and cancels superseded runs on non-main branches; artifact actions upgraded to Node 24 versions.
 
 ## [0.0.7] - 2026-10-24

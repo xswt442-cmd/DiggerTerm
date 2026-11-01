@@ -82,7 +82,7 @@ export function buildPaletteCommands(context: PaletteContext): ExecutablePalette
   const canUseTerminal = context.daemonConnected && context.canUseTerminalTools
   add('terminal:search', zh ? '搜索当前终端' : 'Search current terminal', zh ? '终端' : 'Terminal', ['find', 'search', 'output'],
     canUseTerminal, actions.search)
-  add('terminal:quick-cd', zh ? '快速切换目录（插入 cd）' : 'Quick CD (insert directory command)', zh ? '终端' : 'Terminal',
+  add('terminal:quick-cd', zh ? '快速切换目录' : 'Quick CD', zh ? '终端' : 'Terminal',
     ['cd', 'cwd', 'directory', 'path', 'folder'], context.daemonConnected && context.canUseQuickCd, actions.quickCd)
   add('terminal:quick-select', zh ? '快速选择并复制文字' : 'Quick Select and copy text', zh ? '终端' : 'Terminal',
     ['quick select', 'url', 'path', 'ip', 'hash', 'copy'], canUseTerminal, actions.quickSelect)

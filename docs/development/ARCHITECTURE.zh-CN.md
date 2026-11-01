@@ -17,7 +17,7 @@ DiggerTerm 是 Go/Wails 3 桌面终端应用，使用 Vue 3/TypeScript 和 xterm
 
 GUI 是 Daemon 的 IPC 客户端。GUI 关闭、隐藏或重新打开时，Daemon 管理的会话可以保持运行并重新连接；Daemon 本身或操作系统退出后不会保留活跃进程。Daemon 使用当前系统用户专属的本地 IPC，界面不得绕过 Daemon 直接接管进程。
 
-快速 cd 根据 PowerShell、CMD 或 POSIX Shell 为选定路径生成经过引用的命令，通过托管终端已有的输入通道排队发送，不自动按回车。用户须在空白 Shell 提示符下自行执行；它不会直接修改其他进程的工作目录。只有本机绝对路径可以设为新建本地会话的默认目录，Dig 观察到的外部进程没有 Quick CD 控制入口。
+快速 cd 根据 PowerShell、CMD 或 POSIX Shell 为选定路径生成经过引用的命令，在用户点击后通过托管终端已有的输入通道排队发送命令和回车。用户须确保当前是空白 Shell 提示符；它不会直接修改其他进程的工作目录。只有本机绝对路径可以设为新建本地会话的默认目录，Dig 观察到的外部进程没有 Quick CD 控制入口。
 
 本机文件夹通过 Wails 3 原生目录对话框选择，无需 Daemon 参与。Windows 盘符路径会转换为 WSL/Git Bash 默认挂载格式，自定义挂载点需手动输入。
 

@@ -1,4 +1,4 @@
-# Package the production Wails Windows binary as a standalone release EXE.
+# Package the production Wails Windows binary in a per-user NSIS installer.
 # The historical scripts/package-windows.ps1 keeps the v0.0.1 ZIP recipe.
 [CmdletBinding()]
 param(
@@ -44,6 +44,25 @@ try {
     $stream.Dispose()
 }
 
+$compiler = Get-Command makensis.exe -ErrorAction SilentlyContinue
+if (-not $compiler) {
+    $candidate = Join-Path ${env:ProgramFiles(x86)} 'NSIS/makensis.exe'
+    if (!(Test-Path -LiteralPath $candidate)) { throw 'NSIS makensis.exe is required.' }
+    $compilerPath = $candidate
+} else { $compilerPath = $compiler.Source }
+$nsisDir = Join-Path $root 'build/windows/nsis'
+Push-Location $nsisDir
+try {
+    & $compilerPath '-DWAILS_INSTALL_SCOPE=user' '-DREQUEST_EXECUTION_LEVEL=user' `
+        '-DINFO_PROJECTNAME=DiggerTerm' '-DINFO_COMPANYNAME=xswt442-cmd' `
+        '-DINFO_PRODUCTNAME=DiggerTerm' "-DINFO_PRODUCTVERSION=$($manifest.version)" `
+        '-DINFO_COPYRIGHT=(c) 2026, xswt442-cmd' '-DPRODUCT_EXECUTABLE=diggerterm.exe' `
+        '-DUNINST_KEY_NAME=DiggerTerm' "-DARG_WAILS_AMD64_BINARY=$binary" project.nsi
+    if ($LASTEXITCODE -ne 0) { throw "NSIS failed with exit code $LASTEXITCODE" }
+} finally { Pop-Location }
+$installer = Join-Path $root 'bin/DiggerTerm-amd64-installer.exe'
+if (!(Test-Path -LiteralPath $installer -PathType Leaf)) { throw 'NSIS did not produce the expected installer.' }
+
 $folder = if ([IO.Path]::IsPathRooted($OutputDir)) {
     $OutputDir
 } else {
@@ -51,9 +70,9 @@ $folder = if ([IO.Path]::IsPathRooted($OutputDir)) {
 }
 New-Item -ItemType Directory -Path $folder -Force | Out-Null
 $destination = Join-Path $folder "DiggerTerm-$Version-windows-amd64.exe"
-Copy-Item -LiteralPath $binary -Destination $destination -Force
+Copy-Item -LiteralPath $installer -Destination $destination -Force
 $info = Get-Item -LiteralPath $destination
 if ($info.Length -lt 100KB) { throw "Suspiciously small Windows EXE: $($info.Length) bytes" }
 
-Write-Host "Windows release EXE: $destination"
+Write-Host "Windows release installer: $destination"
 Write-Host "SHA256: $((Get-FileHash -LiteralPath $destination -Algorithm SHA256).Hash.ToLowerInvariant())"
