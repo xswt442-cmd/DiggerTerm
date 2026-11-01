@@ -35,6 +35,8 @@ Copy [example JSON/CSS files](examples/themes/) into `DiggerTerm/` under your OS
 
 The Windows installer creates a Start menu shortcut and Explorer folder context menus for the current user. “Open in DiggerTerm” opens or brings forward DiggerTerm and creates a PowerShell session in the selected folder; on Windows 11 it may appear under “Show more options”. Uninstall removes these entries and retains user data. Finish existing sessions and exit the daemon before upgrading or uninstalling.
 
+On Windows, use “DiggerTerm (Administrator)” in the Start menu or “Open in DiggerTerm as administrator” in a folder context menu to request an elevated window through UAC. Its local Windows terminals run with administrator privileges. Elevated and standard windows use separate daemons and sessions; elevation does not grant administrator rights to remote SSH or Linux users inside WSL.
+
 Windows requires WebView2; binaries are unsigned. Linux packages are built for Ubuntu 24.04; other distributions may require matching system dependencies such as GTK4 and WebKitGTK 6. Sessions are not guaranteed to survive daemon crashes or system reboots.
 
 Quick CD sends a quoted command and Enter to the managed terminal. Use it only at an empty shell prompt, not while `vim`, an Agent, or another foreground application is active or when the prompt contains existing input. Dig's read-only external processes do not support Quick CD.

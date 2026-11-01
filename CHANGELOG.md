@@ -15,6 +15,7 @@ This file records shipped desktop features, fixes, platform support, and compati
 ### 简体中文
 
 **新增**
+- Windows 开始菜单和文件夹右键菜单支持按需以管理员身份启动；管理员与普通窗口的 Daemon 和会话相互隔离。
 - Windows 安装程序为当前用户添加开始菜单快捷方式及资源管理器文件夹右键入口，在所选目录创建 PowerShell 会话；卸载保留用户数据。
 
 **修复**
@@ -31,6 +32,7 @@ This file records shipped desktop features, fixes, platform support, and compati
 ### English
 
 **Added**
+- Windows Start menu and folder context menu support on-demand administrator launch; elevated and standard windows use separate daemons and sessions.
 - The per-user Windows installer adds a Start menu shortcut and Explorer folder context menu to create a PowerShell session in the selected directory; uninstall preserves user data.
 
 **Fixed**

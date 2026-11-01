@@ -13,6 +13,7 @@ import (
 	"time"
 
 	winio "github.com/Microsoft/go-winio"
+	"github.com/xswt442-cmd/DiggerTerm/internal/winsecurity"
 )
 
 func pipeNameAndSID() (string, string, error) {
@@ -29,7 +30,11 @@ func pipeNameAndSID() (string, string, error) {
 	if err != nil {
 		return "", "", err
 	}
-	return `\\.\pipe\diggerterm-` + sid + suffix, sid, nil
+	elevated, err := winsecurity.Elevated()
+	if err != nil {
+		return "", "", fmt.Errorf("inspect process elevation: %w", err)
+	}
+	return winsecurity.PipeName(`\\.\pipe\diggerterm-`+sid+suffix, elevated), sid, nil
 }
 
 func listenLocal() (net.Listener, error) {
@@ -39,22 +44,42 @@ func listenLocal() (net.Listener, error) {
 	}
 	// Default named-pipe ACLs can allow undesired remote/local principals.
 	// Constrain the channel to this OS user plus SYSTEM, with no inherited DACL.
+	elevated, err := winsecurity.Elevated()
+	if err != nil {
+		return nil, err
+	}
 	cfg := &winio.PipeConfig{
-		SecurityDescriptor: "D:P(A;;GA;;;SY)(A;;GA;;;" + sid + ")",
+		SecurityDescriptor: winsecurity.PipeSecurity(sid, elevated),
 		InputBufferSize:    65536,
 		OutputBufferSize:   65536,
 	}
-	return winio.ListenPipe(name, cfg)
+	listener, err := winio.ListenPipe(name, cfg)
+	if err != nil {
+		return nil, err
+	}
+	return winsecurity.ProtectListener(listener, sid, elevated), nil
 }
 
 func dialLocal(timeout time.Duration) (net.Conn, error) {
-	name, _, err := pipeNameAndSID()
+	name, sid, err := pipeNameAndSID()
 	if err != nil {
 		return nil, err
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
-	return winio.DialPipeContext(ctx, name)
+	conn, err := winio.DialPipeContext(ctx, name)
+	if err != nil {
+		return nil, err
+	}
+	elevated, err := winsecurity.Elevated()
+	if err == nil && elevated {
+		err = winsecurity.VerifyElevatedPeer(conn, true, sid)
+	}
+	if err != nil {
+		_ = conn.Close()
+		return nil, err
+	}
+	return conn, nil
 }
 
 func startDetached() error {

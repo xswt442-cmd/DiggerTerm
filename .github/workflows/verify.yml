@@ -65,6 +65,12 @@ jobs:
           go vet ./...
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           go test -tags server ./internal/desktop -run '^TestUnsupportedNativeClipboardReportsFailure$' -count=1
+      - name: Verify elevated IPC boundary
+        shell: pwsh
+        run: |
+          $env:DIGGERTERM_REQUIRE_ELEVATED_TEST = '1'
+          go test ./internal/winsecurity -run '^TestElevatedPipeRoundTrip$' -v -count=1
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Install pinned Wails CLI
         shell: pwsh
         run: |

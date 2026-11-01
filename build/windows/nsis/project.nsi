@@ -107,8 +107,17 @@ Section
     WriteRegStr HKCU "Software\Classes\Directory\Background\shell\DiggerTerm" "" "Open in DiggerTerm"
     WriteRegStr HKCU "Software\Classes\Directory\Background\shell\DiggerTerm" "Icon" '$INSTDIR\${PRODUCT_EXECUTABLE}'
     WriteRegStr HKCU "Software\Classes\Directory\Background\shell\DiggerTerm\command" "" '"$INSTDIR\${PRODUCT_EXECUTABLE}" --directory "%V\."'
+    WriteRegStr HKCU "Software\Classes\Directory\shell\DiggerTermAdmin" "" "Open in DiggerTerm as administrator"
+    WriteRegStr HKCU "Software\Classes\Directory\shell\DiggerTermAdmin" "Icon" '$INSTDIR\${PRODUCT_EXECUTABLE}'
+    WriteRegStr HKCU "Software\Classes\Directory\shell\DiggerTermAdmin" "HasLUAShield" ""
+    WriteRegStr HKCU "Software\Classes\Directory\shell\DiggerTermAdmin\command" "" '"$INSTDIR\${PRODUCT_EXECUTABLE}" --elevate --directory "%1\."'
+    WriteRegStr HKCU "Software\Classes\Directory\Background\shell\DiggerTermAdmin" "" "Open in DiggerTerm as administrator"
+    WriteRegStr HKCU "Software\Classes\Directory\Background\shell\DiggerTermAdmin" "Icon" '$INSTDIR\${PRODUCT_EXECUTABLE}'
+    WriteRegStr HKCU "Software\Classes\Directory\Background\shell\DiggerTermAdmin" "HasLUAShield" ""
+    WriteRegStr HKCU "Software\Classes\Directory\Background\shell\DiggerTermAdmin\command" "" '"$INSTDIR\${PRODUCT_EXECUTABLE}" --elevate --directory "%V\."'
 
     CreateShortcut "$SMPROGRAMS\${INFO_PRODUCTNAME}.lnk" "$INSTDIR\${PRODUCT_EXECUTABLE}"
+    CreateShortcut "$SMPROGRAMS\${INFO_PRODUCTNAME} (Administrator).lnk" "$INSTDIR\${PRODUCT_EXECUTABLE}" "--elevate"
     CreateShortCut "$DESKTOP\${INFO_PRODUCTNAME}.lnk" "$INSTDIR\${PRODUCT_EXECUTABLE}"
 
     !insertmacro wails.associateFiles
@@ -128,12 +137,15 @@ Section "uninstall"
 
     SetRegView 64
     ReadRegStr $0 HKCU "Software\DiggerTerm" "InstallDir"
-    StrCmp $0 $INSTDIR 0 +4
+    StrCmp $0 $INSTDIR 0 +6
         DeleteRegKey HKCU "Software\Classes\Directory\shell\DiggerTerm"
         DeleteRegKey HKCU "Software\Classes\Directory\Background\shell\DiggerTerm"
+        DeleteRegKey HKCU "Software\Classes\Directory\shell\DiggerTermAdmin"
+        DeleteRegKey HKCU "Software\Classes\Directory\Background\shell\DiggerTermAdmin"
         DeleteRegKey HKCU "Software\DiggerTerm"
 
     Delete "$SMPROGRAMS\${INFO_PRODUCTNAME}.lnk"
+    Delete "$SMPROGRAMS\${INFO_PRODUCTNAME} (Administrator).lnk"
     Delete "$DESKTOP\${INFO_PRODUCTNAME}.lnk"
 
     !insertmacro wails.unassociateFiles

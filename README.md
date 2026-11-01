@@ -35,6 +35,8 @@
 
 Windows 安装程序为当前用户创建开始菜单快捷方式及资源管理器文件夹右键菜单。选择“Open in DiggerTerm”会打开或唤起 DiggerTerm，并在所选文件夹中创建 PowerShell 会话；Windows 11 的菜单项可能位于“显示更多选项”。卸载会移除这些入口并保留用户数据。更新或卸载前请先结束已有会话并正常退出 Daemon。
 
+Windows 可从开始菜单的 “DiggerTerm (Administrator)” 或文件夹右键的 “Open in DiggerTerm as administrator” 按需启动管理员窗口，并在 Windows UAC 确认后创建管理员权限的本地终端。管理员窗口和普通窗口使用各自独立的 Daemon 与会话；管理员权限不会自动提升 SSH 远端用户或 WSL 内的 Linux 用户。
+
 Windows 需要 WebView2，安装包尚未签名。Linux 安装包基于 Ubuntu 24.04 构建，其他发行版可能需要相应的 GTK4、WebKitGTK 6 等系统依赖。会话不保证在 Daemon 崩溃或系统重启后存活。
 
 快速 CD 会向托管终端发送经过引用的命令和回车。请确保终端处于空白 Shell 提示符；在 `vim`、Agent 或其他前台程序运行时不要使用，提示符中已有文字时也不要使用。Dig 的只读外部进程不支持该操作。

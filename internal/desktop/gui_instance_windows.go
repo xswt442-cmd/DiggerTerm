@@ -14,6 +14,7 @@ import (
 	"time"
 
 	winio "github.com/Microsoft/go-winio"
+	"github.com/xswt442-cmd/DiggerTerm/internal/winsecurity"
 )
 
 type guiLaunchBroker struct {
@@ -35,13 +36,22 @@ func acquireGUIInstance(args []string) (*guiLaunchBroker, bool, error) {
 			return nil, false, errors.New("invalid GUI namespace")
 		}
 	}
-	return acquireGUIInstanceAt(`\\.\pipe\diggerterm-gui-`+current.Uid+"-"+namespace, current.Uid, args)
+	elevated, err := winsecurity.Elevated()
+	if err != nil {
+		return nil, false, err
+	}
+	name := winsecurity.PipeName(`\\.\pipe\diggerterm-gui-`+current.Uid+"-"+namespace, elevated)
+	return acquireGUIInstanceAt(name, current.Uid, args)
 }
 
 func acquireGUIInstanceAt(name, sid string, args []string) (*guiLaunchBroker, bool, error) {
-	listener, err := winio.ListenPipe(name, &winio.PipeConfig{SecurityDescriptor: "D:P(A;;GA;;;SY)(A;;GA;;;" + sid + ")"})
+	elevated, err := winsecurity.Elevated()
+	if err != nil {
+		return nil, false, err
+	}
+	listener, err := winio.ListenPipe(name, &winio.PipeConfig{SecurityDescriptor: winsecurity.PipeSecurity(sid, elevated)})
 	if err == nil {
-		b := &guiLaunchBroker{listener: listener, launches: make(chan []string, 64)}
+		b := &guiLaunchBroker{listener: winsecurity.ProtectListener(listener, sid, elevated), launches: make(chan []string, 64)}
 		go b.serve()
 		return b, true, nil
 	}
@@ -52,6 +62,11 @@ func acquireGUIInstanceAt(name, sid string, args []string) (*guiLaunchBroker, bo
 		return nil, false, fmt.Errorf("connect existing GUI: %w", dialErr)
 	}
 	defer conn.Close()
+	if elevated {
+		if err := winsecurity.VerifyElevatedPeer(conn, true, sid); err != nil {
+			return nil, false, err
+		}
+	}
 	_ = conn.SetDeadline(time.Now().Add(5 * time.Second))
 	if err := json.NewEncoder(conn).Encode(args); err != nil {
 		return nil, false, fmt.Errorf("forward GUI launch: %w", err)

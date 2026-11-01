@@ -17,6 +17,11 @@ func Run(assets fs.FS, trayIcon []byte) {
 }
 
 func runGUI(assets fs.FS, trayIcon []byte) {
+	elevated, err := guiIsElevated()
+	if err != nil {
+		log.Printf("inspect GUI privilege: %v", err)
+		return
+	}
 	broker, primary, err := acquireGUIInstance(os.Args)
 	if err != nil {
 		log.Printf("GUI launch: %v", err)
@@ -49,8 +54,12 @@ func runGUI(assets fs.FS, trayIcon []byte) {
 	app.RegisterService(application.NewService(NewQuickSelectService()))
 	app.RegisterService(application.NewService(&ClipboardService{app: app}))
 
+	windowTitle := "DiggerTerm"
+	if elevated {
+		windowTitle += " (Administrator)"
+	}
 	window := app.Window.NewWithOptions(application.WebviewWindowOptions{
-		Title:            "DiggerTerm",
+		Title:            windowTitle,
 		Width:            1120,
 		Height:           720,
 		MinWidth:         760,
@@ -73,7 +82,13 @@ func runGUI(assets fs.FS, trayIcon []byte) {
 
 	tray := app.SystemTray.New()
 	tray.SetIcon(trayIcon)
-	tray.SetTooltip(trayLabelsFor("en").tooltip)
+	trayTooltip := func(label string) string {
+		if elevated {
+			return label + " (Administrator)"
+		}
+		return label
+	}
+	tray.SetTooltip(trayTooltip(trayLabelsFor("en").tooltip))
 	tray.OnClick(func() {
 		window.Show()
 		window.Focus()
@@ -188,7 +203,7 @@ func runGUI(assets fs.FS, trayIcon []byte) {
 			stopItem.SetLabel(labels.stop)
 			stopAllItem.SetLabel(labels.stopAll)
 		})
-		tray.SetTooltip(labels.tooltip)
+		tray.SetTooltip(trayTooltip(labels.tooltip))
 	}
 
 	if err := app.Run(); err != nil {
