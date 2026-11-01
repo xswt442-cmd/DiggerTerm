@@ -28,3 +28,23 @@ func TestLaunchDirectory(t *testing.T) {
 		}
 	}
 }
+
+func TestForwardedDirectoryRequestsAreQueuedAndConsumedOnce(t *testing.T) {
+	dir := t.TempDir()
+	s := &SessionService{}
+	for i := 0; i < 2; i++ {
+		if err := s.enqueueLaunch([]string{"app", "--directory", dir}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := s.enqueueLaunch([]string{"app", "--directory", "relative"}); err == nil {
+		t.Fatal("accepted relative directory")
+	}
+	got := s.TakeLaunchDirectories()
+	if len(got) != 2 || got[0] != dir || got[1] != dir {
+		t.Fatalf("unexpected pending requests: %q", got)
+	}
+	if got := s.TakeLaunchDirectories(); len(got) != 0 {
+		t.Fatalf("requests delivered twice: %q", got)
+	}
+}

@@ -33,7 +33,7 @@ Smart **Ctrl+C** copies a terminal selection or interrupts without one; full-scr
 
 Copy [example JSON/CSS files](examples/themes/) into `DiggerTerm/` under your OS user's home directory, then refresh Settings → Appearance. Appearance shows the resolved directory and can open it directly. JSON `name` supplies the display name; optional `custom.css` overrides all themes. Shortcut configuration is stored separately as `keybindings.json` in the same directory.
 
-The Windows installer creates a Start menu shortcut and Explorer folder context menus for the current user. “Open in DiggerTerm” opens a new window with a PowerShell session in the selected folder; on Windows 11 it may appear under “Show more options”. Uninstall removes these entries and retains user data. Finish existing sessions and exit the daemon before upgrading or uninstalling.
+The Windows installer creates a Start menu shortcut and Explorer folder context menus for the current user. “Open in DiggerTerm” opens or brings forward DiggerTerm and creates a PowerShell session in the selected folder; on Windows 11 it may appear under “Show more options”. Uninstall removes these entries and retains user data. Finish existing sessions and exit the daemon before upgrading or uninstalling.
 
 Windows requires WebView2; binaries are unsigned. Linux packages are built for Ubuntu 24.04; other distributions may require matching system dependencies such as GTK4 and WebKitGTK 6. Sessions are not guaranteed to survive daemon crashes or system reboots.
 

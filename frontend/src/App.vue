@@ -338,6 +338,35 @@ let offQuitBlocked: (() => void) | undefined
 let offDaemonDisconnected: (() => void) | undefined
 let offState: (() => void) | undefined
 let offActivityOutput: (() => void) | undefined
+let offLaunchDirectory: (() => void) | undefined
+let launchReady = false
+let launchPending = false
+let launchDraining = false
+
+async function createDirectorySession(directory: string) {
+  const localProfile = profiles.value.find(p => p.id === (navigator.platform.startsWith('Win') ? 'powershell' : 'shell'))
+  if (!localProfile) throw new Error('Local shell is unavailable')
+  const info = await CreateLocal(localProfile.id, directory, 100, 30)
+  sessions.value = mergeSessions(sessions.value, [info])
+  activityTracker.created(info, false, preferences.value.sessionActivityEnabled)
+  selectManaged(info.id)
+}
+
+async function drainLaunchDirectories() {
+  launchPending = true
+  if (!launchReady || launchDraining) return
+  launchDraining = true
+  try {
+    while (launchPending) {
+      launchPending = false
+      const directories = await Call.ByName('github.com/xswt442-cmd/DiggerTerm/internal/desktop.SessionService.TakeLaunchDirectories') as string[] | null
+      for (const directory of directories ?? []) {
+        try { await createDirectorySession(directory) } catch (err) { reportError(err) }
+      }
+    }
+  } catch (err) { reportError(err) }
+  finally { launchDraining = false }
+}
 
 function handleActivityOutput(event: { id: string; offset: number }) {
   if (!event?.id || !Number.isSafeInteger(event.offset) || event.offset < 0) return
@@ -544,6 +573,7 @@ watch([() => preferences.value.observeEnabled, () => preferences.value.observeRe
 
 onMounted(async () => {
   initializeSettings()
+  offLaunchDirectory = Events.On('terminal:launch-directory', () => { void drainLaunchDirectories() })
   offDaemonDisconnected = Events.On('daemon:disconnected', (event) => {
     daemonConnected.value = false
     capabilityGeneration++
@@ -592,14 +622,14 @@ onMounted(async () => {
     finishActivityBaseline(existing ?? [])
     restoreWorkspace(sessions.value)
     daemonConnected.value = true
-    const launchDirectory = await Call.ByName('desktop.SessionService.LaunchDirectory') as string
-    if (launchDirectory) {
-      const localProfile = profiles.value.find(p => p.id === (navigator.platform.startsWith('Win') ? 'powershell' : 'shell'))
-      if (!localProfile) throw new Error('Local shell is unavailable')
-      const info = await CreateLocal(localProfile.id, launchDirectory, 100, 30)
-      sessions.value = mergeSessions(sessions.value, [info])
-      activityTracker.created(info, false, preferences.value.sessionActivityEnabled)
-      selectManaged(info.id)
+    try {
+      const launchDirectory = await Call.ByName('github.com/xswt442-cmd/DiggerTerm/internal/desktop.SessionService.LaunchDirectory') as string
+      if (launchDirectory) await createDirectorySession(launchDirectory)
+    } catch (err) {
+      reportError(err)
+    } finally {
+      launchReady = true
+      void drainLaunchDirectories()
     }
   } catch (err) {
     reportError(err)
@@ -615,6 +645,7 @@ onBeforeUnmount(() => {
   offDaemonDisconnected?.()
   offState?.()
   offActivityOutput?.()
+  offLaunchDirectory?.()
   document.removeEventListener('focusin', updateActivityFocus)
   document.removeEventListener('visibilitychange', updateActivityFocus)
   window.removeEventListener('focus', updateActivityFocus)

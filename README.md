@@ -33,7 +33,7 @@
 
 支持用户主题：将 [示例 JSON/CSS](examples/themes/) 复制到当前用户主目录下的 `DiggerTerm/`，在“设置 → 外观”刷新并选择。外观页显示实际目录，并可直接打开该目录。主题名称读取 JSON 的 `name`；`custom.css` 提供可关闭的全局覆盖。快捷键配置也保存在该目录的 `keybindings.json` 中。
 
-Windows 安装程序为当前用户创建开始菜单快捷方式及资源管理器文件夹右键菜单。选择“Open in DiggerTerm”会打开新窗口，并在所选文件夹中创建 PowerShell 会话；Windows 11 的菜单项可能位于“显示更多选项”。卸载会移除这些入口并保留用户数据。更新或卸载前请先结束已有会话并正常退出 Daemon。
+Windows 安装程序为当前用户创建开始菜单快捷方式及资源管理器文件夹右键菜单。选择“Open in DiggerTerm”会打开或唤起 DiggerTerm，并在所选文件夹中创建 PowerShell 会话；Windows 11 的菜单项可能位于“显示更多选项”。卸载会移除这些入口并保留用户数据。更新或卸载前请先结束已有会话并正常退出 Daemon。
 
 Windows 需要 WebView2，安装包尚未签名。Linux 安装包基于 Ubuntu 24.04 构建，其他发行版可能需要相应的 GTK4、WebKitGTK 6 等系统依赖。会话不保证在 Daemon 崩溃或系统重启后存活。
 

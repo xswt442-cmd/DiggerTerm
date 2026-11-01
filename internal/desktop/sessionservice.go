@@ -28,6 +28,8 @@ type SessionService struct {
 	initErr       error
 	generation    uint64
 	setUILanguage func(string)
+	launchMu      sync.Mutex
+	launchDirs    []string
 }
 
 func NewSessionService(app *application.App) *SessionService {
@@ -320,10 +322,14 @@ func (s *SessionService) stopAllSessionsAndDaemon(confirmedIDs []string) error {
 
 // LaunchDirectory returns the explicitly requested local startup directory.
 func (s *SessionService) LaunchDirectory() (string, error) {
-	if len(os.Args) != 3 || os.Args[1] != "--directory" {
+	return launchDirectory(os.Args)
+}
+
+func launchDirectory(args []string) (string, error) {
+	if len(args) != 3 || args[1] != "--directory" {
 		return "", nil
 	}
-	dir := os.Args[2]
+	dir := args[2]
 	if !filepath.IsAbs(dir) {
 		return "", errors.New("startup directory must be absolute")
 	}
@@ -335,6 +341,29 @@ func (s *SessionService) LaunchDirectory() (string, error) {
 		return "", errors.New("startup path is not a directory")
 	}
 	return dir, nil
+}
+
+func (s *SessionService) enqueueLaunch(args []string) error {
+	dir, err := launchDirectory(args)
+	if err != nil || dir == "" {
+		return err
+	}
+	s.launchMu.Lock()
+	s.launchDirs = append(s.launchDirs, dir)
+	s.launchMu.Unlock()
+	if s.app != nil {
+		s.app.Event.Emit("terminal:launch-directory", nil)
+	}
+	return nil
+}
+
+// TakeLaunchDirectories consumes pending requests forwarded by later GUI launches.
+func (s *SessionService) TakeLaunchDirectories() []string {
+	s.launchMu.Lock()
+	defer s.launchMu.Unlock()
+	dirs := s.launchDirs
+	s.launchDirs = nil
+	return dirs
 }
 
 func (s *SessionService) Profiles() ([]session.Profile, error) {

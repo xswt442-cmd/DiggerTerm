@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io/fs"
 	"log"
+	"os"
 	"runtime"
 
 	"github.com/wailsapp/wails/v3/pkg/application"
@@ -16,6 +17,17 @@ func Run(assets fs.FS, trayIcon []byte) {
 }
 
 func runGUI(assets fs.FS, trayIcon []byte) {
+	broker, primary, err := acquireGUIInstance(os.Args)
+	if err != nil {
+		log.Printf("GUI launch: %v", err)
+		return
+	}
+	if !primary {
+		return
+	}
+	if broker != nil {
+		defer broker.close()
+	}
 	app := application.New(application.Options{
 		Name:        "DiggerTerm",
 		Description: "A lightweight terminal workspace",
@@ -46,6 +58,18 @@ func runGUI(assets fs.FS, trayIcon []byte) {
 		BackgroundColour: application.NewRGB(17, 19, 24),
 		URL:              "/",
 	})
+	if broker != nil {
+		go func() {
+			for args := range broker.launches {
+				if err := sessions.enqueueLaunch(args); err != nil {
+					log.Printf("GUI directory launch: %v", err)
+				}
+				window.Show()
+				window.Restore()
+				window.Focus()
+			}
+		}()
+	}
 
 	tray := app.SystemTray.New()
 	tray.SetIcon(trayIcon)

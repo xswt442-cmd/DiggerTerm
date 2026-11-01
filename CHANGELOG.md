@@ -17,6 +17,9 @@ This file records shipped desktop features, fixes, platform support, and compati
 **新增**
 - Windows 安装程序为当前用户添加开始菜单快捷方式及资源管理器文件夹右键入口，在所选目录创建 PowerShell 会话；卸载保留用户数据。
 
+**修复**
+- 修复资源管理器右键启动的绑定错误，并将后续 Windows 启动请求转交给已有窗口，避免重复 GUI。
+
 **安全**
 - 更新 Go 图像和加密依赖，修复 VP8L 内存分配及 SSH 源地址限制漏洞。
 
@@ -29,6 +32,9 @@ This file records shipped desktop features, fixes, platform support, and compati
 
 **Added**
 - The per-user Windows installer adds a Start menu shortcut and Explorer folder context menu to create a PowerShell session in the selected directory; uninstall preserves user data.
+
+**Fixed**
+- Fixed Explorer context-menu launch binding and forwarded subsequent Windows launches to the existing window to prevent duplicate GUIs.
 
 **Security**
 - Updated Go image and crypto dependencies to address VP8L memory allocation and SSH source-address restriction vulnerabilities.
