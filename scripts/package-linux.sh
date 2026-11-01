@@ -59,12 +59,12 @@ download_tool() {
 }
 
 linuxdeploy="$(download_tool linuxdeploy \
-  'https://github.com/linuxdeploy/linuxdeploy/releases/download/continuous/linuxdeploy-x86_64.AppImage' \
-  '8aea8da0f7f7039d2a2cecb14657d752a222a5e1d3825caeef186c82f751cdd1' \
+  'https://github.com/linuxdeploy/linuxdeploy/releases/download/1-alpha-20251107-1/linuxdeploy-x86_64.AppImage' \
+  'c20cd71e3a4e3b80c3483cef793cda3f4e990aca14014d23c544ca3ce1270b4d' \
   "${LINUXDEPLOY_BIN:-}")"
 appimagetool="$(download_tool appimagetool \
-  'https://github.com/AppImage/appimagetool/releases/download/continuous/appimagetool-x86_64.AppImage' \
-  '95cbe7cce9717fce90c484e34052ee7c7f1d7635b33c12525b4776826a7d29b6' \
+  'https://github.com/AppImage/appimagetool/releases/download/1.9.1/appimagetool-x86_64.AppImage' \
+  'ed4ce84f0d9caff66f50bcca6ff6f35aae54ce8135408b3fa33abfc3cb384eb0' \
   "${APPIMAGETOOL_BIN:-}")"
 
 echo '=== Compile actual Wails GTK/WebKit application ==='
