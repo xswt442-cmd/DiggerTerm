@@ -1,0 +1,25 @@
+# Contributing
+
+## Branches
+
+Pull requests target `dev`. Maintainers fast-forward `main` before a release. Merging, tagging, and publishing are maintainer actions. CI runs on pull requests.
+
+## Pull request descriptions
+
+A description states the change, the work completed, and the checks actually run, in a Simplified Chinese section and a matching English section. Deferred work belongs in an issue.
+
+## Documentation
+
+`README.md` and `README.en.md` change together. `docs/development/ARCHITECTURE.zh-CN.md` and `.en.md` change together, and `CHANGELOG.md` keeps its `简体中文` and `English` sections in step. Tracked files contain no personal paths, credentials, private host details, or one-off logs.
+
+## Verification
+
+Run `go test ./... -count=1`, `go vet ./...`, `npm --prefix frontend test`, `npm --prefix frontend run build`, `node --test scripts/check-docs.test.mjs`, `node scripts/check-docs.mjs`, and `node .github/engineering/scripts/sync-pr.mjs --check .`. A release also runs `node scripts/verify-release.mjs vX.Y.Z` against the candidate version. State which checks were not run.
+
+## Version history
+
+Release notes derive from the section for the tagged version in `CHANGELOG.md`. `docs/development/RELEASE.md` records the maintainer steps.
+
+## Security reports
+
+Security findings follow [SECURITY.md](SECURITY.md).
