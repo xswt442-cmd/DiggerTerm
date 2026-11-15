@@ -20,6 +20,7 @@
 - READMEs explain the product, available features, downloads, installation, usage, supported platforms, and actual limitations. Code comments explain currently relevant behavior and constraints; use Mermaid for diagrams when needed.
 - Keep English and Simplified Chinese user-facing documentation factually consistent.
 - `CHANGELOG.md` is the sole source of version changes, and GitHub Release notes are generated from the matching tagged version. PR descriptions must be bilingual and contain only completed changes and verification that actually passed. Track separate future work in Issues.
+- Start every commit message with a Conventional Commit type (`feat:`, `fix:`, `docs:`, `test:`, `refactor:`, `perf:`, `build:`, `ci:`, `chore:`, `release:`), add a scope in parentheses when it clarifies the area (`fix(paths):`), then write one sentence describing the change. One commit carries one type; split unrelated changes into separate commits.
 - Use the [Architecture](docs/development/ARCHITECTURE.en.md) and [Release runbook](docs/development/RELEASE.md) for their respective subjects. `CLAUDE.md` only points to this file.
 
 ## Verification and permissions
