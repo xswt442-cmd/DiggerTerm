@@ -13,7 +13,7 @@
 
 1. 在 `dev` 整理经过审查的源码，并更新 `CHANGELOG.md` 的中英文 Unreleased 条目；条目只包含实际实现的行为变化。
 2. 更新 `frontend/package.json`、`frontend/package-lock.json`、`build/config.yml` 和对应平台的版本资源。
-3. 将要发布的条目归入 `[X.Y.Z]` 章节，确认两种语言描述相同事实。
+3. 将要发布的条目归入 `[X.Y.Z]` 章节，确认两种语言描述相同事实。版本章节日期使用实际计划发布日；若发布日变化，在创建 Tag 前同步修改。
 4. 使用项目测试和构建命令验证功能、Daemon 会话边界和发布元数据：
 
    ```sh
@@ -22,11 +22,16 @@
    npm --prefix frontend run build
    go test ./... -count=1
    go vet ./...
-   node --test scripts/release-notes.test.mjs scripts/release-downloads.test.mjs
+   node --test scripts/check-docs.test.mjs scripts/release-notes.test.mjs scripts/release-downloads.test.mjs
+   node scripts/check-docs.mjs
+   node .github/engineering/scripts/sync-pr.mjs --check .
+   node .github/engineering/scripts/sync-community.mjs --check .
    node scripts/verify-release.mjs vX.Y.Z
    ```
 
 5. GitHub Actions 的 `publish → Run workflow` 支持手工输入版本进行 Windows/Linux 构建预检；手工运行只产出临时 CI 工件，不创建 Tag 或 GitHub Release。
+
+可复用的验证工作流会对完整 Git 历史执行 Gitleaks Secret Scan；正式 Tag 触发的发布流程也会先完成该检查。
 
 ## Tag 与发布
 

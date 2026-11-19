@@ -8,7 +8,7 @@
 - [ADOPTION.md](ADOPTION.md)：现有项目接入、验证与后续同步检查。
 - [templates/AGENTS.md](templates/AGENTS.md)：仅英文的可移植 Agent 规则模板；必须按项目真实边界调整。
 - [templates/CLAUDE.md](templates/CLAUDE.md)：Claude 兼容入口。
-- [templates/CHANGELOG.md](templates/CHANGELOG.md)：按「新增 / 改进 / 修复」与 的中英双语 Changelog 样例。
+- [templates/CHANGELOG.md](templates/CHANGELOG.md)：按「新增 / 改进 / 修复」等分类的中英双语 Changelog 样例。
 - [templates/PULL_REQUEST_TEMPLATE.md](templates/PULL_REQUEST_TEMPLATE.md)：双语「变更／任务／验证」，允许按复杂度详细解释实现。
 - [templates/SECURITY.md](templates/SECURITY.md)：安全策略的权威模板。
 - [templates/CONTRIBUTING.md](templates/CONTRIBUTING.md)：贡献指南的权威模板。
