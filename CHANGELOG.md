@@ -8,13 +8,7 @@ This file records shipped desktop features, fixes, platform support, and compati
 
 ### 简体中文
 
-**改进**
-- 启用 CodeRabbit 辅助代码评审；必需 CI 仍是合并门禁。
-
 ### English
-
-**Improved**
-- Enabled advisory CodeRabbit code reviews while required CI remains the merge gate.
 
 ## [0.0.9] - 2026-11-19
 
@@ -30,6 +24,7 @@ This file records shipped desktop features, fixes, platform support, and compati
 
 **改进**
 - 侧栏可拖拽的最小宽度缩小到 160 px，收起宽度缩小到 40 px。
+- 启用 CodeRabbit 辅助代码评审；必需 CI 仍是合并门禁。
 
 ### English
 
@@ -43,6 +38,7 @@ This file records shipped desktop features, fixes, platform support, and compati
 
 **Improved**
 - Reduced the draggable sidebar minimum width to 160 px and its collapsed width to 40 px.
+- Enabled advisory CodeRabbit code reviews while required CI remains the merge gate.
 
 ## [0.0.8] - 2026-11-01
 
