@@ -46,6 +46,7 @@ test('all expanded preferences persist across GUI reopen', () => {
     observeRefreshSeconds: 0,
     showPid: false,
     showStatusBar: false,
+    automaticUpdateChecks: false,
     sidebarWidth: 370,
     managedRatio: 0.67,
   }
@@ -57,6 +58,12 @@ test('new session activity preference defaults on and can be disabled', () => {
   assert.equal(prefs.defaults.sessionActivityEnabled, true)
   prefs.writePreferences({ ...prefs.defaults, sessionActivityEnabled: false })
   assert.equal(prefs.readPreferences().sessionActivityEnabled, false)
+})
+
+test('automatic update checks default on and can be disabled', () => {
+  assert.equal(prefs.defaults.automaticUpdateChecks, true)
+  prefs.writePreferences({ ...prefs.defaults, automaticUpdateChecks: false })
+  assert.equal(prefs.readPreferences().automaticUpdateChecks, false)
 })
 
 test('bad saved values are clamped or safely ignored', () => {

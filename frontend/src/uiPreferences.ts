@@ -47,6 +47,7 @@ export interface UIPreferences {
   observeRefreshSeconds: number
   showPid: boolean
   showStatusBar: boolean
+  automaticUpdateChecks: boolean
 }
 
 export const defaults: UIPreferences = {
@@ -55,7 +56,7 @@ export const defaults: UIPreferences = {
   scrollback: 5000, lineHeight: 1.25, scrollSensitivity: 1, terminalPadding: 14, focusBorderStyle: 'accent',
   cursorStyle: 'block', keyboardMode: 'smart', cursorBlink: true, rightClickSelectsWord: false,
   activateNewSession: true, observeEnabled: true,
-  observeRefreshSeconds: 15, showPid: true, showStatusBar: true,
+  observeRefreshSeconds: 15, showPid: true, showStatusBar: true, automaticUpdateChecks: true,
 }
 
 const key = 'diggerterm:preferences:v1'
@@ -167,7 +168,8 @@ export function readPreferences(): UIPreferences {
     if (saved.terminalPadding && paddingOptions.includes(saved.terminalPadding as typeof paddingOptions[number])) result.terminalPadding = saved.terminalPadding
     if (saved.observeRefreshSeconds !== undefined && refreshOptions.includes(saved.observeRefreshSeconds as typeof refreshOptions[number])) result.observeRefreshSeconds = saved.observeRefreshSeconds
     for (const name of ['customCSS', 'cursorBlink', 'rightClickSelectsWord', 'activateNewSession',
-      'observeEnabled', 'showPid', 'showStatusBar', 'sidebarCollapsed', 'sessionActivityEnabled'] as const) {
+      'observeEnabled', 'showPid', 'showStatusBar', 'sidebarCollapsed', 'sessionActivityEnabled',
+      'automaticUpdateChecks'] as const) {
       if (typeof saved[name] === 'boolean') result[name] = saved[name]
     }
   } catch { /* Storage can be disabled: use defaults. */ }

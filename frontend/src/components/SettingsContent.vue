@@ -272,6 +272,8 @@ const t = props.translate
     <button type="button" class="reset-layout" :disabled="checkingUpdate" @click="emit('check-updates')">
       {{ checkingUpdate ? (locale === 'zh' ? '正在检查…' : 'Checking…') : (locale === 'zh' ? '检查更新' : 'Check for updates') }}
     </button>
+    <label class="setting-toggle"><span>{{ locale === 'zh' ? '后台自动检查更新（每 24 小时最多一次）' : 'Check automatically in the background (at most once every 24 hours)' }}</span>
+      <input v-model="preferences.automaticUpdateChecks" type="checkbox" /></label>
     <p v-if="updateStatus" class="update-status" role="status">{{ updateStatus }}</p>
     <button v-if="updateAvailable" type="button" class="reset-layout" @click="emit('open-release-page')">
       {{ locale === 'zh' ? '查看下载' : 'View download' }}

@@ -1003,8 +1003,10 @@ onBeforeUnmount(() => {
           <span>·</span>
           <span>{{ t('observedCount', { count: observedProcesses.length }) }}</span>
         </div>
-        <button type="button" class="settings-trigger" :aria-expanded="settingsOpen"
-          :aria-label="t('settings')" @click="toggleSettings">
+        <button type="button" class="settings-trigger" :class="{ 'has-update': updateAvailable && !focusMode }" :aria-expanded="settingsOpen"
+          :aria-label="updateAvailable && !focusMode ? t('settings') + ' · ' + (locale === 'zh' ? '有更新' : 'Update available') : t('settings')"
+          :title="updateAvailable && !focusMode ? (locale === 'zh' ? '设置 · 有更新' : 'Settings · Update available') : undefined"
+          @click="toggleSettings">
           <span class="gear" aria-hidden="true">⚙</span>
           <span v-if="!preferences.sidebarCollapsed">{{ t('settings') }}</span>
           <span v-if="!preferences.sidebarCollapsed" class="settings-arrow" aria-hidden="true">{{ settingsOpen ? '⌄' : '›' }}</span>
@@ -1258,7 +1260,8 @@ button:focus-visible, input:focus-visible, select:focus-visible, [role="separato
 .sidebar-status span { overflow: hidden; text-overflow: ellipsis; }
 .settings-trigger { display: flex; gap: 9px; width: 100%; align-items: center; height: 31px; padding: 0 8px; background: transparent; color: var(--muted); border: 0; border-radius: 5px; text-align: left; font-size: calc(11px * var(--ui-font-scale)); }
 .settings-trigger:hover, .settings-trigger[aria-expanded="true"] { color: var(--text); background: var(--surface-hover); }
-.gear { font-size: calc(17px * var(--ui-font-scale)); line-height: 1; }
+.gear { position: relative; font-size: calc(17px * var(--ui-font-scale)); line-height: 1; }
+.settings-trigger.has-update .gear::after { content: ''; position: absolute; top: -1px; right: -3px; width: 6px; height: 6px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 0 2px var(--sidebar); }
 .settings-arrow { margin-left: auto; font-size: calc(17px * var(--ui-font-scale)); }
 .session-diagnostics { margin: 0 3px 5px 7px; padding: 5px 7px; border-left: 2px solid var(--border); border-radius: 0 0 4px 4px; background: var(--surface); color: var(--muted); font-size: calc(9px * var(--ui-font-scale)); }
 .session-mark-editor { display: grid; gap: 5px; margin-bottom: 7px; }

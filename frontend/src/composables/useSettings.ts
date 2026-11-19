@@ -14,18 +14,12 @@ import {
 import { defaultBindings, mergeBindings, parseBindings, type Binding } from '../keybindings'
 import { themeRegistry, themeVariables, type ThemeOption } from '../userThemes'
 import type { SettingsTab } from '../components/SettingsDialog.vue'
+import {
+  AUTO_UPDATE_CHECK_DELAY_MS, automaticUpdateCheckDue, compareVersions, parseLatestRelease,
+} from '../updates'
 
 export interface UseSettingsOptions {
   onError?: (error: unknown) => void
-}
-
-function compareVersions(left: string, right: string): number {
-  const a = left.split('.').map(Number)
-  const b = right.split('.').map(Number)
-  for (let index = 0; index < 3; index++) {
-    if (a[index] !== b[index]) return a[index]! - b[index]!
-  }
-  return 0
 }
 
 export function useSettings(options: UseSettingsOptions = {}) {
@@ -58,6 +52,9 @@ export function useSettings(options: UseSettingsOptions = {}) {
   const isMac = /Mac/i.test(navigator.userAgent)
   const bindings = ref<Binding[]>(defaultBindings(isMac))
   let themeStyle: HTMLStyleElement | undefined
+  let automaticUpdateTimer: ReturnType<typeof setTimeout> | undefined
+  let updateRequest: AbortController | undefined
+  const automaticUpdateCheckKey = 'diggerterm:last-auto-update-check'
 
   async function applyTheme() {
     themeStyle ??= document.createElement('style')
@@ -75,6 +72,13 @@ export function useSettings(options: UseSettingsOptions = {}) {
     void SetUILanguage(value).catch(() => {
       // The GUI remains functional if the platform does not expose a tray.
     })
+  })
+  watch(() => preferences.value.automaticUpdateChecks, enabled => {
+    if (enabled) scheduleAutomaticUpdateCheck()
+    else if (automaticUpdateTimer) {
+      clearTimeout(automaticUpdateTimer)
+      automaticUpdateTimer = undefined
+    }
   })
 
   async function refreshThemes() {
@@ -105,6 +109,7 @@ export function useSettings(options: UseSettingsOptions = {}) {
     void QuickSelectPath().then(value => { quickSelectPath.value = value }).catch(onError)
     void applyTheme()
     void refreshThemes()
+    scheduleAutomaticUpdateCheck()
     void SetUILanguage(locale.value).catch(() => {
       // The GUI remains functional if the platform does not expose a tray.
     })
@@ -152,30 +157,55 @@ export function useSettings(options: UseSettingsOptions = {}) {
     }
   }
 
-  async function checkForUpdates() {
+  async function checkForUpdates(automatic = false) {
+    if (checkingUpdate.value) return
+    if (!automatic && automaticUpdateTimer) {
+      clearTimeout(automaticUpdateTimer)
+      automaticUpdateTimer = undefined
+    }
     checkingUpdate.value = true
-    updateStatus.value = ''
+    if (!automatic) updateStatus.value = ''
+    const controller = new AbortController()
+    updateRequest = controller
+    const timeout = setTimeout(() => controller.abort(), 8_000)
     try {
       const response = await fetch('https://api.github.com/repos/xswt442-cmd/DiggerTerm/releases/latest', {
         headers: { Accept: 'application/vnd.github+json' },
+        cache: 'no-store',
+        signal: controller.signal,
       })
       if (!response.ok) throw new Error(`HTTP ${response.status}`)
-      const release: unknown = await response.json()
-      if (!release || typeof release !== 'object' || !('tag_name' in release) ||
-        typeof release.tag_name !== 'string' || !/^v?\d+\.\d+\.\d+$/.test(release.tag_name)) {
-        throw new Error('Invalid latest release version')
-      }
-      const latestVersion = release.tag_name.replace(/^v/, '')
-      updateAvailable.value = compareVersions(latestVersion, appVersion) > 0
+      const release = parseLatestRelease(await response.json())
+      updateAvailable.value = compareVersions(release.version, appVersion) > 0
       updateStatus.value = updateAvailable.value
-        ? (locale.value === 'zh' ? `发现新版本 ${release.tag_name}` : `Version ${release.tag_name} is available`)
+        ? (locale.value === 'zh' ? `发现新版本 ${release.tag}` : `Version ${release.tag} is available`)
         : (locale.value === 'zh' ? '当前已是最新版本' : 'You are up to date')
     } catch {
-      updateAvailable.value = false
-      updateStatus.value = locale.value === 'zh' ? '检查更新失败' : 'Could not check for updates'
+      if (!automatic) updateStatus.value = locale.value === 'zh' ? '检查更新失败' : 'Could not check for updates'
     } finally {
+      clearTimeout(timeout)
+      if (updateRequest === controller) updateRequest = undefined
+      try { localStorage.setItem(automaticUpdateCheckKey, String(Date.now())) } catch { /* Optional. */ }
       checkingUpdate.value = false
     }
+  }
+
+  function scheduleAutomaticUpdateCheck() {
+    if (automaticUpdateTimer) {
+      clearTimeout(automaticUpdateTimer)
+      automaticUpdateTimer = undefined
+    }
+    if (!preferences.value.automaticUpdateChecks) return
+    let lastCheckedAt: number | null = null
+    try {
+      const value = localStorage.getItem(automaticUpdateCheckKey)
+      lastCheckedAt = value === null ? null : Number(value)
+    } catch { /* Storage can be disabled: check once this session. */ }
+    if (!automaticUpdateCheckDue(lastCheckedAt)) return
+    automaticUpdateTimer = setTimeout(() => {
+      automaticUpdateTimer = undefined
+      void checkForUpdates(true)
+    }, AUTO_UPDATE_CHECK_DELAY_MS)
   }
 
   async function openReleasePage() {
@@ -203,7 +233,11 @@ export function useSettings(options: UseSettingsOptions = {}) {
   ])
   const fontChoices = Object.entries(fonts).map(([id, font]) => ({ id, name: font.name }))
 
-  onBeforeUnmount(() => themeStyle?.remove())
+  onBeforeUnmount(() => {
+    if (automaticUpdateTimer) clearTimeout(automaticUpdateTimer)
+    updateRequest?.abort()
+    themeStyle?.remove()
+  })
 
   return {
     preferences, locale, t, defaults, fonts, scrollbackOptions, lineHeightOptions,
