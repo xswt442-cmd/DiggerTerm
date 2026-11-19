@@ -21,13 +21,14 @@ Download the Windows x64, Linux x64, or Ubuntu / Debian x64 packages and SHA-256
 ## Features
 
 - **Multiple terminals:** sidebar navigation, search, rename, nested horizontal/vertical splits, draggable dividers and layout restore; closing a pane keeps its session running.
-- **Focus mode:** hide workspace controls and show only the active terminal; the narrow sidebar keeps settings accessible through a terminal-only focus settings page.
+- **Focus mode:** hide workspace controls and show only the active terminal plus terminal-local actions such as search and copy; pane splits, session switching, the command palette, and Quick CD are unavailable. The narrow sidebar keeps settings accessible through a terminal-only focus settings page.
 - **Local and remote shells:** PowerShell, CMD, Git Bash (requires Git for Windows), WSL, Linux Bash, and SSH.
 - **Quick CD:** use the Quick CD button or `Ctrl+Shift+G` in a managed terminal. Local sessions can choose a folder through the native OS dialog; SSH sessions have a separate read-only remote directory browser. Paths may also be typed manually. Click Quick CD to send a quoted `cd` command and execute it; local paths can become the new-session default.
 - **Workspace information:** favorite paths and recall recently sent directories in Quick CD; add notes and colors to sessions. Session presets save a local shell and starting directory or an SSH host and port for later use.
 - **Persistent sessions:** the daemon keeps sessions running after the GUI exits; reconnect on restart.
 - **Dig process tree:** browse discovered shells, agents and descendants by Windows/WSL distribution, expand and filter the tree, and inspect read-only details without taking control.
 - **Preferences:** dark themes, fonts, sizes, language, default shell, and working directory.
+- **Update checks:** check the latest GitHub release in the background at most once every 24 hours, with an opt-out in Help and a download entry when an update is available.
 
 Smart **Ctrl+C** copies a terminal selection or interrupts without one; full-screen applications retain native control keys. The terminal toolbar and context menu provide Copy, Paste and a read-only copy mode. Try **Shift-drag** in mouse-reporting applications (Option on macOS); use Copy mode if selection is unavailable. Settings → Keys records, validates and saves shortcuts to `DiggerTerm/keybindings.json` in the current user's home directory ([example](examples/keybindings.json)).
 
@@ -40,6 +41,8 @@ The Windows installer creates a Start menu shortcut and Explorer folder context 
 On Windows, use “DiggerTerm (Administrator)” in the Start menu or “Open in DiggerTerm as administrator” in a folder context menu to request an elevated window through UAC. Its local Windows terminals run with administrator privileges. Elevated and standard windows use separate daemons and sessions; elevation does not grant administrator rights to remote SSH or Linux users inside WSL.
 
 Windows requires WebView2; binaries are unsigned. Linux packages are built for Ubuntu 24.04; other distributions may require matching system dependencies such as GTK4 and WebKitGTK 6. Sessions are not guaranteed to survive daemon crashes or system reboots.
+
+Update checks read only the GitHub Release version and never download or replace the program silently. Before installing a new version, finish existing sessions, exit the daemon normally, then download and run the package from Releases.
 
 Quick CD sends a quoted command and Enter to the managed terminal. Use it only at an empty shell prompt, not while `vim`, an Agent, or another foreground application is active or when the prompt contains existing input. Dig's read-only external processes do not support Quick CD.
 

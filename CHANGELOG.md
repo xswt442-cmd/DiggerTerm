@@ -16,9 +16,11 @@ This file records shipped desktop features, fixes, platform support, and compati
 
 **新增**
 - 新增专注模式，仅显示当前终端，并提供只调整终端字体、字号、行高、光标与内边距的专注设置页；展开侧栏会先确认退出专注模式。
+- 启动后每 24 小时最多在后台检查一次 GitHub 最新版本；可在帮助设置中关闭，发现更新后显示下载入口。
 
 **修复**
 - 修复终端右侧滚动条拖动与滚轮滚动不一致的问题。
+- 修复专注模式仍可通过工作区快捷键或命令面板分屏、切换会话、关闭面板和执行快速 CD 的问题。
 
 **改进**
 - 侧栏可拖拽的最小宽度缩小到 160 px，收起宽度缩小到 40 px。
@@ -27,9 +29,11 @@ This file records shipped desktop features, fixes, platform support, and compati
 
 **Added**
 - Added focus mode to show only the active terminal, with a dedicated settings page limited to terminal font, size, line height, cursor, and padding; expanding the sidebar asks before leaving focus mode.
+- Added an automatic background check for the latest GitHub release at most once every 24 hours, with a Help settings toggle and a download entry when an update is available.
 
 **Fixed**
 - Fixed the terminal scrollbar thumb not matching wheel scrolling behavior.
+- Fixed focus mode still allowing workspace shortcuts or the command palette to split panes, switch sessions, close panes, or run Quick CD.
 
 **Improved**
 - Reduced the draggable sidebar minimum width to 160 px and its collapsed width to 40 px.
