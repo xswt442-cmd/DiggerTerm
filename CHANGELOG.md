@@ -8,7 +8,13 @@ This file records shipped desktop features, fixes, platform support, and compati
 
 ### 简体中文
 
+**改进**
+- 启用 CodeRabbit 辅助代码评审；必需 CI 仍是合并门禁。
+
 ### English
+
+**Improved**
+- Enabled advisory CodeRabbit code reviews while required CI remains the merge gate.
 
 ## [0.0.9] - 2026-11-19
 
