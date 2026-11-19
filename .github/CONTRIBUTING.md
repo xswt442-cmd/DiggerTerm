@@ -2,7 +2,11 @@
 
 ## Branches
 
-Pull requests target `dev`. Maintainers fast-forward `main` before a release. Merging, tagging, and publishing are maintainer actions. CI runs on pull requests.
+Contribution pull requests target `dev`. Before `main` advances, maintainers open a `dev` to `main` review pull request so CI and review cover the integration diff. Keep `main` linear and fast-forward it only after required checks and review issues are resolved. Merging, tagging, and publishing are maintainer actions.
+
+## Review
+
+CodeRabbit is an advisory reviewer configured by [`.coderabbit.yaml`](../.coderabbit.yaml). Follow [REVIEW_POLICY.md](REVIEW_POLICY.md), fix applicable findings with focused commits, and explain inapplicable findings with evidence. Bot comments never replace local tests, required CI or maintainer judgment.
 
 ## Pull request descriptions
 
