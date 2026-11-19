@@ -45,6 +45,7 @@ export function useSettings(options: UseSettingsOptions = {}) {
   const settingsOpen = ref(false)
   const settingsTab = ref<SettingsTab>('appearance')
   const settingsTabLabels = computed<Record<SettingsTab, string>>(() => ({
+    focus: locale.value === 'zh' ? '专注' : 'Focus',
     appearance: t('appearanceTab'), terminal: t('terminalTab'), sessions: t('sessionTab'),
     observed: t('monitorTab'), keybindings: locale.value === 'zh' ? '快捷键' : 'Keys',
     quickselect: locale.value === 'zh' ? '快速选择' : 'Quick Select',
@@ -130,6 +131,11 @@ export function useSettings(options: UseSettingsOptions = {}) {
       case 'terminal':
         for (const key of ['fontSize', 'fontFamily', 'scrollback', 'lineHeight', 'scrollSensitivity', 'keyboardMode',
           'terminalPadding', 'focusBorderStyle', 'cursorStyle', 'cursorBlink', 'rightClickSelectsWord'] as const) {
+          Object.assign(preferences.value, { [key]: defaults[key] })
+        }
+        break
+      case 'focus':
+        for (const key of ['fontSize', 'fontFamily', 'lineHeight', 'cursorStyle', 'cursorBlink', 'terminalPadding'] as const) {
           Object.assign(preferences.value, { [key]: defaults[key] })
         }
         break

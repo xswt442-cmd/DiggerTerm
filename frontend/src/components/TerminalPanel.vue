@@ -21,6 +21,7 @@ import { sliceOutput } from '../terminalReplay'
 import { createExplicitWebLinkActivator, validateExternalWebURL } from '../externalLinks'
 import { withTerminalSearchSupport } from '../terminalSearch'
 import type { PositionedQuickSelectCandidate } from '../quickSelect'
+import { scrollbarMetrics, scrollLineFromThumb } from '../terminalScrollbar'
 import TerminalSearch from './TerminalSearch.vue'
 const QuickSelectOverlay = defineAsyncComponent(() => import('./QuickSelectOverlay.vue'))
 const SSHDirectoryBrowser = defineAsyncComponent(() => import('./SSHDirectoryBrowser.vue'))
@@ -64,6 +65,9 @@ const recovering = ref(true)
 const copyMenu = ref<{ x: number; y: number } | null>(null)
 const copyMenuElement = ref<HTMLElement | null>(null)
 const copyMenuURL = ref('')
+const scrollbarTrack = ref<HTMLElement | null>(null)
+const scrollbarThumb = ref<HTMLElement | null>(null)
+const scrollbarState = ref({ scrollable: false, thumbTop: 0, thumbHeight: 0, value: 0, max: 0 })
 const selectedWebURL = ref('')
 const searchOpen = ref(false)
 const searchQuery = ref('')
@@ -131,10 +135,14 @@ let observer: ResizeObserver | undefined
 let offOutput: (() => void) | undefined
 let offInput: { dispose(): void } | undefined
 let offSelection: { dispose(): void } | undefined
+let offScrollbarScroll: { dispose(): void } | undefined
+let offScrollbarWrite: { dispose(): void } | undefined
+let offScrollbarResize: { dispose(): void } | undefined
 let pending: OutputEvent[] = []
 let replaying = true
 let lastOffset = 0
 let lastSize = ''
+let scrollbarDrag: { pointerId: number; offset: number } | undefined
 
 function decodeBase64(data: string): Uint8Array {
   const raw = atob(data)
@@ -154,6 +162,56 @@ function writeEvent(event: OutputEvent) {
   } catch (error) { replayError.value = String(error) }
 }
 
+function refreshScrollbar() {
+  if (!terminal || !scrollbarTrack.value) {
+    scrollbarState.value = { scrollable: false, thumbTop: 0, thumbHeight: 0, value: 0, max: 0 }
+    return
+  }
+  const buffer = terminal.buffer.active
+  const metrics = scrollbarMetrics(buffer.viewportY, buffer.baseY, terminal.rows)
+  const trackHeight = scrollbarTrack.value.clientHeight
+  const thumbHeight = metrics.scrollable ? Math.max(18, trackHeight * metrics.thumbHeightPercent / 100) : trackHeight
+  const ratio = buffer.baseY > 0 ? buffer.viewportY / buffer.baseY : 0
+  scrollbarState.value = {
+    scrollable: metrics.scrollable,
+    thumbHeight,
+    thumbTop: Math.max(0, Math.min(trackHeight - thumbHeight, ratio * (trackHeight - thumbHeight))),
+    value: buffer.viewportY,
+    max: buffer.baseY,
+  }
+}
+
+function scrollFromPointer(event: PointerEvent) {
+  if (!scrollbarDrag || !terminal || !scrollbarTrack.value) return
+  const rect = scrollbarTrack.value.getBoundingClientRect()
+  const thumbHeight = scrollbarThumb.value?.offsetHeight ?? 18
+  const line = scrollLineFromThumb(event.clientY, rect.top, rect.height, thumbHeight, scrollbarDrag.offset, terminal.buffer.active.baseY)
+  terminal.scrollToLine(line)
+  refreshScrollbar()
+}
+
+function beginScrollbarDrag(event: PointerEvent) {
+  if (!terminal || !scrollbarState.value.scrollable || !scrollbarTrack.value) return
+  event.preventDefault()
+  event.stopPropagation()
+  const trackRect = scrollbarTrack.value.getBoundingClientRect()
+  const thumbHeight = scrollbarThumb.value?.offsetHeight ?? 18
+  const thumbTop = trackRect.top + scrollbarState.value.thumbTop
+  const onThumb = (event.target as HTMLElement).classList.contains('terminal-scrollbar-thumb')
+  scrollbarDrag = {
+    pointerId: event.pointerId,
+    offset: onThumb ? event.clientY - thumbTop : thumbHeight / 2,
+  }
+  scrollbarTrack.value.setPointerCapture(event.pointerId)
+  scrollFromPointer(event)
+}
+
+function endScrollbarDrag(event: PointerEvent) {
+  if (!scrollbarDrag || event.pointerId !== scrollbarDrag.pointerId) return
+  if (scrollbarTrack.value?.hasPointerCapture(event.pointerId)) scrollbarTrack.value.releasePointerCapture(event.pointerId)
+  scrollbarDrag = undefined
+}
+
 function fit() {
   if (!props.active || !props.connected || !controlled.value || !terminal || !fitAddon || !container.value || container.value.clientWidth === 0 || container.value.clientHeight === 0) return
   try {
@@ -162,6 +220,7 @@ function fit() {
     const cols = Math.min(500, size.cols)
     const rows = Math.min(500, size.rows)
     if (terminal.cols !== cols || terminal.rows !== rows) terminal.resize(cols, rows)
+    refreshScrollbar()
     const key = `${cols}:${rows}`
     if (quickSelectOpen.value && key !== lastSize) void closeQuickSelect()
     if (key !== lastSize && props.session.status === 'running') {
@@ -705,7 +764,10 @@ watch(() => props.lineHeight, async (height) => {
   fit()
 })
 watch(() => props.scrollback, (lines) => {
-  if (terminal) terminal.options.scrollback = lines
+  if (terminal) {
+    terminal.options.scrollback = lines
+    refreshScrollbar()
+  }
 })
 watch(() => props.cursorStyle, (style) => {
   if (terminal) terminal.options.cursorStyle = style
@@ -779,6 +841,9 @@ onMounted(async () => {
   terminal = term
   updateColors()
   fitAddon = fitPlugin
+  offScrollbarScroll = term.onScroll(refreshScrollbar)
+  offScrollbarWrite = term.onWriteParsed(refreshScrollbar)
+  offScrollbarResize = term.onResize(refreshScrollbar)
   offSelection = term.onSelectionChange(updateSelectedWebURL)
   void import('@xterm/addon-web-links').then(({ WebLinksAddon }) => {
     if (terminal === term) term.loadAddon(new WebLinksAddon(openTerminalLink, {
@@ -831,6 +896,9 @@ onBeforeUnmount(() => {
   observer?.disconnect()
   offOutput?.()
   offSelection?.dispose()
+  offScrollbarScroll?.dispose()
+  offScrollbarWrite?.dispose()
+  offScrollbarResize?.dispose()
   quickSelectRequest++
   quickSelectAbort?.abort()
   offQuickSelectScroll?.dispose()
@@ -917,12 +985,19 @@ onBeforeUnmount(() => {
     </div>
     <div v-if="session.status === 'exited'" class="copy-notice" role="status">{{ text('会话已结束', 'Session ended') }} {{ session.message }}</div>
     <div v-else-if="session.streamClosed" class="copy-notice" role="status">{{ text('PTY 输出流已关闭，已暂停输入。', 'PTY output stream closed; input paused.') }}</div>
-    <div class="terminal-content" @contextmenu.prevent="openCopyMenu">
+    <div :id="'terminal-content-' + session.id" class="terminal-content" @contextmenu.prevent="openCopyMenu">
       <div v-if="copyMode" class="copy-overlay">
         <small>{{ text('当前可见文字的只读副本；选择后复制，Esc 返回终端。', 'Read-only copy of visible text. Select and copy; Escape returns to the terminal.') }}</small>
         <textarea ref="copyEditor" :value="copyText" readonly spellcheck="false" :aria-label="text('复制模式文字', 'Copy mode text')" @mousedown.right.prevent @keydown="onCopyEditorKey" />
       </div>
       <div ref="container" class="xterm-host" :style="{ padding: props.padding + 'px', visibility: controlled ? 'visible' : 'hidden' }" @click="focus" />
+      <div v-if="scrollbarState.scrollable && !copyMode" ref="scrollbarTrack" class="terminal-scrollbar-track"
+        role="scrollbar" :aria-controls="'terminal-content-' + session.id" aria-orientation="vertical"
+        aria-valuemin="0" :aria-valuenow="scrollbarState.value" :aria-valuemax="scrollbarState.max"
+        @pointerdown="beginScrollbarDrag" @pointermove="scrollFromPointer" @pointerup="endScrollbarDrag" @pointercancel="endScrollbarDrag">
+        <div ref="scrollbarThumb" class="terminal-scrollbar-thumb"
+          :style="{ top: scrollbarState.thumbTop + 'px', height: scrollbarState.thumbHeight + 'px' }" />
+      </div>
       <QuickSelectOverlay v-if="quickSelectOpen" :locale="locale" :candidates="quickSelectCandidates"
         :truncated="quickSelectTruncated" :range="quickSelectRange"
         @update:range="quickSelectRange = $event" @selected="selectQuickCandidate" @close="closeQuickSelect" />
@@ -963,6 +1038,11 @@ onBeforeUnmount(() => {
 .quick-cd-buttons { display: flex; gap: 6px; }
 .quick-cd-buttons button { background: var(--canvas); color: var(--text); border: 1px solid var(--border); border-radius: var(--dt-radius, 4px); padding: 5px 9px; cursor: pointer; }
 .xterm-host { position: absolute; inset: 0; overflow: hidden; }
+.terminal-panel :deep(.xterm-viewport) { scrollbar-width: none; }
+.terminal-panel :deep(.xterm-viewport::-webkit-scrollbar) { width: 0; height: 0; }
+.terminal-scrollbar-track { position: absolute; z-index: 3; top: 3px; right: 1px; bottom: 3px; width: 9px; cursor: pointer; touch-action: none; }
+.terminal-scrollbar-thumb { position: absolute; right: 1px; width: 6px; min-height: 18px; border-radius: 6px; background: color-mix(in srgb, var(--muted) 62%, transparent); opacity: .62; }
+.terminal-scrollbar-track:hover .terminal-scrollbar-thumb, .terminal-scrollbar-thumb:active { opacity: 1; background: var(--accent); }
 .terminal-actions { position: relative; display: flex; align-items: center; flex-wrap: nowrap; flex: 0 0 28px; min-height: 28px; gap: 4px; padding: 2px 6px; border-bottom: 1px solid var(--border-faint); }
 .terminal-actions button { flex: 0 0 auto; color: var(--text); background: var(--surface); border: 1px solid var(--border); border-radius: var(--dt-radius, 4px); font-size: 10px; line-height: 1.2; padding: 2px 5px; white-space: nowrap; }
 .terminal-more summary { cursor: pointer; color: var(--muted); font-size: 10px; padding: 3px 5px; }

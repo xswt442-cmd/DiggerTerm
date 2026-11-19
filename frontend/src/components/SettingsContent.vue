@@ -45,13 +45,56 @@ const emit = defineEmits<{
   'keybindings-change': [bindings: Binding[]]
   'check-updates': []
   'open-release-page': []
+  'exit-focus': []
 }>()
 
 const t = props.translate
 </script>
 
 <template>
-  <template v-if="tab === 'appearance'">
+  <template v-if="tab === 'focus'">
+    <label class="setting-row">
+      <span>{{ t('fontFamily') }}</span>
+      <select v-model="preferences.fontFamily">
+        <option v-for="font in fontChoices" :key="font.id" :value="font.id">{{ font.name }}</option>
+      </select>
+    </label>
+    <div class="setting-block">
+      <div class="setting-label setting-split">
+        <label for="focus-font-size-slider">{{ t('fontSizeShort') }}</label>
+        <output for="focus-font-size-slider">{{ preferences.fontSize }} px</output>
+      </div>
+      <input id="focus-font-size-slider" v-model.number="preferences.fontSize"
+        class="font-slider" type="range" min="11" max="20" step="1" />
+    </div>
+    <div class="setting-grid">
+      <label class="setting-stack">
+        <span>{{ t('lineHeight') }}</span>
+        <select v-model.number="preferences.lineHeight">
+          <option v-for="n in lineHeightOptions" :key="n" :value="n">{{ n.toFixed(2).replace(/0+$/, '').replace(/\.$/, '') }}×</option>
+        </select>
+      </label>
+      <label class="setting-stack">
+        <span>{{ t('cursorStyle') }}</span>
+        <select v-model="preferences.cursorStyle">
+          <option value="block">{{ t('cursorBlock') }}</option>
+          <option value="underline">{{ t('cursorUnderline') }}</option>
+          <option value="bar">{{ t('cursorBar') }}</option>
+        </select>
+      </label>
+      <label class="setting-stack">
+        <span>{{ t('terminalPadding') }}</span>
+        <select v-model.number="preferences.terminalPadding">
+          <option v-for="n in paddingOptions" :key="n" :value="n">{{ n }} px</option>
+        </select>
+      </label>
+    </div>
+    <label class="setting-toggle"><span>{{ t('cursorBlink') }}</span>
+      <input v-model="preferences.cursorBlink" type="checkbox" /></label>
+    <button type="button" class="reset-layout" @click="emit('exit-focus')">{{ locale === 'zh' ? '退出专注模式' : 'Exit focus mode' }}</button>
+  </template>
+
+  <template v-else-if="tab === 'appearance'">
     <div class="setting-block">
       <label class="setting-label">{{ t('colors') }}</label>
       <div class="theme-options">
@@ -235,7 +278,7 @@ const t = props.translate
     </button>
   </template>
 
-  <button v-if="!['keybindings', 'quickselect', 'help'].includes(tab)" type="button" class="reset-layout compact-reset" @click="emit('reset-section')">
+  <button v-if="!['focus', 'keybindings', 'quickselect', 'help'].includes(tab)" type="button" class="reset-layout compact-reset" @click="emit('reset-section')">
     {{ t(tab === 'appearance' ? 'resetAppearance' : tab === 'terminal' ? 'resetTerminal' : tab === 'sessions' ? 'resetSessions' : 'resetObserved') }}
   </button>
 </template>

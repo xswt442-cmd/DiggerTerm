@@ -7,7 +7,7 @@ import PaneNodeView from './PaneNode.vue'
 type Leaf = Extract<PaneNode, { type: 'leaf' }>
 type Rect = { x: number; y: number; width: number; height: number }
 
-const props = defineProps<{ layout: WorkspaceLayout; focusBorderStyle: FocusBorderStyle }>()
+const props = defineProps<{ layout: WorkspaceLayout; focusBorderStyle: FocusBorderStyle; focusMode: boolean }>()
 const emit = defineEmits<{
   focus: [paneId: string]
   resize: [splitId: string, ratio: number]
@@ -61,14 +61,14 @@ function forwardResize(splitId: string, ratio: number) {
 </script>
 
 <template>
-  <div class="pane-workspace" role="group" aria-label="Terminal panes">
+  <div class="pane-workspace" :class="{ 'pane-workspace--focus': focusMode }" role="group" aria-label="Terminal panes">
     <div class="pane-workspace__canvas" :style="canvasStyle">
       <PaneNodeView :node="layout.root" :rect="{ x: 0, y: 0, width: 1, height: 1 }" @resize="forwardResize" />
       <div
         v-for="entry in paneRects"
         :key="entry.pane.paneId"
         class="pane-workspace__leaf"
-        :class="layout.focusedPaneId === entry.pane.paneId ? `pane-workspace__leaf--focus-${focusBorderStyle}` : undefined"
+        :class="[layout.focusedPaneId === entry.pane.paneId ? `pane-workspace__leaf--focus-${focusBorderStyle}` : undefined, layout.focusedPaneId === entry.pane.paneId ? 'pane-workspace__leaf--focused' : undefined]"
         :style="{
           '--pane-x': `${entry.rect.x * 100}%`, '--pane-y': `${entry.rect.y * 100}%`,
           '--pane-width': `${entry.rect.width * 100}%`, '--pane-height': `${entry.rect.height * 100}%`,
@@ -129,5 +129,17 @@ function forwardResize(splitId: string, ratio: number) {
 .pane-workspace__leaf--focus-none {
   border-color: var(--border, #343a44);
   box-shadow: inset 0 0 0 1px transparent;
+}
+.pane-workspace--focus { overflow: hidden; }
+.pane-workspace--focus .pane-workspace__canvas { width: 100% !important; height: 100% !important; }
+.pane-workspace--focus .pane-workspace__leaf:not(.pane-workspace__leaf--focused) { display: none; }
+.pane-workspace--focus .pane-workspace__leaf--focused {
+  left: 0;
+  top: 0;
+  width: 100%;
+  height: 100%;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
 }
 </style>

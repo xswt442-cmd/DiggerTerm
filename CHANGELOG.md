@@ -10,6 +10,30 @@ This file records shipped desktop features, fixes, platform support, and compati
 
 ### English
 
+## [0.0.9] - 2026-11-19
+
+### 简体中文
+
+**新增**
+- 新增专注模式，仅显示当前终端，并提供只调整终端字体、字号、行高、光标与内边距的专注设置页；展开侧栏会先确认退出专注模式。
+
+**修复**
+- 修复终端右侧滚动条拖动与滚轮滚动不一致的问题。
+
+**改进**
+- 侧栏可拖拽的最小宽度缩小到 160 px，收起宽度缩小到 40 px。
+
+### English
+
+**Added**
+- Added focus mode to show only the active terminal, with a dedicated settings page limited to terminal font, size, line height, cursor, and padding; expanding the sidebar asks before leaving focus mode.
+
+**Fixed**
+- Fixed the terminal scrollbar thumb not matching wheel scrolling behavior.
+
+**Improved**
+- Reduced the draggable sidebar minimum width to 160 px and its collapsed width to 40 px.
+
 ## [0.0.8] - 2026-11-01
 
 ### 简体中文

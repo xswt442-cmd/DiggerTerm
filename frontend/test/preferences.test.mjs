@@ -94,6 +94,11 @@ test('bad saved values are clamped or safely ignored', () => {
   assert.equal(read.managedRatio, .2)
 })
 
+test('sidebar width clamps to the narrower focus-friendly minimum', () => {
+  values.set('diggerterm:preferences:v1', JSON.stringify({ sidebarWidth: 100 }))
+  assert.equal(prefs.readPreferences().sidebarWidth, 160)
+})
+
 test('corrupt settings recover defaults without crashing UI', () => {
   values.set('diggerterm:preferences:v1', '{broken json')
   assert.deepEqual(prefs.readPreferences(), prefs.defaults)

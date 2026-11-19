@@ -54,6 +54,8 @@ const {
   openThemeDirectory,
 } = settings
 const commandPaletteOpen = ref(false)
+const focusMode = ref(false)
+let sidebarCollapsedBeforeFocus = false
 const paletteToolRequest = ref<{ sequence: number; action: 'search' | 'quickSelect' | 'quickCd' } | null>(null)
 let nextPaletteToolRequest = 0
 
@@ -72,7 +74,7 @@ function workspaceKey(event: KeyboardEvent) {
   }
   if (!target.classList.contains('xterm-helper-textarea') && target.closest('input, textarea, select, [contenteditable="true"]')) return
   if (action === 'openSettings') {
-    event.preventDefault(); event.stopPropagation(); settingsOpen.value = true
+    event.preventDefault(); event.stopPropagation(); toggleSettings()
   } else if (action && !selectedExternalKey.value) {
     event.preventDefault(); event.stopPropagation()
     if (action === 'quickCd') requestTerminalTool('quickCd')
@@ -104,7 +106,7 @@ function onDrag(event: PointerEvent) {
   if (dragging.value === 'width') {
     preferences.value.sidebarWidth = Math.round(clamp(
       dragOrigin.width + event.clientX - dragOrigin.x,
-      216, Math.min(500, window.innerWidth - 320),
+      160, Math.min(500, window.innerWidth - 320),
     ))
   } else if (dragging.value === 'height') {
     preferences.value.managedRatio = clamp(
@@ -119,12 +121,50 @@ function dividerKeys(event: KeyboardEvent, axis: 'width' | 'height') {
   if (axis === 'width' && (event.key === 'ArrowLeft' || event.key === 'ArrowRight')) {
     event.preventDefault()
     preferences.value.sidebarWidth = Math.round(clamp(preferences.value.sidebarWidth +
-      (event.key === 'ArrowRight' ? step : -step), 216, Math.min(500, window.innerWidth - 320)))
+      (event.key === 'ArrowRight' ? step : -step), 160, Math.min(500, window.innerWidth - 320)))
   } else if (axis === 'height' && (event.key === 'ArrowUp' || event.key === 'ArrowDown')) {
     event.preventDefault()
     preferences.value.managedRatio = clamp(preferences.value.managedRatio +
       (event.key === 'ArrowDown' ? step : -step) / Math.max(1, paneStack.value?.clientHeight ?? 1), 0.2, 0.8)
   }
+}
+
+function requestSidebarToggle() {
+  if (!preferences.value.sidebarCollapsed) {
+    preferences.value.sidebarCollapsed = true
+    return
+  }
+  if (focusMode.value && !window.confirm(locale.value === 'zh'
+    ? '展开侧栏会退出专注模式，是否继续？'
+    : 'Expanding the sidebar exits focus mode. Continue?')) return
+  if (focusMode.value) exitFocusMode(false)
+  preferences.value.sidebarCollapsed = false
+}
+
+function enterFocusMode() {
+  if (!activeSession.value || selectedExternalKey.value || focusMode.value) return
+  sidebarCollapsedBeforeFocus = preferences.value.sidebarCollapsed
+  preferences.value.sidebarCollapsed = true
+  settingsOpen.value = false
+  commandPaletteOpen.value = false
+  focusMode.value = true
+}
+
+function exitFocusMode(restoreSidebar = true) {
+  if (!focusMode.value) return
+  focusMode.value = false
+  settingsOpen.value = false
+  if (settingsTab.value === 'focus') settingsTab.value = 'terminal'
+  if (restoreSidebar) preferences.value.sidebarCollapsed = sidebarCollapsedBeforeFocus
+}
+
+function toggleSettings() {
+  if (settingsOpen.value) {
+    settingsOpen.value = false
+    return
+  }
+  if (focusMode.value) settingsTab.value = 'focus'
+  settingsOpen.value = true
 }
 const localProfiles = computed(() => profiles.value.filter(p => p.id !== 'ssh'))
 watch(() => preferences.value.defaultProfile, (value) => {
@@ -262,6 +302,8 @@ const {
 } = dig
 const filteredSessions = computed(() => sessions.value.filter((s) => (s.name + ' ' + s.id + ' ' + s.profile + ' ' + s.pid + ' ' + (library.value.marks[s.id]?.note ?? '')).toLowerCase().includes(query.value.trim().toLowerCase())))
 const activeSession = computed(() => sessions.value.find((s) => s.id === selectedId.value))
+watch(selectedExternalKey, value => { if (value && focusMode.value) exitFocusMode() })
+watch(activeSession, value => { if (!value && focusMode.value) exitFocusMode() })
 const activeObservedWatchSource = computed(() => {
   const process = activeObserved.value
   return process ? watchSources.value.find(source => source.source === process.source && source.distribution === process.distribution) : undefined
@@ -290,7 +332,10 @@ async function refreshPaletteCommands() {
     observeEnabled: preferences.value.observeEnabled,
     observationBusy: refreshingExternal.value,
     actions: {
-      openSettings: tab => { settingsTab.value = tab as typeof settingsTab.value; settingsOpen.value = true },
+      openSettings: tab => {
+        settingsTab.value = focusMode.value ? 'focus' : tab as typeof settingsTab.value
+        settingsOpen.value = true
+      },
       setTheme: updateTheme,
       selectSession: selectManaged,
       createSession: async profile => {
@@ -690,7 +735,7 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <main class="layout" :class="{ 'sidebar-collapsed': preferences.sidebarCollapsed }" :data-dt-theme="preferences.theme" :style="{ '--ui-font-scale': preferences.uiFontSize / 12 }" @keydown.capture="workspaceKey" @keydown.esc="settingsOpen = false">
+  <main class="layout" :class="{ 'sidebar-collapsed': preferences.sidebarCollapsed, 'focus-mode': focusMode }" :data-dt-theme="preferences.theme" :style="{ '--ui-font-scale': preferences.uiFontSize / 12 }" @keydown.capture="workspaceKey" @keydown.esc="settingsOpen = false">
     <aside class="sidebar" :style="{ width: preferences.sidebarWidth + 'px' }">
       <header class="brand">
         <template v-if="!preferences.sidebarCollapsed">
@@ -703,7 +748,7 @@ onBeforeUnmount(() => {
         <button type="button" class="sidebar-collapse" :title="t(preferences.sidebarCollapsed ? 'expandSidebar' : 'collapseSidebar')"
           :aria-label="t(preferences.sidebarCollapsed ? 'expandSidebar' : 'collapseSidebar')"
           :aria-expanded="!preferences.sidebarCollapsed"
-          @click="preferences.sidebarCollapsed = !preferences.sidebarCollapsed">
+          @click="requestSidebarToggle">
           {{ preferences.sidebarCollapsed ? '›' : '‹' }}
         </button>
       </header>
@@ -948,7 +993,7 @@ onBeforeUnmount(() => {
           <span>{{ t('observedCount', { count: observedProcesses.length }) }}</span>
         </div>
         <button type="button" class="settings-trigger" :aria-expanded="settingsOpen"
-          :aria-label="t('settings')" @click="settingsOpen = !settingsOpen">
+          :aria-label="t('settings')" @click="toggleSettings">
           <span class="gear" aria-hidden="true">⚙</span>
           <span v-if="!preferences.sidebarCollapsed">{{ t('settings') }}</span>
           <span v-if="!preferences.sidebarCollapsed" class="settings-arrow" aria-hidden="true">{{ settingsOpen ? '⌄' : '›' }}</span>
@@ -956,7 +1001,8 @@ onBeforeUnmount(() => {
       </footer>
 
       <SettingsDialog v-model:open="settingsOpen" v-model:tab="settingsTab"
-        :title="t('settingsTitle')" :close-label="t('close')" :tab-labels="settingsTabLabels">
+        :available-tabs="focusMode ? ['focus'] : undefined"
+        :title="focusMode ? (locale === 'zh' ? '专注设置' : 'Focus settings') : t('settingsTitle')" :close-label="t('close')" :tab-labels="settingsTabLabels">
         <SettingsContent v-model:preferences="preferences" :tab="settingsTab" :locale="locale" :translate="t"
           :theme-options="themeOptions" :theme-directory="themeDirectory" :theme-errors="themeErrors"
           :font-choices="fontChoices" :scrollback-options="scrollbackOptions" :line-height-options="lineHeightOptions"
@@ -967,14 +1013,14 @@ onBeforeUnmount(() => {
           @theme-change="updateTheme" @language-change="updateLanguage" @refresh-themes="refreshThemes"
           @open-theme-directory="openThemeDirectory" @reset-layout="resetLayout" @reset-section="resetSection"
           @reconnect="reconnectDaemon" @keybindings-change="bindings = $event"
-          @check-updates="checkForUpdates" @open-release-page="openReleasePage" />
+          @check-updates="checkForUpdates" @open-release-page="openReleasePage" @exit-focus="exitFocusMode()" />
       </SettingsDialog>
     </aside>
 
     <div v-if="!preferences.sidebarCollapsed" class="sidebar-resizer"
       role="separator" tabindex="0" aria-orientation="vertical"
       :aria-label="t('widthHandle')"
-      :aria-valuenow="preferences.sidebarWidth" aria-valuemin="216" aria-valuemax="500"
+      :aria-valuenow="preferences.sidebarWidth" aria-valuemin="160" aria-valuemax="500"
       :class="{ dragging: dragging === 'width' }"
       @pointerdown="beginDrag($event, 'width')"
       @pointermove="onDrag" @pointerup="endDrag" @pointercancel="endDrag"
@@ -990,6 +1036,7 @@ onBeforeUnmount(() => {
           <button type="button" @click="splitPane('vertical')">{{ locale === 'zh' ? '向下分屏' : 'Split down' }}</button>
           <button type="button" @click="focusNextPane">{{ locale === 'zh' ? '下一面板' : 'Next pane' }}</button>
           <button type="button" :disabled="!daemonConnected || activeSession?.status !== 'running' || !!activeSession?.streamClosed" @click="requestTerminalTool('quickCd')">{{ locale === 'zh' ? '快速 cd' : 'Quick CD' }}</button>
+          <button type="button" :disabled="!activeSession || !!selectedExternalKey" :aria-pressed="focusMode" @click="enterFocusMode">{{ locale === 'zh' ? '专注模式' : 'Focus mode' }}</button>
           <button type="button" :aria-expanded="commandPaletteOpen" @click="openCommandPalette">{{ locale === 'zh' ? '命令' : 'Commands' }}</button>
         </div>
         <span class="status" :class="{ live: daemonConnected && activeSession?.status === 'running' && !activeSession.streamClosed }">
@@ -1002,7 +1049,7 @@ onBeforeUnmount(() => {
         <button type="button" aria-label="Dismiss error" @click="errorMessage = ''">×</button>
       </div>
       <div class="terminal-area">
-        <PaneWorkspace v-show="!selectedExternalKey" :layout="layout" :focus-border-style="preferences.focusBorderStyle"
+        <PaneWorkspace v-show="!selectedExternalKey" :layout="layout" :focus-border-style="preferences.focusBorderStyle" :focus-mode="focusMode"
           @focus="focusWorkspacePane" @resize="(id, ratio) => layout = resizeSplit(layout, id, ratio)">
           <template #default="{ pane, focused }">
             <header class="workspace-pane-head">
@@ -1096,8 +1143,12 @@ button:focus-visible, input:focus-visible, select:focus-visible, [role="separato
 .workspace-pane-head { height: 30px; display: flex; gap: 5px; padding: 3px; align-items: center; border-bottom: 1px solid var(--border-faint); }
 .workspace-pane-head select { min-width: 0; flex: 1; }
 .workspace-pane-body { position: absolute; inset: 30px 0 0; }
+.layout.focus-mode .toolbar,
+.layout.focus-mode .workspace-pane-head,
+.layout.focus-mode .terminal-actions { display: none; }
+.layout.focus-mode .workspace-pane-body { inset: 0; }
 .pane-placeholder { color: var(--muted); font-size: 12px; padding: 10px; }
-.sidebar { position: relative; display: flex; flex-direction: column; flex: 0 0 auto; min-width: 216px; max-width: 500px; min-height: 0; background: var(--sidebar); padding: 11px 10px 0; z-index: 2; }
+.sidebar { position: relative; display: flex; flex-direction: column; flex: 0 0 auto; min-width: 160px; max-width: 500px; min-height: 0; background: var(--sidebar); padding: 11px 10px 0; z-index: 2; }
 .brand { display: flex; align-items: center; gap: 9px; height: 43px; padding: 0 5px; flex-shrink: 0; }
 .sidebar-collapse { display: grid; place-items: center; flex: 0 0 23px; width: 23px; height: 23px; margin-left: auto; padding: 0; border: 1px solid transparent; background: transparent; color: var(--muted); font-size: 17px; line-height: 1; }
 .sidebar-collapse:hover { border-color: var(--border); background: var(--surface-hover); color: var(--text); }
@@ -1206,7 +1257,7 @@ button:focus-visible, input:focus-visible, select:focus-visible, [role="separato
 .session-diagnostics dd { min-width: 0; margin: 0; overflow-wrap: anywhere; }
 .session-diagnostic-note { margin: 6px 0; color: var(--muted); line-height: 1.35; }
 .session-new-ssh { border: 1px solid var(--border); border-radius: 4px; padding: 4px 6px; color: var(--text); background: var(--canvas); font-size: inherit; }
-.layout.sidebar-collapsed .sidebar { width: 48px !important; min-width: 48px; max-width: 48px; padding: 8px 5px 0; }
+.layout.sidebar-collapsed .sidebar { width: 40px !important; min-width: 40px; max-width: 40px; padding: 8px 5px 0; }
 .layout.sidebar-collapsed .brand { justify-content: center; height: 36px; padding: 0; }
 .layout.sidebar-collapsed .sidebar-collapse { margin: 0 auto; }
 .layout.sidebar-collapsed .brand-logo,

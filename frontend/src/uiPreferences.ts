@@ -146,7 +146,7 @@ export function readPreferences(): UIPreferences {
     if (saved.language && ['system', 'zh', 'en'].includes(saved.language)) result.language = saved.language
     if (typeof saved.fontSize === 'number' && Number.isFinite(saved.fontSize)) result.fontSize = Math.max(11, Math.min(20, Math.round(saved.fontSize)))
     if (typeof saved.uiFontSize === 'number' && Number.isFinite(saved.uiFontSize)) result.uiFontSize = Math.max(10, Math.min(16, Math.round(saved.uiFontSize)))
-    if (typeof saved.sidebarWidth === 'number' && Number.isFinite(saved.sidebarWidth)) result.sidebarWidth = Math.max(216, Math.min(500, Math.round(saved.sidebarWidth)))
+    if (typeof saved.sidebarWidth === 'number' && Number.isFinite(saved.sidebarWidth)) result.sidebarWidth = Math.max(160, Math.min(500, Math.round(saved.sidebarWidth)))
     if (saved.focusBorderStyle && ['accent', 'muted', 'none'].includes(saved.focusBorderStyle)) {
       result.focusBorderStyle = saved.focusBorderStyle
     } else {

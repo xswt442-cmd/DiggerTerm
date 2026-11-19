@@ -1,9 +1,10 @@
 <script setup lang="ts">
-export type SettingsTab = 'appearance' | 'terminal' | 'sessions' | 'observed' | 'keybindings' | 'quickselect' | 'help'
+export type SettingsTab = 'focus' | 'appearance' | 'terminal' | 'sessions' | 'observed' | 'keybindings' | 'quickselect' | 'help'
 
 defineProps<{
   open: boolean
   tab: SettingsTab
+  availableTabs?: SettingsTab[]
   title: string
   closeLabel: string
   tabLabels: Record<SettingsTab, string>
@@ -25,7 +26,7 @@ const tabs: SettingsTab[] = ['appearance', 'terminal', 'sessions', 'observed', '
       <button type="button" :title="closeLabel" :aria-label="closeLabel" @click="emit('update:open', false)">×</button>
     </header>
     <div class="settings-tabs" role="tablist" :aria-label="title">
-      <button v-for="item in tabs" :key="item" type="button" role="tab"
+      <button v-for="item in (availableTabs ?? tabs)" :key="item" type="button" role="tab"
         :aria-selected="tab === item" :class="{ chosen: tab === item }"
         @click="emit('update:tab', item)">
         {{ tabLabels[item] }}
@@ -41,7 +42,7 @@ const tabs: SettingsTab[] = ['appearance', 'terminal', 'sessions', 'observed', '
 .settings-head { display: flex; justify-content: space-between; align-items: center; flex-shrink: 0; gap: 8px; padding: 6px 10px; min-height: 34px; border-bottom: 1px solid var(--border-faint); }
 .settings-head strong { display: block; font-size: calc(12px * var(--ui-font-scale)); font-weight: 650; }
 .settings-head button { flex: 0 0 23px; height: 23px; border: 0; background: var(--surface); color: var(--text); font-size: calc(16px * var(--ui-font-scale)); border-radius: 4px; }
-.settings-tabs { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 2px; flex-shrink: 0; padding: 5px 7px 3px; border-bottom: 1px solid var(--border-faint); }
+.settings-tabs { display: grid; grid-template-columns: repeat(auto-fit, minmax(62px, 1fr)); gap: 2px; flex-shrink: 0; padding: 5px 7px 3px; border-bottom: 1px solid var(--border-faint); }
 .settings-tabs button { min-width: 0; height: 26px; padding: 0 3px; border: 0; border-radius: 4px; color: var(--muted); background: transparent; font-size: calc(10px * var(--ui-font-scale)); }
 .settings-tabs button:hover { color: var(--text); background: var(--surface); }
 .settings-tabs button.chosen { color: var(--accent-text); background: var(--accent-bg); }
