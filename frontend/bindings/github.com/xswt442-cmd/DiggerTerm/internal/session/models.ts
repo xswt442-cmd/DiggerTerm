@@ -30,6 +30,12 @@ export interface Replay {
     "truncated": boolean;
 }
 
+export interface SSHDirectoryListing {
+    "path": string;
+    "directories": string[] | null;
+    "truncated": boolean;
+}
+
 export interface SSHOptions {
     "keepAlive": boolean;
     "serverAliveInterval": number;

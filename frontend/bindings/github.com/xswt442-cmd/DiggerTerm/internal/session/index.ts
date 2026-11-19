@@ -5,5 +5,6 @@ export type {
     Info,
     Profile,
     Replay,
+    SSHDirectoryListing,
     SSHOptions
 } from "./models.js";

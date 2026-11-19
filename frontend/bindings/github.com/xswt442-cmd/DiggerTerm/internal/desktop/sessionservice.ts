@@ -25,6 +25,14 @@ export function Attach(id: string): $CancellablePromise<void> {
     return $Call.ByID(3570698667, id);
 }
 
+/**
+ * BrowseSSHDirectories performs a separate, read-only noninteractive SSH
+ * request using immutable connection metadata from the managed daemon session.
+ */
+export function BrowseSSHDirectories(id: string, directory: string): $CancellablePromise<session$0.SSHDirectoryListing> {
+    return $Call.ByID(1349905261, id, directory);
+}
+
 export function Create(profile: string, cols: number, rows: number): $CancellablePromise<session$0.Info> {
     return $Call.ByID(2216079782, profile, cols, rows);
 }
@@ -51,6 +59,13 @@ export function Detach(id: string): $CancellablePromise<void> {
 
 export function Forget(id: string): $CancellablePromise<void> {
     return $Call.ByID(1064876787, id);
+}
+
+/**
+ * LaunchDirectory returns the explicitly requested local startup directory.
+ */
+export function LaunchDirectory(): $CancellablePromise<string> {
+    return $Call.ByID(3318965512);
 }
 
 export function List(): $CancellablePromise<session$0.Info[] | null> {
@@ -107,6 +122,13 @@ export function SetUILanguage(locale: string): $CancellablePromise<void> {
 
 export function Snapshot(id: string): $CancellablePromise<session$0.Replay> {
     return $Call.ByID(2706972894, id);
+}
+
+/**
+ * TakeLaunchDirectories consumes pending requests forwarded by later GUI launches.
+ */
+export function TakeLaunchDirectories(): $CancellablePromise<string[] | null> {
+    return $Call.ByID(1230909933);
 }
 
 export function Terminate(id: string): $CancellablePromise<void> {
