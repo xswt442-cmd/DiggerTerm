@@ -49,6 +49,7 @@ const props = defineProps<{
   toolsEnabled: boolean
   defaultDirectory: string
   library: WorkspaceLibrary
+  focusMode: boolean
   toolRequest: { sequence: number; action: 'search' | 'quickSelect' | 'quickCd' } | null
 }>()
 const emit = defineEmits<{ error: [message: string]; setDefaultDirectory: [path: string]; directoryUsed: [item: DirectoryItem]; toggleFavorite: [item: DirectoryItem]; removeRecent: [item: DirectoryItem] }>()
@@ -317,6 +318,7 @@ async function scanQuickSelect() {
 }
 
 async function openQuickCd() {
+  if (props.focusMode) return
   if (!props.active || !props.focused || !props.connected || !controlled.value ||
       recovering.value || replayError.value || props.session.streamClosed || props.session.status !== 'running') return
   if (searchOpen.value) await closeSearch()
@@ -382,6 +384,10 @@ function closeQuickCd() {
 }
 
 async function executeQuickCd() {
+  if (props.focusMode) {
+    closeQuickCd()
+    return
+  }
   if (!quickCdOpen.value || quickCdBrowsing.value || quickCdExecuting.value || !controlled.value || !props.connected || props.session.streamClosed ||
       props.session.status !== 'running' || recovering.value || replayError.value) return
   quickCdExecuting.value = true
@@ -796,8 +802,15 @@ watch(() => props.toolsEnabled, enabled => {
 watch(() => props.toolRequest, request => {
   if (!request || !props.focused || !props.toolsEnabled) return
   if (request.action === 'search') void openSearch()
-  else if (request.action === 'quickCd') void openQuickCd()
+  else if (request.action === 'quickCd') {
+    if (!props.focusMode) void openQuickCd()
+  }
   else void openQuickSelect()
+})
+watch(() => props.focusMode, focusMode => {
+  if (!focusMode) return
+  if (quickCdOpen.value) closeQuickCd()
+  copyMenu.value = null
 })
 
 watch(() => props.active, async (active) => {

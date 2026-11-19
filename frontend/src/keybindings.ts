@@ -196,3 +196,7 @@ export function matchBinding(event: Parameters<typeof eventChord>[0], bindings: 
   for (const binding of bindings) if (binding.scope === scope && binding.keys.includes(chord)) return binding.action
   return null
 }
+
+export function focusModeAllowsWorkspaceAction(action: ActionId | null): boolean {
+  return action === 'openSettings'
+}

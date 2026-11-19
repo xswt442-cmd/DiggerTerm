@@ -99,3 +99,11 @@ test('keeps an older user shortcut when it conflicts with a new default action',
     assert.equal(keybindings.matchBinding(keyEvent(key, { ctrlKey: true, shiftKey: true }), merged, 'terminal'), null)
   }
 })
+
+test('focus mode exposes settings but blocks workspace-changing shortcuts', () => {
+  assert.equal(keybindings.focusModeAllowsWorkspaceAction('openSettings'), true)
+  for (const action of keybindings.actionDefinitions.map(({ id }) => id)) {
+    if (action !== 'openSettings') assert.equal(keybindings.focusModeAllowsWorkspaceAction(action), false)
+  }
+  assert.equal(keybindings.focusModeAllowsWorkspaceAction(null), false)
+})

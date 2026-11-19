@@ -132,6 +132,7 @@ function forwardResize(splitId: string, ratio: number) {
 }
 .pane-workspace--focus { overflow: hidden; }
 .pane-workspace--focus .pane-workspace__canvas { width: 100% !important; height: 100% !important; }
+.pane-workspace--focus :deep(.pane-divider) { display: none; }
 .pane-workspace--focus .pane-workspace__leaf:not(.pane-workspace__leaf--focused) { display: none; }
 .pane-workspace--focus .pane-workspace__leaf--focused {
   left: 0;

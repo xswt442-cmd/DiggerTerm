@@ -12,7 +12,7 @@ import SettingsDialog from './components/SettingsDialog.vue'
 import SettingsContent from './components/SettingsContent.vue'
 import DigTree from './components/DigTree.vue'
 import { useDig } from './composables/useDig'
-import { matchBinding } from './keybindings'
+import { focusModeAllowsWorkspaceAction, matchBinding } from './keybindings'
 import { Create, CreateLocal, CreateSSH, CreateSSHWithOptions, Forget, List, ObserveCapabilities, Profiles, Reconnect, Rename, SSHHosts, Terminate } from '../bindings/github.com/xswt442-cmd/DiggerTerm/internal/desktop/sessionservice'
 import type { Info, Profile } from '../bindings/github.com/xswt442-cmd/DiggerTerm/internal/session/models'
 import type { Process } from '../bindings/github.com/xswt442-cmd/DiggerTerm/internal/observe/models'
@@ -64,6 +64,13 @@ function workspaceKey(event: KeyboardEvent) {
   if (settingsOpen.value || event.defaultPrevented) return
   const target = event.target as HTMLElement
   const action = matchBinding(event, bindings.value, 'workspace')
+  if (focusMode.value && !focusModeAllowsWorkspaceAction(action)) {
+    if (action) {
+      event.preventDefault()
+      event.stopPropagation()
+    }
+    return
+  }
   if (action === 'openCommandPalette') {
     const editable = !target.classList.contains('xterm-helper-textarea') && target.closest('input, textarea, select, [contenteditable="true"]')
     const temporaryTool = target.closest('.terminal-search, .copy-overlay, .quick-select-layer')
@@ -360,7 +367,7 @@ async function refreshPaletteCommands() {
 }
 
 async function openCommandPalette() {
-  if (commandPaletteOpen.value) return
+  if (commandPaletteOpen.value || focusMode.value) return
   try {
     await refreshPaletteCommands()
     commandPaletteOpen.value = true
@@ -382,6 +389,7 @@ async function executePaletteCommand(id: string) {
 }
 
 function requestTerminalTool(action: 'search' | 'quickSelect' | 'quickCd') {
+  if (focusMode.value && action === 'quickCd') return
   paletteToolRequest.value = { sequence: ++nextPaletteToolRequest, action }
 }
 
@@ -462,11 +470,14 @@ watch(() => preferences.value.sessionActivityEnabled, enabled => {
 
 // Observed PIDs are display-only. They are never sent to Write/Terminate.
 function selectManaged(id: string) {
+  if (focusMode.value) return
   if (!sessions.value.some(session => session.id === id)) return
   selectManagedSession(id)
 }
 
-const selectObserved = dig.selectProcess
+function selectObserved(process: Process) {
+  if (!focusMode.value) dig.selectProcess(process)
+}
 const refreshObserved = dig.refresh
 const digWatchOpen = ref(false)
 const digWatchMessage = ref('')
@@ -1072,6 +1083,7 @@ onBeforeUnmount(() => {
                 :padding="preferences.terminalPadding"
                 :colors="palette.terminal" :theme-revision="themeRevision" :locale="locale" :bindings="bindings"
                 :tools-enabled="!commandPaletteOpen" :tool-request="paletteToolRequest" :default-directory="preferences.defaultDirectory"
+                :focus-mode="focusMode"
                 :library="library" @directory-used="rememberDirectory(library, $event)" @toggle-favorite="toggleFavorite(library, $event)" @remove-recent="removeRecent"
                 @set-default-directory="preferences.defaultDirectory = $event" @error="reportError" />
               <p v-else-if="sessions.length > 0" class="pane-placeholder">{{ locale === 'zh' ? '从侧栏或上方选择托管会话。关闭面板仅分离视图。' : 'Choose a managed session here or in the sidebar. Closing a pane only detaches its view.' }}</p>
