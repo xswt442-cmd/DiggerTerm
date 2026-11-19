@@ -40,6 +40,21 @@ reviews:
         External process discovery is read-only current-user metadata.
         Never add terminal input, termination or arbitrary PTY takeover for
         observed processes. Keep Windows and WSL PID namespaces distinct.
+    - path: "internal/desktop/**"
+      instructions: >-
+        The GUI lifecycle, IPC reconnect, clipboard and GUI-only configuration
+        services must not own PTYs, terminate sessions or resend commands.
+        Check bounded IPC deadlines, foreground-window ownership, path
+        confinement and preservation of the managed/observed boundary.
+        Theme, shortcut and clipboard failures must be reported without
+        exposing private paths or clipboard content.
+    - path: "internal/winsecurity/**"
+      instructions: >-
+        Verify Windows named-pipe ACLs, peer SID identity and elevation on both
+        ends of privileged IPC. Standard and elevated GUIs must never share
+        endpoints or sessions accidentally. Reject behavior that trusts an
+        unauthenticated peer, weakens administrator-only access or silently
+        falls back across integrity levels.
     - path: "frontend/**"
       instructions: >-
         The GUI is an IPC client, not a process owner. Closing panes only
@@ -50,6 +65,12 @@ reviews:
         clipboard failures and copy-mode text ranges without logging content.
         External observation must never gain terminal controls. Versioned
         generated Wails bindings must agree with Go service interfaces.
+        Focus mode is display isolation: it must keep the active terminal and
+        terminal-local actions while blocking workspace-changing commands,
+        session switching, Quick CD, and other overlays that can alter the
+        workspace. Automatic update checks must be bounded and advisory; they
+        must not pop dialogs in focus mode, download silently or replace a
+        running application or daemon.
     - path: "*.go"
       instructions: >-
         GUI lifecycle and manual IPC reconnect must not terminate sessions,
