@@ -165,6 +165,11 @@ function exitFocusMode(restoreSidebar = true) {
   if (restoreSidebar) preferences.value.sidebarCollapsed = sidebarCollapsedBeforeFocus
 }
 
+function toggleFocusMode() {
+  if (focusMode.value) exitFocusMode()
+  else enterFocusMode()
+}
+
 function toggleSettings() {
   if (settingsOpen.value) {
     settingsOpen.value = false
@@ -1003,6 +1008,22 @@ onBeforeUnmount(() => {
           <span>·</span>
           <span>{{ t('observedCount', { count: observedProcesses.length }) }}</span>
         </div>
+        <button type="button" class="focus-trigger" :class="{ active: focusMode }"
+          :disabled="!focusMode && (!activeSession || !!selectedExternalKey)"
+          :aria-pressed="focusMode"
+          :aria-label="focusMode ? (locale === 'zh' ? '退出专注模式' : 'Exit focus mode') : (locale === 'zh' ? '进入专注模式' : 'Enter focus mode')"
+          :title="focusMode ? (locale === 'zh' ? '退出专注模式' : 'Exit focus mode') : (locale === 'zh' ? '进入专注模式' : 'Enter focus mode')"
+          @click="toggleFocusMode">
+          <span class="focus-glyph" aria-hidden="true">
+            <svg viewBox="0 0 20 20">
+              <path d="M3 7V3h4M13 3h4v4M17 13v4h-4M7 17H3v-4" />
+              <circle cx="10" cy="10" r="2.25" />
+            </svg>
+          </span>
+          <span v-if="!preferences.sidebarCollapsed" class="focus-label">
+            {{ focusMode ? (locale === 'zh' ? '退出专注' : 'Exit focus') : (locale === 'zh' ? '专注模式' : 'Focus mode') }}
+          </span>
+        </button>
         <button type="button" class="settings-trigger" :class="{ 'has-update': updateAvailable && !focusMode }" :aria-expanded="settingsOpen"
           :aria-label="updateAvailable && !focusMode ? t('settings') + ' · ' + (locale === 'zh' ? '有更新' : 'Update available') : t('settings')"
           :title="updateAvailable && !focusMode ? (locale === 'zh' ? '设置 · 有更新' : 'Settings · Update available') : undefined"
@@ -1049,7 +1070,6 @@ onBeforeUnmount(() => {
           <button type="button" @click="splitPane('vertical')">{{ locale === 'zh' ? '向下分屏' : 'Split down' }}</button>
           <button type="button" @click="focusNextPane">{{ locale === 'zh' ? '下一面板' : 'Next pane' }}</button>
           <button type="button" :disabled="!daemonConnected || activeSession?.status !== 'running' || !!activeSession?.streamClosed" @click="requestTerminalTool('quickCd')">{{ locale === 'zh' ? '快速 cd' : 'Quick CD' }}</button>
-          <button type="button" :disabled="!activeSession || !!selectedExternalKey" :aria-pressed="focusMode" @click="enterFocusMode">{{ locale === 'zh' ? '专注模式' : 'Focus mode' }}</button>
           <button type="button" :aria-expanded="commandPaletteOpen" @click="openCommandPalette">{{ locale === 'zh' ? '命令' : 'Commands' }}</button>
         </div>
         <span class="status" :class="{ live: daemonConnected && activeSession?.status === 'running' && !activeSession.streamClosed }">
@@ -1258,6 +1278,16 @@ button:focus-visible, input:focus-visible, select:focus-visible, [role="separato
 .sidebar-footer { position: relative; flex: 0 0 auto; border-top: 1px solid var(--border-faint); padding: 5px 0 6px; background: var(--sidebar); }
 .sidebar-status { display: flex; gap: 4px; overflow: hidden; margin: 0 4px 4px; padding: 1px 3px; color: var(--faint); font-size: calc(9px * var(--ui-font-scale)); white-space: nowrap; }
 .sidebar-status span { overflow: hidden; text-overflow: ellipsis; }
+.focus-trigger { display: flex; gap: 9px; width: 100%; align-items: center; height: 31px; margin-bottom: 3px; padding: 0 8px; background: transparent; color: var(--muted); border: 0; border-radius: 5px; text-align: left; font-size: calc(11px * var(--ui-font-scale)); }
+.focus-trigger:hover:not(:disabled), .focus-trigger:focus-visible { color: var(--text); background: var(--surface-hover); }
+.focus-trigger.active { color: var(--accent-text); background: var(--accent-bg); }
+.focus-trigger:disabled { opacity: .45; }
+.focus-glyph { display: grid; place-items: center; flex: 0 0 18px; width: 18px; height: 18px; }
+.focus-glyph svg { width: 18px; height: 18px; }
+.focus-glyph path { fill: none; stroke: currentColor; stroke-width: 1.5; stroke-linecap: round; }
+.focus-glyph circle { fill: transparent; stroke: currentColor; stroke-width: 1.5; transition: fill .12s ease; }
+.focus-trigger.active .focus-glyph circle { fill: currentColor; }
+.focus-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .settings-trigger { display: flex; gap: 9px; width: 100%; align-items: center; height: 31px; padding: 0 8px; background: transparent; color: var(--muted); border: 0; border-radius: 5px; text-align: left; font-size: calc(11px * var(--ui-font-scale)); }
 .settings-trigger:hover, .settings-trigger[aria-expanded="true"] { color: var(--text); background: var(--surface-hover); }
 .gear { position: relative; font-size: calc(17px * var(--ui-font-scale)); line-height: 1; }
@@ -1285,6 +1315,8 @@ button:focus-visible, input:focus-visible, select:focus-visible, [role="separato
 .layout.sidebar-collapsed .pane-stack,
 .layout.sidebar-collapsed .sidebar-status { display: none; }
 .layout.sidebar-collapsed .sidebar-footer { margin-top: auto; border-top: 0; padding: 5px 0 6px; }
+.layout.sidebar-collapsed .focus-trigger { justify-content: center; width: 34px; height: 34px; margin: 0 auto 3px; padding: 0; }
+.layout.sidebar-collapsed .focus-label { display: none; }
 .layout.sidebar-collapsed .settings-trigger { justify-content: center; width: 34px; height: 34px; margin: 0 auto; padding: 0; }
 .sidebar-resizer { position: relative; display: flex; justify-content: center; align-items: center; flex: 0 0 7px; width: 7px; background: var(--border-faint); touch-action: none; cursor: col-resize; user-select: none; z-index: 1; }
 .sidebar-resizer span { display: block; width: 3px; height: 30px; background: var(--border); border-radius: 4px; opacity: .25; }
