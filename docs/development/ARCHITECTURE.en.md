@@ -39,6 +39,8 @@ Windows and WSL distribution PIDs belong to different namespaces. External proce
 
 Focus mode is a GUI presentation state: it keeps the active terminal and terminal-local actions visible while blocking controls that can change the workspace or selected session. It does not change Daemon session ownership, PTY state, or the Managed/Observed boundary.
 
+While focused, DiggerTerm does not open its own terminal context menu and does not consume terminal keyboard, mouse-reporting, or link activation events. DiggerTerm search, Quick Select, copy mode, Quick CD, and informational overlays close before focus mode becomes active.
+
 The GUI may check the latest stable GitHub release at most once every 24 hours with a bounded request. Detection only exposes update status and a download entry; it never downloads or installs silently, terminates sessions, or stops the Daemon. Installing a release remains a separate user action from the published release assets.
 
 ## Data and Settings

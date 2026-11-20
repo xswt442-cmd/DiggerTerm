@@ -7,7 +7,7 @@ const source = readFileSync(new URL('../src/terminalShortcuts.ts', import.meta.u
 const compiled = ts.transpileModule(source, {
   compilerOptions: { module: ts.ModuleKind.ES2022, target: ts.ScriptTarget.ES2022 },
 }).outputText
-const { decideTerminalShortcut } = await import('data:text/javascript;base64,' +
+const { decideTerminalShortcut, focusModeControlInput } = await import('data:text/javascript;base64,' +
   Buffer.from(compiled).toString('base64'))
 
 function event(key, overrides = {}) {
@@ -59,6 +59,15 @@ test('Common Ctrl keys are forwarded as control bytes, not browser accelerators'
   for (const [key, data] of Object.entries(keys)) {
     expectAction(key, { ctrlKey: true }, false, false, { kind: 'input', data })
   }
+})
+
+test('focus mode passes plain Ctrl letters as terminal input and leaves shifted chords to xterm', () => {
+  assert.equal(focusModeControlInput(ctrl('r')), '\x12')
+  assert.equal(focusModeControlInput(ctrl('c')), '\x03')
+  assert.equal(focusModeControlInput(ctrl('v')), '\x16')
+  assert.equal(focusModeControlInput(ctrl('C', { shiftKey: true })), null)
+  assert.equal(focusModeControlInput(ctrl('r', { altKey: true })), null)
+  assert.equal(focusModeControlInput(event('x', { metaKey: true })), null)
 })
 
 test('Ordinary text, Ctrl+arrows, function keys, AltGr and IME never get stolen', () => {

@@ -10,7 +10,7 @@ import { Resize, Snapshot, Write } from '../../bindings/github.com/xswt442-cmd/D
 import { QuickSelectConfig } from '../../bindings/github.com/xswt442-cmd/DiggerTerm/internal/desktop/quickselectservice'
 import type { Info } from '../../bindings/github.com/xswt442-cmd/DiggerTerm/internal/session/models'
 import { fonts, type Palette, type FontId, type CursorStyle, type KeyboardMode, type Locale } from '../uiPreferences'
-import { decideTerminalShortcut } from '../terminalShortcuts'
+import { decideTerminalShortcut, focusModeControlInput } from '../terminalShortcuts'
 import { terminalColors } from '../userThemes'
 import { matchBinding, type Binding } from '../keybindings'
 import { queueSessionOperation, updateAttachment } from '../terminalAttachment'
@@ -105,6 +105,15 @@ function openCopyMenu(event: MouseEvent) {
   }
 }
 
+function onTerminalContextMenu(event: MouseEvent) {
+  if (props.focusMode) {
+    copyMenu.value = null
+    return
+  }
+  event.preventDefault()
+  openCopyMenu(event)
+}
+
 function dismissCopyMenu(event: PointerEvent) {
   if (!copyMenuElement.value?.contains(event.target as Node)) copyMenu.value = null
 }
@@ -128,6 +137,8 @@ interface OutputEvent {
 let terminal: Terminal | undefined
 let fitAddon: FitAddon | undefined
 let searchAddon: SearchAddonInstance | undefined
+let webLinksAddon: { dispose(): void } | undefined
+let webLinksLoading = false
 let offSearchResults: { dispose(): void } | undefined
 let offQuickSelectScroll: { dispose(): void } | undefined
 let quickSelectAbort: AbortController | undefined
@@ -691,7 +702,29 @@ async function readClipboard(): Promise<string> {
 const isMac = typeof navigator !== 'undefined' &&
   /Mac/i.test(navigator.userAgent)
 
-const openTerminalLink = createExplicitWebLinkActivator(isMac, value => { void confirmAndOpenWebLink(value) })
+const activateExplicitWebLink = createExplicitWebLinkActivator(isMac, value => { void confirmAndOpenWebLink(value) })
+
+function openTerminalLink(event: MouseEvent, value: string) {
+  if (!props.focusMode) activateExplicitWebLink(event, value)
+}
+
+async function installWebLinksAddon(term: Terminal) {
+  if (props.focusMode || webLinksAddon || webLinksLoading) return
+  webLinksLoading = true
+  try {
+    const { WebLinksAddon } = await import('@xterm/addon-web-links')
+    if (terminal !== term || props.focusMode || webLinksAddon) return
+    const addon = new WebLinksAddon(openTerminalLink, {
+      urlRegex: /https?:\/\/[^\s"'!*(){}|\\^<>`]+[^\s"':,.!?{}|\\^~\[\]`()<>]/giu,
+    })
+    term.loadAddon(addon)
+    webLinksAddon = addon
+  } catch (error) {
+    if (!props.focusMode && terminal === term) notice.value = text('链接识别不可用：', 'Link detection unavailable: ') + String(error)
+  } finally {
+    webLinksLoading = false
+  }
+}
 
 function onTerminalKeydown(event: KeyboardEvent) {
   // Do not steal shortcuts from the sidebar, search or settings. The
@@ -705,6 +738,17 @@ function onTerminalKeydown(event: KeyboardEvent) {
   }
   const target = event.target as HTMLElement
   if (!target.classList.contains('xterm-helper-textarea') && target.closest('input, select, textarea')) return
+  if (props.focusMode) {
+    const input = focusModeControlInput(event)
+    if (input === null) return
+    event.preventDefault()
+    event.stopPropagation()
+    if (props.connected && !props.session.streamClosed && !recovering.value && !replayError.value &&
+        controlled.value && props.session.status === 'running') {
+      term.input(input, true)
+    }
+    return
+  }
   const binding = matchBinding(event, props.bindings, 'terminal')
   if (binding) {
     event.preventDefault(); event.stopPropagation()
@@ -784,8 +828,8 @@ watch(() => props.cursorBlink, (blink) => {
 watch(() => props.scrollSensitivity, (sensitivity) => {
   if (terminal) terminal.options.scrollSensitivity = sensitivity
 })
-watch(() => props.rightClickSelectsWord, (enabled) => {
-  if (terminal) terminal.options.rightClickSelectsWord = enabled
+watch([() => props.rightClickSelectsWord, () => props.focusMode], ([enabled, focusMode]) => {
+  if (terminal) terminal.options.rightClickSelectsWord = enabled && !focusMode
 })
 watch(() => props.padding, async () => {
   await nextTick()
@@ -807,10 +851,23 @@ watch(() => props.toolRequest, request => {
   }
   else void openQuickSelect()
 })
-watch(() => props.focusMode, focusMode => {
-  if (!focusMode) return
+watch(() => props.focusMode, async focusMode => {
+  if (!focusMode) {
+    if (terminal) void installWebLinksAddon(terminal)
+    return
+  }
+  webLinksAddon?.dispose()
+  webLinksAddon = undefined
   if (quickCdOpen.value) closeQuickCd()
+  if (searchOpen.value) await closeSearch()
+  if (quickSelectOpen.value) await closeQuickSelect()
+  if (copyMode.value) await toggleCopyMode()
   copyMenu.value = null
+  copyMenuURL.value = ''
+  selectedWebURL.value = ''
+  notice.value = ''
+  await nextTick()
+  focus()
 })
 
 watch(() => props.active, async (active) => {
@@ -842,7 +899,7 @@ onMounted(async () => {
     lineHeight: props.lineHeight,
     scrollback: props.scrollback,
     scrollSensitivity: props.scrollSensitivity,
-    rightClickSelectsWord: props.rightClickSelectsWord,
+    rightClickSelectsWord: !props.focusMode && props.rightClickSelectsWord,
     macOptionClickForcesSelection: true,
     linkHandler: { activate: openTerminalLink },
     convertEol: false,
@@ -858,13 +915,7 @@ onMounted(async () => {
   offScrollbarWrite = term.onWriteParsed(refreshScrollbar)
   offScrollbarResize = term.onResize(refreshScrollbar)
   offSelection = term.onSelectionChange(updateSelectedWebURL)
-  void import('@xterm/addon-web-links').then(({ WebLinksAddon }) => {
-    if (terminal === term) term.loadAddon(new WebLinksAddon(openTerminalLink, {
-      urlRegex: /https?:\/\/[^\s"'!*(){}|\\^<>`]+[^\s"':,.!?{}|\\^~\[\]`()<>]/giu,
-    }))
-  }).catch(error => {
-    if (terminal === term) notice.value = text('链接识别不可用：', 'Link detection unavailable: ') + String(error)
-  })
+  void installWebLinksAddon(term)
   term.attachCustomKeyEventHandler((event) => {
     const writable = props.active && props.focused && props.connected && !props.session.streamClosed && props.session.status === 'running' && controlled.value &&
       !copyMode.value && !recovering.value && !replayError.value
@@ -918,6 +969,8 @@ onBeforeUnmount(() => {
   offSearchResults?.dispose()
   searchAddon?.clearDecorations()
   searchAddon = undefined
+  webLinksAddon?.dispose()
+  webLinksAddon = undefined
   offInput?.dispose()
   terminal?.dispose()
   terminal = undefined
@@ -945,7 +998,7 @@ onBeforeUnmount(() => {
       </details>
       <button v-if="selectedWebURL" type="button" @click="openSelectedWebLink">{{ text('打开所选链接…', 'Open selected link…') }}</button>
     </div>
-    <form v-if="quickCdOpen" class="quick-cd-form" :aria-label="text('快速更改目录', 'Quick directory change')" @submit.prevent="executeQuickCd" @keydown.esc.stop.prevent="closeQuickCd">
+    <form v-if="quickCdOpen && !focusMode" class="quick-cd-form" :aria-label="text('快速更改目录', 'Quick directory change')" @submit.prevent="executeQuickCd" @keydown.esc.stop.prevent="closeQuickCd">
       <label>{{ text('目标目录', 'Target directory') }}
         <input ref="quickCdInput" v-model="quickCdPath" type="text" spellcheck="false" autocomplete="off" maxlength="2048"
           :placeholder="text('输入终端所在系统的目录路径', 'Enter a path on the terminal host')" :aria-label="text('目标目录', 'Directory path')" />
@@ -984,22 +1037,22 @@ onBeforeUnmount(() => {
         <button type="button" @click="closeQuickCd">{{ text('取消', 'Cancel') }}</button>
       </div>
     </form>
-    <TerminalSearch v-if="searchOpen" :locale="locale" :query="searchQuery" :case-sensitive="searchCaseSensitive"
+    <TerminalSearch v-if="searchOpen && !focusMode" :locale="locale" :query="searchQuery" :case-sensitive="searchCaseSensitive"
       :result-index="searchResultIndex" :result-count="searchResultCount"
       @update:query="searchQuery = $event" @update:case-sensitive="searchCaseSensitive = $event"
       @next="searchNext" @previous="searchPrevious" @close="closeSearch" />
-    <div v-if="quickSelectLoading" class="copy-notice" role="status">{{ text('正在扫描当前缓冲…', 'Scanning terminal text…') }}</div>
-    <div v-if="notice" class="copy-notice" role="status">{{ notice }}</div>
+    <div v-if="quickSelectLoading && !focusMode" class="copy-notice" role="status">{{ text('正在扫描当前缓冲…', 'Scanning terminal text…') }}</div>
+    <div v-if="notice && !focusMode" class="copy-notice" role="status">{{ notice }}</div>
     <div v-if="replayError" class="copy-notice" role="alert">{{ text('画面输出不完整，已暂停输入；请重新回放：', 'Output incomplete; input paused. Replay to recover: ') }}{{ replayError }}</div>
-    <div v-else-if="replayTruncated" class="copy-notice" role="status">{{ text('仅回放最近 256 KiB 输出，全屏画面可能不完整。', 'Only the last 256 KiB of output was replayed; full-screen content may be incomplete.') }}</div>
+    <div v-else-if="replayTruncated && !focusMode" class="copy-notice" role="status">{{ text('仅回放最近 256 KiB 输出，全屏画面可能不完整。', 'Only the last 256 KiB of output was replayed; full-screen content may be incomplete.') }}</div>
     <div v-if="attachmentError" class="copy-notice" role="status">
       {{ text('会话尚未连接：', 'Session not attached: ') }}{{ attachmentError }}
       <button type="button" @click="reconnectView">{{ text('重试连接', 'Retry attach') }}</button>
     </div>
     <div v-if="session.status === 'exited'" class="copy-notice" role="status">{{ text('会话已结束', 'Session ended') }} {{ session.message }}</div>
     <div v-else-if="session.streamClosed" class="copy-notice" role="status">{{ text('PTY 输出流已关闭，已暂停输入。', 'PTY output stream closed; input paused.') }}</div>
-    <div :id="'terminal-content-' + session.id" class="terminal-content" @contextmenu.prevent="openCopyMenu">
-      <div v-if="copyMode" class="copy-overlay">
+    <div :id="'terminal-content-' + session.id" class="terminal-content" @contextmenu="onTerminalContextMenu">
+      <div v-if="copyMode && !focusMode" class="copy-overlay">
         <small>{{ text('当前可见文字的只读副本；选择后复制，Esc 返回终端。', 'Read-only copy of visible text. Select and copy; Escape returns to the terminal.') }}</small>
         <textarea ref="copyEditor" :value="copyText" readonly spellcheck="false" :aria-label="text('复制模式文字', 'Copy mode text')" @mousedown.right.prevent @keydown="onCopyEditorKey" />
       </div>
@@ -1011,12 +1064,12 @@ onBeforeUnmount(() => {
         <div ref="scrollbarThumb" class="terminal-scrollbar-thumb"
           :style="{ top: scrollbarState.thumbTop + 'px', height: scrollbarState.thumbHeight + 'px' }" />
       </div>
-      <QuickSelectOverlay v-if="quickSelectOpen" :locale="locale" :candidates="quickSelectCandidates"
+      <QuickSelectOverlay v-if="quickSelectOpen && !focusMode" :locale="locale" :candidates="quickSelectCandidates"
         :truncated="quickSelectTruncated" :range="quickSelectRange"
         @update:range="quickSelectRange = $event" @selected="selectQuickCandidate" @close="closeQuickSelect" />
     </div>
     <Teleport to=".layout">
-      <div v-if="copyMenu" ref="copyMenuElement" class="terminal-copy-menu" role="group" :aria-label="text('终端复制操作', 'Terminal copy actions')"
+      <div v-if="copyMenu && !focusMode" ref="copyMenuElement" class="terminal-copy-menu" role="group" :aria-label="text('终端复制操作', 'Terminal copy actions')"
         :style="{ left: copyMenu.x + 'px', top: copyMenu.y + 'px' }" @pointerdown.prevent @keydown.esc.prevent.stop="copyMenu = null">
         <button type="button" @click="runCopyMenu('copy')">{{ text('复制选区', 'Copy selection') }}</button>
         <button type="button" :disabled="!connected || session.streamClosed || !!replayError || copyMode || session.status !== 'running'" @click="runCopyMenu('paste')">{{ text('粘贴', 'Paste') }}</button>

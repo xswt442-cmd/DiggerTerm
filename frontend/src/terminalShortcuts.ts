@@ -23,6 +23,12 @@ export type TerminalKeyModifiers = Pick<
   'key' | 'ctrlKey' | 'metaKey' | 'altKey' | 'shiftKey' | 'isComposing'
 >
 
+export function focusModeControlInput(event: TerminalKeyModifiers): string | null {
+  if (event.isComposing || event.altKey || event.metaKey || event.shiftKey || !event.ctrlKey) return null
+  const key = event.key.toLowerCase()
+  return /^[a-z]$/.test(key) ? String.fromCharCode(key.charCodeAt(0) - 96) : null
+}
+
 export function decideTerminalShortcut(
   event: TerminalKeyModifiers,
   hasSelection: boolean,

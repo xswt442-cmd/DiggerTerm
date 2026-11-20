@@ -21,7 +21,7 @@ Download the Windows x64, Linux x64, or Ubuntu / Debian x64 packages and SHA-256
 ## Features
 
 - **Multiple terminals:** sidebar navigation, search, rename, nested horizontal/vertical splits, draggable dividers and layout restore; closing a pane keeps its session running.
-- **Focus mode:** hide workspace controls and show only the active terminal plus terminal-local actions such as search and copy; pane splits, session switching, the command palette, and Quick CD are unavailable. The narrow sidebar keeps settings accessible through a terminal-only focus settings page.
+- **Focus mode:** hide workspace controls and show only the active terminal; context menus, mouse reporting, keyboard input, and link activation pass through to the terminal application while DiggerTerm pane splits, session switching, the command palette, Quick CD, search, and copy overlays are unavailable. The narrow sidebar keeps the exit control and a terminal-only appearance settings page.
 - **Local and remote shells:** PowerShell, CMD, Git Bash (requires Git for Windows), WSL, Linux Bash, and SSH.
 - **Quick CD:** use the Quick CD button or `Ctrl+Shift+G` in a managed terminal. Local sessions can choose a folder through the native OS dialog; SSH sessions have a separate read-only remote directory browser. Paths may also be typed manually. Click Quick CD to send a quoted `cd` command and execute it; local paths can become the new-session default.
 - **Workspace information:** favorite paths and recall recently sent directories in Quick CD; add notes and colors to sessions. Session presets save a local shell and starting directory or an SSH host and port for later use.

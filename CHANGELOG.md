@@ -22,6 +22,7 @@ This file records shipped desktop features, fixes, platform support, and compati
 - 修复终端右侧滚动条拖动与滚轮滚动不一致的问题。
 - 修复专注模式仍可通过工作区快捷键或命令面板分屏、切换会话、关闭面板和执行快速 CD 的问题。
 - 将专注模式入口移到侧栏底部，并使用双态图标支持在专注模式中直接退出。
+- 专注模式不再拦截终端的右键、鼠标报告、键盘和链接交互，并关闭 DiggerTerm 的搜索、快速选择、复制模式与普通提示。
 
 **改进**
 - 侧栏可拖拽的最小宽度缩小到 160 px，收起宽度缩小到 40 px。
@@ -36,6 +37,7 @@ This file records shipped desktop features, fixes, platform support, and compati
 - Fixed the terminal scrollbar thumb not matching wheel scrolling behavior.
 - Fixed focus mode still allowing workspace shortcuts or the command palette to split panes, switch sessions, close panes, or run Quick CD.
 - Moved the focus-mode entry to the sidebar footer and added a two-state icon that exits focus mode directly.
+- Focus mode no longer intercepts terminal context menus, mouse reporting, keyboard shortcuts, or links, and closes DiggerTerm search, Quick Select, copy mode, and informational notices.
 
 **Improved**
 - Reduced the draggable sidebar minimum width to 160 px and its collapsed width to 40 px.
