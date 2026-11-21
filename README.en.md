@@ -1,7 +1,7 @@
 <div align="center">
   <img src="icons/diggerterm-icon.svg" alt="DiggerTerm" width="88" height="88">
   <h1>DiggerTerm</h1>
-  <p>A lightweight desktop workspace for multiple terminals</p>
+  <p>A desktop workspace for multiple terminals, with sessions hosted by a background daemon</p>
   <p>
     <a href="README.md">简体中文</a> ·
     <a href="https://github.com/xswt442-cmd/DiggerTerm/releases">Releases</a> ·
