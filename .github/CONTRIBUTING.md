@@ -18,7 +18,7 @@ Start the subject with a Conventional Commit type: `feat:`, `fix:`, `docs:`, `te
 
 ## Verification
 
-Run `go test ./... -count=1`, `go vet ./...`, `npm --prefix frontend test`, `npm --prefix frontend run build`, `node --test scripts/check-docs.test.mjs`, `node scripts/check-docs.mjs`, and `node .github/engineering/scripts/sync-pr.mjs --check .`. CI also scans the full Git history with Gitleaks. A release also runs `node scripts/verify-release.mjs vX.Y.Z` against the candidate version. State which checks were not run.
+Run `go test ./... -count=1`, `go vet ./...`, `npm --prefix frontend test`, `npm --prefix frontend run build`, `node --test scripts/check-docs.test.mjs`, `node scripts/check-docs.mjs`, and `node .github/engineering/scripts/skills.mjs --check .`. CI also scans the full Git history with Gitleaks. A release also runs `node scripts/verify-release.mjs vX.Y.Z` against the candidate version. State which checks were not run.
 
 ## Version history
 

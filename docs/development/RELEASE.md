@@ -24,7 +24,7 @@
    go vet ./...
    node --test scripts/check-docs.test.mjs scripts/release-notes.test.mjs scripts/release-downloads.test.mjs
    node scripts/check-docs.mjs
-   node .github/engineering/scripts/sync-pr.mjs --check .
+   node .github/engineering/scripts/skills.mjs --check .
    node .github/engineering/scripts/sync-community.mjs --check .
    node scripts/verify-release.mjs vX.Y.Z
    ```

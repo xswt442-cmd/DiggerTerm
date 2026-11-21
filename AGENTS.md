@@ -25,6 +25,6 @@
 
 ## Verification and permissions
 
-- Run checks relevant to the affected code, including `go test ./... -count=1`, `go vet ./...`, `npm --prefix frontend test`, `npm --prefix frontend run build`, `node --test scripts/check-docs.test.mjs`, `node scripts/check-docs.mjs`, and `node .github/engineering/scripts/sync-pr.mjs --check .`. For releases, check `node scripts/verify-release.mjs vX.Y.Z` against the actual candidate version.
+- Run checks relevant to the affected code, including `go test ./... -count=1`, `go vet ./...`, `npm --prefix frontend test`, `npm --prefix frontend run build`, `node --test scripts/check-docs.test.mjs`, `node scripts/check-docs.mjs`, and `node .github/engineering/scripts/skills.mjs --check .`. For releases, check `node scripts/verify-release.mjs vX.Y.Z` against the actual candidate version.
 - Keep `testplace/` ignored and preserve user files and `icons/`. Do not stage untracked personal content or generated build artifacts.
 - Commits, pushes, branch changes, resets, tags, releases, modifications to existing user assets, and external-service operations require explicit authorization for the current task.

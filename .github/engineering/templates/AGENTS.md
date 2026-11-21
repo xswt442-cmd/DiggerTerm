@@ -18,6 +18,7 @@
 - Treat `CHANGELOG.md` as the source for version-change text. Generate GitHub Release notes from the tagged version section rather than maintaining a separate copy.
 - PR descriptions must describe completed changes and checks actually passed in matching Simplified Chinese and English sections. Place separate future work in Issues.
 - Use relative links to tracked documentation inside this repository. Do not make public documentation depend on a developer's private files or another local checkout.
+- Repository skills are installed under `.agents/skills/` and tracked by Git. Each skill ships its own installer (`node .github/engineering/skills/<name>/scripts/install.mjs --check|--apply .`), which also places any files it mirrors into the repository root, such as the PR template. Never edit an installed copy: change the source and re-apply. Rules specific to this repository belong here, not inside a skill.
 - Keep local experiments and Agent handoffs in an ignored directory such as `testplace/`, never in a public commit. Put directory-specific rules in additional local-scope `AGENTS.md` files only when useful.
 
 ## Changes, verification, and authorization

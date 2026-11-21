@@ -38,7 +38,7 @@ jobs:
         run: |
           node --test scripts/check-docs.test.mjs
           node scripts/check-docs.mjs
-          node .github/engineering/scripts/sync-pr.mjs --check .
+          node .github/engineering/scripts/skills.mjs --check .
       - name: Install frontend dependencies
         run: npm --prefix frontend ci
       - name: Run all frontend tests
@@ -65,7 +65,7 @@ jobs:
         run: |
           node --test scripts/check-docs.test.mjs
           node scripts/check-docs.mjs
-          node .github/engineering/scripts/sync-pr.mjs --check .
+          node .github/engineering/scripts/skills.mjs --check .
       - name: Install frontend dependencies
         run: npm --prefix frontend ci
       - name: Test frontend preferences, themes, shortcuts and layouts
