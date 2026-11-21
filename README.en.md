@@ -23,37 +23,31 @@ Download the Windows x64, Linux x64, or Ubuntu / Debian x64 packages and SHA-256
 - **Multiple terminals:** sidebar navigation, search, rename, nested horizontal/vertical splits, draggable dividers and layout restore; closing a pane keeps its session running.
 - **Focus mode:** hide workspace controls and show only the active terminal; context menus, mouse reporting, keyboard input, and link activation pass through to the terminal application while DiggerTerm pane splits, session switching, the command palette, Quick CD, search, and copy overlays are unavailable. The narrow sidebar keeps the exit control and a terminal-only appearance settings page.
 - **Local and remote shells:** PowerShell, CMD, Git Bash (requires Git for Windows), WSL, Linux Bash, and SSH.
-- **Quick CD:** use the Quick CD button or `Ctrl+Shift+G` in a managed terminal. Local sessions can choose a folder through the native OS dialog; SSH sessions have a separate read-only remote directory browser. Paths may also be typed manually. Click Quick CD to send a quoted `cd` command and execute it; local paths can become the new-session default.
+- **Quick CD:** select a managed terminal and click Quick CD or press `Ctrl+Shift+G`. Local sessions can choose a folder through the native OS dialog; SSH sessions have a separate read-only remote directory browser. Paths may also be typed manually. The command is quoted for the shell type and executed on click; a local path can become the new-session default.
 - **Workspace information:** favorite paths and recall recently sent directories in Quick CD; add notes and colors to sessions. Session presets save a local shell and starting directory or an SSH host and port for later use.
 - **Persistent sessions:** the daemon keeps sessions running after the GUI exits; reconnect on restart.
 - **Dig process tree:** browse discovered shells, agents and descendants by Windows/WSL distribution, expand and filter the tree, and inspect read-only details without taking control.
 - **Preferences:** dark themes, fonts, sizes, language, default shell, and working directory.
 - **Update checks:** check the latest GitHub release in the background at most once every 24 hours, with an opt-out in Help and a download entry when an update is available.
 
-Smart **Ctrl+C** copies a terminal selection or interrupts without one; full-screen applications retain native control keys. The terminal toolbar and context menu provide Copy, Paste and a read-only copy mode. Try **Shift-drag** in mouse-reporting applications (Option on macOS); use Copy mode if selection is unavailable. Settings → Keys records, validates and saves shortcuts to `DiggerTerm/keybindings.json` in the current user's home directory ([example](examples/keybindings.json)).
+In smart mode, **Ctrl+C** copies when there is a selection and interrupts when there is none; full-screen applications such as nano keep their native control keys. The terminal toolbar and context menu provide Copy, Paste and a read-only copy mode. Try **Shift-drag** in terminals that report mouse events (Option on macOS), and use copy mode when the selection does not take. Shortcuts are recorded in Settings → Keys ([example](examples/keybindings.json)).
 
 ## Notes
 
-Copy [example JSON/CSS files](examples/themes/) into `DiggerTerm/` under your OS user's home directory, then refresh Settings → Appearance. Appearance shows the resolved directory and can open it directly. JSON `name` supplies the display name; optional `custom.css` overrides all themes. Shortcut configuration is stored separately as `keybindings.json` in the same directory.
+Themes and keys: copy the [example JSON/CSS files](examples/themes/) into `DiggerTerm/` under your user's home directory, then refresh Settings → Appearance to pick one. A JSON `name` is the display name, and `custom.css` overrides styling globally. Shortcuts are stored as `keybindings.json` in the same directory.
 
-The Windows installer creates a Start menu shortcut and Explorer folder context menus for the current user. “Open in DiggerTerm” opens or brings forward DiggerTerm and creates a PowerShell session in the selected folder; on Windows 11 it may appear under “Show more options”. Uninstall removes these entries and retains user data. Finish existing sessions and exit the daemon before upgrading or uninstalling.
+The Windows installer creates a Start menu shortcut and Explorer folder context menus for the current user (on Windows 11 they may sit under "Show more options"); right-clicking a folder and choosing "Open in DiggerTerm" opens a PowerShell session in that folder. Uninstall removes these entries and keeps your data. "DiggerTerm (Administrator)" in the Start menu opens an elevated window with its own daemon and sessions; elevation does not extend to remote SSH users or to Linux users inside WSL. Windows requires WebView2, and the packages are unsigned.
 
-On Windows, use “DiggerTerm (Administrator)” in the Start menu or “Open in DiggerTerm as administrator” in a folder context menu to request an elevated window through UAC. Its local Windows terminals run with administrator privileges. Elevated and standard windows use separate daemons and sessions; elevation does not grant administrator rights to remote SSH or Linux users inside WSL.
+Linux packages are built for Ubuntu 24.04; other distributions need their own GTK4 and WebKitGTK 6 dependencies. Sessions are not guaranteed to survive a daemon crash or a system reboot.
 
-Windows requires WebView2; binaries are unsigned. Linux packages are built for Ubuntu 24.04; other distributions may require matching system dependencies such as GTK4 and WebKitGTK 6. Sessions are not guaranteed to survive daemon crashes or system reboots.
+Quick CD sends a quoted `cd` and Enter to the managed terminal. Use it only at an empty prompt: not while `vim`, an Agent, or another foreground program is running, and not when the prompt already holds input. Read-only processes listed under Dig do not offer it.
 
-Update checks read only the GitHub Release version and never download or replace the program silently. Before installing a new version, finish existing sessions, exit the daemon normally, then download and run the package from Releases.
+Favorites, directory history, session notes and colors, and presets live in the local GUI only. A recent directory means the command was sent, not that the shell changed. SSH directories are isolated per session; SSH presets store no password and do not change remote directories.
 
-Quick CD sends a quoted command and Enter to the managed terminal. Use it only at an empty shell prompt, not while `vim`, an Agent, or another foreground application is active or when the prompt contains existing input. Dig's read-only external processes do not support Quick CD.
+Windows drive folders are converted to WSL `/mnt/c/...` or Git Bash `/c/...` paths; custom mounts and Linux-only paths must be typed. The SSH directory browser uses a separate OpenSSH connection and needs a POSIX-compatible remote shell plus noninteractive key or SSH Agent authentication; password-only targets can still be entered by hand.
 
-Favorites, directory history, session notes and colors, and presets are stored in the local GUI. Recent directories record commands sent, not confirmed shell changes; SSH directories are isolated by managed session. SSH presets do not store passwords or automatically change remote directories; WSL presets do not set a Windows starting directory.
-
-The local folder picker converts Windows drive folders to default WSL `/mnt/c/...` or Git Bash `/c/...` paths. Custom WSL mounts and Linux-only paths require manual entry. The SSH directory browser uses a separate OpenSSH connection and requires a POSIX-compatible remote shell plus noninteractive key/SSH Agent authentication, preserving `ssh_config` and host-key verification. Password-only or non-POSIX SSH sessions can still enter paths manually (with the appropriate shell syntax).
-
-Settings provide manual reconnection and session exit details. A running managed session allows only one GUI controller; another GUI can inspect it but cannot terminate it while controlled elsewhere. Accepted terminal input is sent in order before the pane detaches. IPC requests have timeouts; if creation or termination times out, the operation may still complete, so refresh the session list before retrying.
-
-New features require a matching daemon version; finish existing sessions before stopping the old daemon and opening the updated app. Reconnection restores recent terminal output; long-running full-screen applications may not be fully restored.
+Update checks read only the release version and never download or replace the program silently. New features need a matching daemon version, so finish existing sessions and exit the old daemon before upgrading or uninstalling. Reconnecting restores recent terminal output; long-running full-screen applications may come back incomplete.
 
 ## License
 
-MIT
+[MIT](LICENSE).
